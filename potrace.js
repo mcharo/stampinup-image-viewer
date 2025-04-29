@@ -153,12 +153,12 @@ var Potrace = (function() {
     function loadCanvas() {
       imgCanvas.width = imgElement.width;
       imgCanvas.height = imgElement.height;
-      var ctx = imgCanvas.getContext('2d');
+      var ctx = imgCanvas.getContext('2d', { willReadFrequently: true });
       ctx.drawImage(imgElement, 0, 0);
     }
     
     function loadBm() {
-      var ctx = imgCanvas.getContext('2d');
+      var ctx = imgCanvas.getContext('2d', { willReadFrequently: true });
       bm = new Bitmap(imgCanvas.width, imgCanvas.height);
       var imgdataobj = ctx.getImageData(0, 0, bm.w, bm.h);
       var l = imgdataobj.data.length, i, j, color;
