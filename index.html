@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Stampin' Up Image Viewer</title>
+    <script src="potrace.js"></script>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -40,13 +41,30 @@
             color: red;
             margin-top: 10px;
         }
+        .controls {
+            display: flex;
+            gap: 10px;
+            margin-top: 10px;
+        }
+        .svg-container {
+            margin-top: 10px;
+            border: 1px solid #ccc;
+            padding: 10px;
+            max-width: 300px;
+            overflow: hidden;
+        }
+        .svg-container svg {
+            width: 100%;
+            height: auto;
+            display: block;
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>Stampin' Up Image Viewer</h1>
         <div class="input-group">
-            <input type="number" id="productId" placeholder="Enter product ID" min="1">
+            <input type="number" id="productId" placeholder="Enter product ID" min="1" value="165346">
             <button onclick="loadImages()">Load Images</button>
         </div>
         <div id="error" class="error"></div>
@@ -55,6 +73,19 @@
 
     <script>
         const baseUrl = 'https://res.cloudinary.com/stampin-up/image/upload/prod/images/default-source/product-image';
+
+        // Add event listener for Enter key
+        document.getElementById('productId').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                loadImages();
+            }
+        });
+
+        // Load images automatically on page load
+        window.onload = function() {
+            loadImages();
+        };
 
         async function loadImages() {
             const productId = document.getElementById('productId').value;
@@ -90,14 +121,35 @@
                         
                         imageWrapper.appendChild(img);
 
-                        // Add color picker for o01 images
+                        // Add controls for o01 images
                         if (url.includes('o01')) {
+                            const controls = document.createElement('div');
+                            controls.className = 'controls';
+
                             const colorPicker = document.createElement('input');
                             colorPicker.type = 'color';
                             colorPicker.className = 'color-picker';
                             colorPicker.value = '#000000';
                             colorPicker.onchange = (e) => adjustImageHue(img, e.target.value);
-                            imageWrapper.appendChild(colorPicker);
+                            controls.appendChild(colorPicker);
+
+                            const convertButton = document.createElement('button');
+                            convertButton.textContent = 'Convert to SVG';
+                            convertButton.onclick = async () => {
+                                const isBW = await isBlackAndWhite(img);
+                                if (isBW) {
+                                    const svg = await convertToSVG(img);
+                                    const svgContainer = document.createElement('div');
+                                    svgContainer.className = 'svg-container';
+                                    svgContainer.innerHTML = svg;
+                                    imageWrapper.appendChild(svgContainer);
+                                } else {
+                                    alert('This image is not primarily black and white. SVG conversion may not be accurate.');
+                                }
+                            };
+                            controls.appendChild(convertButton);
+
+                            imageWrapper.appendChild(controls);
                         }
 
                         imageContainer.appendChild(imageWrapper);
@@ -125,37 +177,118 @@
             const canvas = document.createElement('canvas');
             const ctx = canvas.getContext('2d');
             
-            // Set canvas size to match image
             canvas.width = img.naturalWidth;
             canvas.height = img.naturalHeight;
             
-            // Draw the original image
             ctx.drawImage(img, 0, 0);
             
-            // Get image data
             const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
             const data = imageData.data;
             
-            // Convert color to RGB
             const r = parseInt(color.slice(1, 3), 16);
             const g = parseInt(color.slice(3, 5), 16);
             const b = parseInt(color.slice(5, 7), 16);
             
-            // Adjust the image
             for (let i = 0; i < data.length; i += 4) {
-                // If the pixel is not white (assuming white is 255,255,255)
                 if (data[i] < 250 || data[i + 1] < 250 || data[i + 2] < 250) {
-                    data[i] = r;     // Red
-                    data[i + 1] = g; // Green
-                    data[i + 2] = b; // Blue
+                    data[i] = r;
+                    data[i + 1] = g;
+                    data[i + 2] = b;
                 }
             }
             
-            // Put the modified image data back
             ctx.putImageData(imageData, 0, 0);
-            
-            // Update the image source
             img.src = canvas.toDataURL();
+        }
+
+        async function isBlackAndWhite(img) {
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            
+            canvas.width = img.naturalWidth;
+            canvas.height = img.naturalHeight;
+            
+            ctx.drawImage(img, 0, 0);
+            
+            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const data = imageData.data;
+            
+            let blackPixels = 0;
+            let whitePixels = 0;
+            let totalPixels = 0;
+            
+            for (let i = 0; i < data.length; i += 4) {
+                const r = data[i];
+                const g = data[i + 1];
+                const b = data[i + 2];
+                
+                // Check if pixel is black (all channels close to 0)
+                if (r < 50 && g < 50 && b < 50) {
+                    blackPixels++;
+                }
+                // Check if pixel is white (all channels close to 255)
+                else if (r > 200 && g > 200 && b > 200) {
+                    whitePixels++;
+                }
+                totalPixels++;
+            }
+            
+            const blackPercentage = (blackPixels / totalPixels) * 100;
+            const whitePercentage = (whitePixels / totalPixels) * 100;
+            
+            // Consider it black and white if more than 90% of pixels are either black or white
+            return (blackPercentage + whitePercentage) > 90;
+        }
+
+        async function convertToSVG(img) {
+            return new Promise((resolve, reject) => {
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                
+                canvas.width = img.naturalWidth;
+                canvas.height = img.naturalHeight;
+                
+                ctx.drawImage(img, 0, 0);
+                
+                // Convert to black and white
+                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                const data = imageData.data;
+                
+                for (let i = 0; i < data.length; i += 4) {
+                    const r = data[i];
+                    const g = data[i + 1];
+                    const b = data[i + 2];
+                    const gray = (r + g + b) / 3;
+                    const threshold = 128;
+                    
+                    data[i] = data[i + 1] = data[i + 2] = gray < threshold ? 0 : 255;
+                }
+                
+                ctx.putImageData(imageData, 0, 0);
+                
+                // Get the image data as a data URL
+                const dataUrl = canvas.toDataURL('image/png');
+                
+                // Set Potrace parameters
+                Potrace.setParameter({
+                    turdsize: 25, // Minimum area of a path
+                    alphamax: 0.8, // Maximum angle for a corner
+                    optcurve: true, // Optimize curves
+                    opttolerance: 0.2, // Curve optimization tolerance
+                    threshold: 128 // Black/white threshold
+                });
+                
+                // Load the image and process it
+                Potrace.loadImageFromUrl(dataUrl);
+                
+                // Process the image and get SVG
+                Potrace.process(function() {
+                    // Calculate scale factor to fit within 300px width
+                    const scale = 300 / canvas.width;
+                    const svg = Potrace.getSVG(scale); // Scale factor to fit width
+                    resolve(svg);
+                });
+            });
         }
     </script>
 </body>
