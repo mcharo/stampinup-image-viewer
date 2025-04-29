@@ -115,41 +115,53 @@
                         const imageWrapper = document.createElement('div');
                         imageWrapper.className = 'image-wrapper';
                         
-                        const img = document.createElement('img');
-                        img.src = dataUrl;
-                        img.alt = `Product ${productId}`;
-                        
-                        imageWrapper.appendChild(img);
-
-                        // Add controls for o01 images
                         if (url.includes('o01')) {
-                            const controls = document.createElement('div');
-                            controls.className = 'controls';
-
-                            const colorPicker = document.createElement('input');
-                            colorPicker.type = 'color';
-                            colorPicker.className = 'color-picker';
-                            colorPicker.value = '#000000';
-                            colorPicker.onchange = (e) => adjustImageHue(img, e.target.value);
-                            controls.appendChild(colorPicker);
-
-                            const convertButton = document.createElement('button');
-                            convertButton.textContent = 'Convert to SVG';
-                            convertButton.onclick = async () => {
-                                const isBW = await isBlackAndWhite(img);
-                                if (isBW) {
-                                    const svg = await convertToSVG(img);
-                                    const svgContainer = document.createElement('div');
-                                    svgContainer.className = 'svg-container';
-                                    svgContainer.innerHTML = svg;
-                                    imageWrapper.appendChild(svgContainer);
-                                } else {
-                                    alert('This image is not primarily black and white. SVG conversion may not be accurate.');
-                                }
-                            };
-                            controls.appendChild(convertButton);
-
-                            imageWrapper.appendChild(controls);
+                            // For o01 images, check if they're black and white
+                            const img = document.createElement('img');
+                            img.src = dataUrl;
+                            img.alt = `Product ${productId}`;
+                            
+                            // Wait for image to load
+                            await new Promise(resolve => {
+                                img.onload = resolve;
+                            });
+                            
+                            const isBW = await isBlackAndWhite(img);
+                            if (isBW) {
+                                // Convert to SVG automatically
+                                const svg = await convertToSVG(img);
+                                const svgContainer = document.createElement('div');
+                                svgContainer.className = 'svg-container';
+                                svgContainer.innerHTML = svg;
+                                imageWrapper.appendChild(svgContainer);
+                                
+                                // Add color picker for SVG
+                                const controls = document.createElement('div');
+                                controls.className = 'controls';
+                                
+                                const colorPicker = document.createElement('input');
+                                colorPicker.type = 'color';
+                                colorPicker.className = 'color-picker';
+                                colorPicker.value = '#000000';
+                                colorPicker.onchange = (e) => tintSVG(svgContainer.querySelector('svg'), e.target.value);
+                                controls.appendChild(colorPicker);
+                                
+                                const downloadButton = document.createElement('button');
+                                downloadButton.textContent = 'Download SVG';
+                                downloadButton.onclick = () => downloadSVG(svgContainer.querySelector('svg'), productId);
+                                controls.appendChild(downloadButton);
+                                
+                                imageWrapper.appendChild(controls);
+                            } else {
+                                // If not black and white, show original image
+                                imageWrapper.appendChild(img);
+                            }
+                        } else {
+                            // For regular images, just show them
+                            const img = document.createElement('img');
+                            img.src = dataUrl;
+                            img.alt = `Product ${productId}`;
+                            imageWrapper.appendChild(img);
                         }
 
                         imageContainer.appendChild(imageWrapper);
@@ -289,6 +301,37 @@
                     resolve(svg);
                 });
             });
+        }
+
+        function tintSVG(svg, color) {
+            if (!svg) return;
+            
+            // Get the path element
+            const path = svg.querySelector('path');
+            if (!path) return;
+            
+            // Update the fill color
+            path.setAttribute('fill', color);
+        }
+
+        function downloadSVG(svg, productId) {
+            if (!svg) return;
+            
+            // Create a blob from the SVG
+            const svgData = new XMLSerializer().serializeToString(svg);
+            const blob = new Blob([svgData], { type: 'image/svg+xml' });
+            
+            // Create a download link
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `stampinup_${productId}.svg`;
+            
+            // Trigger the download
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
         }
     </script>
 </body>
