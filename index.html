@@ -104,6 +104,13 @@
             gap: 1rem;
             padding-top: 0.5rem;
             border-top: 1px solid #e2e8f0;
+            align-items: center;
+        }
+
+        .color-control {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
         }
 
         .color-picker {
@@ -113,6 +120,21 @@
             border: 1px solid #e2e8f0;
             border-radius: var(--border-radius);
             cursor: pointer;
+        }
+
+        .hex-input {
+            width: 90px;
+            padding: 0.5rem;
+            border: 1px solid #e2e8f0;
+            border-radius: var(--border-radius);
+            font-family: monospace;
+            font-size: 0.875rem;
+        }
+
+        .hex-input:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
         }
 
         .error {
@@ -239,12 +261,43 @@
                                 const controls = document.createElement('div');
                                 controls.className = 'controls';
                                 
+                                const colorControl = document.createElement('div');
+                                colorControl.className = 'color-control';
+                                
                                 const colorPicker = document.createElement('input');
                                 colorPicker.type = 'color';
                                 colorPicker.className = 'color-picker';
                                 colorPicker.value = '#000000';
-                                colorPicker.onchange = (e) => tintSVG(svgContainer.querySelector('svg'), e.target.value);
-                                controls.appendChild(colorPicker);
+                                
+                                const hexInput = document.createElement('input');
+                                hexInput.type = 'text';
+                                hexInput.className = 'hex-input';
+                                hexInput.value = '#000000';
+                                hexInput.placeholder = '#000000';
+                                
+                                // Sync color picker and hex input
+                                colorPicker.addEventListener('input', (e) => {
+                                    const color = e.target.value;
+                                    hexInput.value = color;
+                                    tintSVG(svgContainer.querySelector('svg'), color);
+                                });
+                                
+                                hexInput.addEventListener('input', (e) => {
+                                    let color = e.target.value;
+                                    // Add # if missing
+                                    if (color.charAt(0) !== '#') {
+                                        color = '#' + color;
+                                    }
+                                    // Validate hex color
+                                    if (/^#[0-9A-Fa-f]{6}$/.test(color)) {
+                                        colorPicker.value = color;
+                                        tintSVG(svgContainer.querySelector('svg'), color);
+                                    }
+                                });
+                                
+                                colorControl.appendChild(colorPicker);
+                                colorControl.appendChild(hexInput);
+                                controls.appendChild(colorControl);
                                 
                                 const downloadButton = document.createElement('button');
                                 downloadButton.textContent = 'Download SVG';
