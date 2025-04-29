@@ -50,13 +50,20 @@
             margin-top: 10px;
             border: 1px solid #ccc;
             padding: 10px;
-            max-width: 300px;
+            width: 300px;
+            height: 300px;
             overflow: hidden;
+            position: relative;
+            background: #fff;
         }
         .svg-container svg {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
             width: 100%;
-            height: auto;
-            display: block;
+            height: 100%;
+            object-fit: contain;
         }
     </style>
 </head>
@@ -110,29 +117,37 @@
                     const response = await fetch(url);
                     if (response.ok) {
                         const blob = await response.blob();
-                        const dataUrl = await blobToDataUrl(blob);
                         
                         const imageWrapper = document.createElement('div');
                         imageWrapper.className = 'image-wrapper';
                         
                         if (url.includes('o01')) {
-                            // For o01 images, check if they're black and white
-                            const img = document.createElement('img');
-                            img.src = dataUrl;
-                            img.alt = `Product ${productId}`;
+                            // Create a temporary image to get dimensions
+                            const tempImg = document.createElement('img');
+                            tempImg.src = URL.createObjectURL(blob);
                             
                             // Wait for image to load
                             await new Promise(resolve => {
-                                img.onload = resolve;
+                                tempImg.onload = resolve;
                             });
                             
-                            const isBW = await isBlackAndWhite(img);
+                            const originalWidth = tempImg.naturalWidth;
+                            const originalHeight = tempImg.naturalHeight;
+                            
+                            const isBW = await isBlackAndWhite(tempImg);
                             if (isBW) {
                                 // Convert to SVG automatically
-                                const svg = await convertToSVG(img);
+                                const svg = await convertToSVG(tempImg, originalWidth, originalHeight);
                                 const svgContainer = document.createElement('div');
                                 svgContainer.className = 'svg-container';
-                                svgContainer.innerHTML = svg;
+                                
+                                // Scale the SVG for display
+                                const displayScale = Math.min(280 / originalWidth, 280 / originalHeight);
+                                const scaledSvg = svg.replace(/<svg([^>]*)>/, (match, attributes) => {
+                                    return `<svg${attributes} viewBox="0 0 ${originalWidth} ${originalHeight}" width="100%" height="100%">`;
+                                });
+                                
+                                svgContainer.innerHTML = scaledSvg;
                                 imageWrapper.appendChild(svgContainer);
                                 
                                 // Add color picker for SVG
@@ -148,18 +163,24 @@
                                 
                                 const downloadButton = document.createElement('button');
                                 downloadButton.textContent = 'Download SVG';
-                                downloadButton.onclick = () => downloadSVG(svgContainer.querySelector('svg'), productId);
+                                downloadButton.onclick = () => downloadSVG(svgContainer.querySelector('svg'), productId, originalWidth, originalHeight);
                                 controls.appendChild(downloadButton);
                                 
                                 imageWrapper.appendChild(controls);
                             } else {
                                 // If not black and white, show original image
+                                const img = document.createElement('img');
+                                img.src = URL.createObjectURL(blob);
+                                img.alt = `Product ${productId}`;
                                 imageWrapper.appendChild(img);
                             }
+                            
+                            // Clean up the temporary URL
+                            URL.revokeObjectURL(tempImg.src);
                         } else {
                             // For regular images, just show them
                             const img = document.createElement('img');
-                            img.src = dataUrl;
+                            img.src = URL.createObjectURL(blob);
                             img.alt = `Product ${productId}`;
                             imageWrapper.appendChild(img);
                         }
@@ -252,13 +273,13 @@
             return (blackPercentage + whitePercentage) > 90;
         }
 
-        async function convertToSVG(img) {
+        async function convertToSVG(img, originalWidth, originalHeight) {
             return new Promise((resolve, reject) => {
                 const canvas = document.createElement('canvas');
                 const ctx = canvas.getContext('2d');
                 
-                canvas.width = img.naturalWidth;
-                canvas.height = img.naturalHeight;
+                canvas.width = originalWidth;
+                canvas.height = originalHeight;
                 
                 ctx.drawImage(img, 0, 0);
                 
@@ -295,9 +316,8 @@
                 
                 // Process the image and get SVG
                 Potrace.process(function() {
-                    // Calculate scale factor to fit within 300px width
-                    const scale = 300 / canvas.width;
-                    const svg = Potrace.getSVG(scale); // Scale factor to fit width
+                    // Get SVG at original size
+                    const svg = Potrace.getSVG(1); // Use scale of 1 for original size
                     resolve(svg);
                 });
             });
@@ -314,11 +334,21 @@
             path.setAttribute('fill', color);
         }
 
-        function downloadSVG(svg, productId) {
+        function downloadSVG(svg, productId, originalWidth, originalHeight) {
             if (!svg) return;
             
+            // Create a copy of the SVG to modify
+            const svgCopy = svg.cloneNode(true);
+            
+            // Set the viewBox to match original dimensions
+            svgCopy.setAttribute('viewBox', `0 0 ${originalWidth} ${originalHeight}`);
+            
+            // Set width and height to match original dimensions
+            svgCopy.setAttribute('width', originalWidth);
+            svgCopy.setAttribute('height', originalHeight);
+            
             // Create a blob from the SVG
-            const svgData = new XMLSerializer().serializeToString(svg);
+            const svgData = new XMLSerializer().serializeToString(svgCopy);
             const blob = new Blob([svgData], { type: 'image/svg+xml' });
             
             // Create a download link
