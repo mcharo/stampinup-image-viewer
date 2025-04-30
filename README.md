@@ -16,7 +16,7 @@ A web-based tool to convert Stampin' Up product images to SVG format. This tool 
 
 ## Live Demo
 
-Visit [https://YOUR_USERNAME.github.io/stampinup_images](https://YOUR_USERNAME.github.io/stampinup_images) to try the tool.
+Visit [https://mcharo.github.io/stampinup-image-viewer](https://mcharo.github.io/stampinup-image-viewer) to try the tool.
 
 ## Local Development
 
