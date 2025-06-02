@@ -105,9 +105,67 @@
             padding-top: 0.5rem;
             border-top: 1px solid #e2e8f0;
             align-items: center;
+            flex-direction: column;
         }
 
         .color-control {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            width: 100%;
+            justify-content: space-between;
+        }
+
+        .color-palette {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            padding: 0.75rem;
+            background: #f8fafc;
+            border-radius: var(--border-radius);
+            width: 100%;
+            justify-content: center;
+            border: 1px solid #e2e8f0;
+        }
+
+        .color-swatch {
+            width: 28px;
+            height: 28px;
+            border-radius: 6px;
+            cursor: pointer;
+            border: 2px solid #fff;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            transition: all 0.15s ease;
+        }
+
+        .color-swatch:hover {
+            transform: scale(1.15);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+        }
+
+        .color-swatch.active {
+            outline: 3px solid var(--primary-color);
+            outline-offset: 2px;
+            transform: scale(1.1);
+        }
+
+        .palette-selector {
+            padding: 0.5rem 0.75rem;
+            border: 1px solid #e2e8f0;
+            border-radius: var(--border-radius);
+            font-size: 0.875rem;
+            background: white;
+            cursor: pointer;
+            min-width: 120px;
+        }
+
+        .palette-selector:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+        }
+
+        .color-inputs {
             display: flex;
             align-items: center;
             gap: 0.5rem;
@@ -257,12 +315,16 @@
                                 svgContainer.innerHTML = scaledSvg;
                                 imageWrapper.appendChild(svgContainer);
                                 
-                                // Add color picker for SVG
+                                // Add controls
                                 const controls = document.createElement('div');
                                 controls.className = 'controls';
                                 
                                 const colorControl = document.createElement('div');
                                 colorControl.className = 'color-control';
+                                
+                                // Create color inputs container
+                                const colorInputs = document.createElement('div');
+                                colorInputs.className = 'color-inputs';
                                 
                                 const colorPicker = document.createElement('input');
                                 colorPicker.type = 'color';
@@ -274,12 +336,140 @@
                                 hexInput.className = 'hex-input';
                                 hexInput.value = '#000000';
                                 hexInput.placeholder = '#000000';
+
+                                // Add palette selector
+                                const paletteSelector = document.createElement('select');
+                                paletteSelector.className = 'palette-selector';
+                                
+                                // Add color palettes
+                                const colorPalettes = {
+                                    "2025-2027": {
+                                        "Strawberry Slush": "#f26b73",
+                                        "Timid Tiger": "#f68e4f",
+                                        "Darling Duckling": "#f0d34f",
+                                        "Cloud Cover": "#b4c5c0",
+                                        "Secret Sea": "#334249"
+                                    },
+                                    "2024-2026": {
+                                        "Pretty in Pink": "#f8abb6",
+                                        "Peach Pie": "#fab474",
+                                        "Shy Shamrock": "#49bc8f",
+                                        "Summer Splash": "#63c4b1",
+                                        "Petunia Pop": "#d37eb4"
+                                    },
+                                    "Basics": {
+                                        "Basic Beige": "#e3dbc5",
+                                        "Very Vanilla": "#fff7e1",
+                                        "Basic White": "#ffffff",
+                                        "White Willow": "#ffffff",
+                                        "Basic Black": "#000000",
+                                        "Bronze & Ivory": "#a97448",
+                                        "Crumb Cake": "#c8ad8c"
+                                    },
+                                    "Subtles": {
+                                        "Petal Pink": "#fcd1bb",
+                                        "Calypso Coral": "#f47e63",
+                                        "Lemon Lolly": "#fff8a2",
+                                        "Soft Sea Foam": "#e6f1d2",
+                                        "Lost Lagoon": "#7baaa1",
+                                        "Pool Party": "#a9dbd6",
+                                        "Balmy Blue": "#a0d6ea",
+                                        "Highland Heather": "#ad95c6",
+                                        "Fresh Freesia": "#e6b7d6",
+                                        "Bubble Bath": "#fad5e6"
+                                    },
+                                    "Brights": {
+                                        "Poppy Parade": "#ed193a",
+                                        "Melon Mambo": "#e94d87",
+                                        "Flirty Flamingo": "#f5928b",
+                                        "Pumpkin Pie": "#f89433",
+                                        "Daffodil Delight": "#ffdc67",
+                                        "Lemon Lime Twist": "#dee568",
+                                        "Granny Apple Green": "#a3c149",
+                                        "Coastal Cabana": "#90d2be",
+                                        "Azure Afternoon": "#27a0d6",
+                                        "Berry Burst": "#b74985"
+                                    },
+                                    "Regals": {
+                                        "Cherry Cobbler": "#a10637",
+                                        "Real Red": "#c52342",
+                                        "Cajun Craze": "#c0492d",
+                                        "Crushed Curry": "#f8bd16",
+                                        "Old Olive": "#98a04d",
+                                        "Garden Green": "#4d8b56",
+                                        "Shaded Spruce": "#00815b",
+                                        "Pretty Peacock": "#006f71",
+                                        "Blueberry Bushel": "#0d5993",
+                                        "Gorgeous Grape": "#855da4"
+                                    },
+                                    "Neutrals": {
+                                        "Mossy Meadow": "#656739",
+                                        "Misty Moonlight": "#58728e",
+                                        "Night of Navy": "#213e6d",
+                                        "Blackberry Bliss": "#582752",
+                                        "Early Espresso": "#63412c",
+                                        "Pecan Pie": "#a97448",
+                                        "Crumb Cake": "#c8ad8c",
+                                        "Gray Granite": "#b3aba1",
+                                        "Smoky Slate": "#bdbdbe",
+                                        "Basic Gray": "#767e85"
+                                    }
+                                };
+
+                                // Add options to palette selector
+                                Object.keys(colorPalettes).forEach(paletteName => {
+                                    const option = document.createElement('option');
+                                    option.value = paletteName;
+                                    option.textContent = paletteName;
+                                    paletteSelector.appendChild(option);
+                                });
+
+                                // Create color palette container
+                                const colorPalette = document.createElement('div');
+                                colorPalette.className = 'color-palette';
+
+                                // Function to update color palette
+                                function updateColorPalette(paletteName) {
+                                    colorPalette.innerHTML = '';
+                                    const colors = colorPalettes[paletteName];
+                                    
+                                    Object.entries(colors).forEach(([name, hex]) => {
+                                        const swatch = document.createElement('div');
+                                        swatch.className = 'color-swatch';
+                                        swatch.style.backgroundColor = hex;
+                                        swatch.title = name;
+                                        
+                                        swatch.addEventListener('click', () => {
+                                            // Remove active class from all swatches
+                                            colorPalette.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('active'));
+                                            // Add active class to clicked swatch
+                                            swatch.classList.add('active');
+                                            
+                                            // Update color picker and hex input
+                                            colorPicker.value = hex;
+                                            hexInput.value = hex;
+                                            tintSVG(svgContainer.querySelector('svg'), hex);
+                                        });
+                                        
+                                        colorPalette.appendChild(swatch);
+                                    });
+                                }
+
+                                // Initial palette update
+                                updateColorPalette(paletteSelector.value);
+
+                                // Update palette when selection changes
+                                paletteSelector.addEventListener('change', (e) => {
+                                    updateColorPalette(e.target.value);
+                                });
                                 
                                 // Sync color picker and hex input
                                 colorPicker.addEventListener('input', (e) => {
                                     const color = e.target.value;
                                     hexInput.value = color;
                                     tintSVG(svgContainer.querySelector('svg'), color);
+                                    // Remove active class from all swatches
+                                    colorPalette.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('active'));
                                 });
                                 
                                 hexInput.addEventListener('input', (e) => {
@@ -292,16 +482,24 @@
                                     if (/^#[0-9A-Fa-f]{6}$/.test(color)) {
                                         colorPicker.value = color;
                                         tintSVG(svgContainer.querySelector('svg'), color);
+                                        // Remove active class from all swatches
+                                        colorPalette.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('active'));
                                     }
                                 });
                                 
-                                colorControl.appendChild(colorPicker);
-                                colorControl.appendChild(hexInput);
-                                controls.appendChild(colorControl);
+                                // Assemble the structure
+                                colorInputs.appendChild(colorPicker);
+                                colorInputs.appendChild(hexInput);
+                                
+                                colorControl.appendChild(colorInputs);
+                                colorControl.appendChild(paletteSelector);
                                 
                                 const downloadButton = document.createElement('button');
                                 downloadButton.textContent = 'Download SVG';
                                 downloadButton.onclick = () => downloadSVG(svgContainer.querySelector('svg'), productId, originalWidth, originalHeight);
+                                
+                                controls.appendChild(colorControl);
+                                controls.appendChild(colorPalette);
                                 controls.appendChild(downloadButton);
                                 
                                 imageWrapper.appendChild(controls);
