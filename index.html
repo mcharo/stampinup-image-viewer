@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Stampin' Up Image Viewer</title>
     <script src="potrace.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
     <style>
         :root {
             --primary-color: #2563eb;
@@ -330,12 +331,224 @@
             <button onclick="document.getElementById('imageUpload').click()">Upload Your Own Image</button>
             <span id="uploadStatus" style="margin-left: 1rem; color: #6b7280;"></span>
         </div>
+        <div id="stampSetInfo" style="padding: 0.25rem 1.5rem; font-size: 0.875rem; color: #6b7280; min-height: 1.5em;"></div>
         <div id="error" class="error"></div>
         <div class="image-container" id="imageContainer"></div>
     </div>
 
     <script>
         const baseUrl = 'https://res.cloudinary.com/stampin-up/image/upload/prod/images/default-source/product-image';
+        let detectedStampSetName = '';
+
+        function findBannerRegion(img) {
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+
+            // Analyze the left 60%, top 50% of the image where packaging appears
+            const scanW = Math.floor(img.naturalWidth * 0.6);
+            const scanH = Math.floor(img.naturalHeight * 0.5);
+            canvas.width = scanW;
+            canvas.height = scanH;
+            ctx.drawImage(img, 0, 0, scanW, scanH, 0, 0, scanW, scanH);
+
+            const imageData = ctx.getImageData(0, 0, scanW, scanH);
+            const pixels = imageData.data;
+            const DARK = 50;
+
+            function lum(i) {
+                return pixels[i] * 0.299 + pixels[i + 1] * 0.587 + pixels[i + 2] * 0.114;
+            }
+
+            // Per-row: fraction of pixels darker than threshold
+            const rowDark = new Float32Array(scanH);
+            for (let y = 0; y < scanH; y++) {
+                let n = 0;
+                for (let x = 0; x < scanW; x++) {
+                    if (lum((y * scanW + x) * 4) < DARK) n++;
+                }
+                rowDark[y] = n / scanW;
+            }
+
+            // Collect contiguous dark-row bands (>= 25% dark pixels per row)
+            const ROW_TH = 0.25;
+            const rawBands = [];
+            let start = null;
+            for (let y = 0; y < scanH; y++) {
+                if (rowDark[y] >= ROW_TH) {
+                    if (start === null) start = y;
+                } else if (start !== null) {
+                    rawBands.push({ y0: start, y1: y });
+                    start = null;
+                }
+            }
+            if (start !== null) rawBands.push({ y0: start, y1: scanH });
+            if (rawBands.length === 0) return null;
+
+            // Merge bands separated by small gaps (handles white text box inside banner)
+            const MERGE_GAP = Math.floor(scanH * 0.06);
+            const merged = [{ ...rawBands[0] }];
+            for (let i = 1; i < rawBands.length; i++) {
+                const prev = merged[merged.length - 1];
+                if (rawBands[i].y0 - prev.y1 <= MERGE_GAP) {
+                    prev.y1 = rawBands[i].y1;
+                } else {
+                    merged.push({ ...rawBands[i] });
+                }
+            }
+
+            // Pick the tallest band that meets minimum height
+            const MIN_H = Math.max(20, scanH * 0.05);
+            const tallest = merged
+                .filter(b => (b.y1 - b.y0) >= MIN_H)
+                .sort((a, b) => (b.y1 - b.y0) - (a.y1 - a.y0))[0];
+            if (!tallest) return null;
+
+            // Find horizontal extent: first and last columns with >= 20% dark pixels in the band
+            const bandH = tallest.y1 - tallest.y0;
+            const COL_TH = 0.2;
+            let x0 = 0, x1 = scanW;
+
+            for (let x = 0; x < scanW; x++) {
+                let n = 0;
+                for (let y = tallest.y0; y < tallest.y1; y++) {
+                    if (lum((y * scanW + x) * 4) < DARK) n++;
+                }
+                if (n / bandH >= COL_TH) { x0 = x; break; }
+            }
+            for (let x = scanW - 1; x >= 0; x--) {
+                let n = 0;
+                for (let y = tallest.y0; y < tallest.y1; y++) {
+                    if (lum((y * scanW + x) * 4) < DARK) n++;
+                }
+                if (n / bandH >= COL_TH) { x1 = x + 1; break; }
+            }
+
+            // Small padding so text at edges isn't clipped
+            const padY = Math.max(2, Math.floor(bandH * 0.05));
+            const padX = Math.max(2, Math.floor((x1 - x0) * 0.02));
+            return {
+                x0: Math.max(0, x0 - padX),
+                y0: Math.max(0, tallest.y0 - padY),
+                x1: Math.min(img.naturalWidth, x1 + padX),
+                y1: Math.min(img.naturalHeight, tallest.y1 + padY)
+            };
+        }
+
+        function extractOCRLines(data) {
+            if (data.lines && data.lines.length > 0) return data.lines;
+            const lines = [];
+            for (const block of (data.blocks || [])) {
+                for (const para of (block.paragraphs || [])) {
+                    for (const line of (para.lines || [])) {
+                        lines.push(line);
+                    }
+                }
+            }
+            return lines;
+        }
+
+        function cleanOCRText(text) {
+            return text.replace(/[|[\]{}]/g, '').replace(/\s+/g, ' ').trim();
+        }
+
+        async function detectStampSetName(imageBlob) {
+            const infoDiv = document.getElementById('stampSetInfo');
+            infoDiv.textContent = 'Detecting stamp set name...';
+            detectedStampSetName = '';
+
+            try {
+                const img = new Image();
+                img.src = URL.createObjectURL(imageBlob);
+                await new Promise(resolve => { img.onload = resolve; });
+
+                // Step 1: Find the black banner region via pixel analysis
+                const region = findBannerRegion(img);
+                if (!region) {
+                    URL.revokeObjectURL(img.src);
+                    infoDiv.textContent = '';
+                    return;
+                }
+
+                // Step 2: Crop to just the banner
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                const rw = region.x1 - region.x0;
+                const rh = region.y1 - region.y0;
+                canvas.width = rw;
+                canvas.height = rh;
+                ctx.drawImage(img, region.x0, region.y0, rw, rh, 0, 0, rw, rh);
+
+                // Step 3: Invert colors (white text on black → black text on white for OCR)
+                const imageData = ctx.getImageData(0, 0, rw, rh);
+                const px = imageData.data;
+                for (let i = 0; i < px.length; i += 4) {
+                    px[i] = 255 - px[i];
+                    px[i + 1] = 255 - px[i + 1];
+                    px[i + 2] = 255 - px[i + 2];
+                }
+                ctx.putImageData(imageData, 0, 0);
+                URL.revokeObjectURL(img.src);
+
+                // Step 4: OCR just the banner
+                const worker = await Tesseract.createWorker('eng');
+                const result = await worker.recognize(canvas);
+                await worker.terminate();
+
+                // Step 5: Find the stamp set name using anchor-based approach
+                const anchorPatterns = [/photopolymer/i, /stamp\s*set/i, /cling/i, /clear.?mount/i, /wood.?mount/i];
+                const ocrLines = extractOCRLines(result.data);
+
+                const anchorLines = [];
+                const candidateLines = [];
+                for (const line of ocrLines) {
+                    const text = cleanOCRText(line.text);
+                    if (text.length < 2) continue;
+                    if (anchorPatterns.some(p => p.test(text))) {
+                        anchorLines.push(line);
+                    } else {
+                        candidateLines.push(line);
+                    }
+                }
+
+                if (anchorLines.length > 0 && candidateLines.length > 0) {
+                    let bestCandidate = null;
+                    let bestDistance = Infinity;
+                    for (const candidate of candidateLines) {
+                        const cy = (candidate.bbox.y0 + candidate.bbox.y1) / 2;
+                        for (const anchor of anchorLines) {
+                            const ay = (anchor.bbox.y0 + anchor.bbox.y1) / 2;
+                            const dist = Math.abs(cy - ay);
+                            if (dist < bestDistance) {
+                                bestDistance = dist;
+                                bestCandidate = candidate;
+                            }
+                        }
+                    }
+                    if (bestCandidate) {
+                        detectedStampSetName = cleanOCRText(bestCandidate.text);
+                        infoDiv.textContent = `Stamp set: ${detectedStampSetName}`;
+                        return;
+                    }
+                }
+
+                // Fallback: filter out anchor text and take the first remaining line
+                const textLines = result.data.text
+                    .split('\n')
+                    .map(l => cleanOCRText(l))
+                    .filter(l => l.length > 1)
+                    .filter(l => !anchorPatterns.some(p => p.test(l)));
+
+                if (textLines.length > 0) {
+                    detectedStampSetName = textLines[0];
+                    infoDiv.textContent = `Stamp set: ${detectedStampSetName}`;
+                } else {
+                    infoDiv.textContent = '';
+                }
+            } catch (err) {
+                console.error('OCR detection failed:', err);
+                infoDiv.textContent = '';
+            }
+        }
 
         // Add event listener for Enter key
         document.getElementById('productId').addEventListener('keypress', function(e) {
@@ -362,6 +575,8 @@
             const productId = document.getElementById('productId').value;
             const errorDiv = document.getElementById('error');
             const imageContainer = document.getElementById('imageContainer');
+            detectedStampSetName = '';
+            document.getElementById('stampSetInfo').textContent = '';
             
             if (!productId) {
                 errorDiv.textContent = 'Please enter a product ID';
@@ -443,6 +658,9 @@
                             img.src = URL.createObjectURL(blob);
                             img.alt = `Product ${productId}`;
                             imageWrapper.appendChild(img);
+
+                            // Kick off OCR detection in the background for the product photo
+                            detectStampSetName(blob);
                         }
 
                         imageContainer.appendChild(imageWrapper);
@@ -1011,6 +1229,24 @@
             path.setAttribute('fill', color);
         }
 
+        function sanitizeForFilename(name) {
+            return name
+                .trim()
+                .toLowerCase()
+                .replace(/[^a-z0-9\s-]/g, '')
+                .replace(/\s+/g, '_')
+                .replace(/_+/g, '_')
+                .replace(/^_|_$/g, '');
+        }
+
+        function buildDownloadFilename(productId, suffix) {
+            const sanitized = sanitizeForFilename(detectedStampSetName);
+            const parts = ['stampinup', productId];
+            if (sanitized) parts.push(sanitized);
+            if (suffix) parts.push(suffix);
+            return parts.join('_') + '.svg';
+        }
+
         function downloadSVG(svg, productId, originalWidth, originalHeight) {
             if (!svg) return;
             
@@ -1032,7 +1268,7 @@
             const url = URL.createObjectURL(blob);
             const link = document.createElement('a');
             link.href = url;
-            link.download = `stampinup_${productId}.svg`;
+            link.download = buildDownloadFilename(productId);
             
             // Trigger the download
             document.body.appendChild(link);
