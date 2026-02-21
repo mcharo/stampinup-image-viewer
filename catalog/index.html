@@ -1,0 +1,789 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Stampin' Up Stamp Catalog</title>
+  <script src="catalog-data.js"></script>
+  <style>
+    :root {
+      --primary-color: #2563eb;
+      --border-radius: 8px;
+      --shadow-sm: 0 1px 2px 0 rgba(0,0,0,0.05);
+      --shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #f8fafc;
+      color: #1e293b;
+      min-height: 100vh;
+    }
+
+    /* ── Header ── */
+    .header {
+      background: white;
+      border-bottom: 1px solid #e2e8f0;
+      padding: 1rem 1.5rem;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+
+    .header-title {
+      font-size: 1.25rem;
+      font-weight: 600;
+      color: #0f172a;
+      white-space: nowrap;
+    }
+
+    .header-subtitle {
+      font-size: 0.85rem;
+      color: #64748b;
+      white-space: nowrap;
+    }
+
+    .search-input {
+      flex: 1;
+      min-width: 200px;
+      max-width: 400px;
+      padding: 0.5rem 0.875rem;
+      border: 1px solid #e2e8f0;
+      border-radius: var(--border-radius);
+      font-size: 0.95rem;
+      transition: border-color 0.15s;
+    }
+
+    .search-input:focus {
+      outline: none;
+      border-color: var(--primary-color);
+      box-shadow: 0 0 0 3px rgba(37,99,235,0.1);
+    }
+
+    /* ── Filter bar ── */
+    .filter-bar {
+      background: white;
+      border-bottom: 1px solid #e2e8f0;
+      padding: 0.625rem 1.5rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+    }
+
+    .chip {
+      padding: 0.3rem 0.75rem;
+      border: 1px solid #e2e8f0;
+      border-radius: 999px;
+      font-size: 0.82rem;
+      font-weight: 500;
+      cursor: pointer;
+      background: white;
+      color: #475569;
+      transition: background 0.12s, border-color 0.12s, color 0.12s;
+      white-space: nowrap;
+    }
+
+    .chip:hover { background: #f1f5f9; }
+
+    .chip.active {
+      background: var(--primary-color);
+      border-color: var(--primary-color);
+      color: white;
+    }
+
+    .filter-spacer { flex: 1; }
+
+    .result-count {
+      font-size: 0.82rem;
+      color: #64748b;
+      white-space: nowrap;
+    }
+
+    /* ── Grid ── */
+    .grid-container {
+      padding: 1.25rem 1.5rem;
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 1rem;
+    }
+
+    /* ── Card ── */
+    .card {
+      background: white;
+      border-radius: var(--border-radius);
+      box-shadow: var(--shadow-sm);
+      overflow: hidden;
+      cursor: pointer;
+      transition: box-shadow 0.15s, transform 0.15s;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .card:hover {
+      box-shadow: var(--shadow);
+      transform: translateY(-2px);
+    }
+
+    .card-img-wrap {
+      aspect-ratio: 1;
+      background: #f1f5f9;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .card-img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+
+    .card-img-placeholder {
+      font-size: 2rem;
+      color: #cbd5e1;
+    }
+
+    .card-body {
+      padding: 0.625rem 0.75rem 0.75rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+      flex: 1;
+    }
+
+    .card-name {
+      font-size: 0.875rem;
+      font-weight: 600;
+      color: #0f172a;
+      line-height: 1.3;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+
+    .card-meta {
+      display: flex;
+      align-items: center;
+      gap: 0.375rem;
+      margin-top: auto;
+      padding-top: 0.25rem;
+    }
+
+    .card-id {
+      font-size: 0.75rem;
+      color: #94a3b8;
+      font-family: ui-monospace, monospace;
+    }
+
+    .lang-badge {
+      font-size: 0.9rem;
+      line-height: 1;
+    }
+
+    /* ── Empty state ── */
+    .empty-state {
+      grid-column: 1 / -1;
+      padding: 4rem 2rem;
+      text-align: center;
+      color: #94a3b8;
+    }
+
+    .empty-state p { font-size: 1rem; margin-top: 0.5rem; }
+
+    /* ── Loading ── */
+    .loading {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 60vh;
+      font-size: 1rem;
+      color: #64748b;
+      gap: 0.75rem;
+    }
+
+    .spinner {
+      width: 24px;
+      height: 24px;
+      border: 3px solid #e2e8f0;
+      border-top-color: var(--primary-color);
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Modal ── */
+    .modal-backdrop {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(15,23,42,0.5);
+      z-index: 100;
+      align-items: center;
+      justify-content: center;
+      padding: 1rem;
+    }
+
+    .modal-backdrop.open { display: flex; }
+
+    .modal {
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.25);
+      max-width: 720px;
+      width: 100%;
+      max-height: 90vh;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .modal-header {
+      padding: 1.25rem 1.5rem 0;
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 1rem;
+    }
+
+    .modal-title {
+      font-size: 1.25rem;
+      font-weight: 700;
+      color: #0f172a;
+      line-height: 1.3;
+    }
+
+    .modal-close {
+      background: none;
+      border: none;
+      font-size: 1.5rem;
+      line-height: 1;
+      color: #94a3b8;
+      cursor: pointer;
+      padding: 0.125rem 0.25rem;
+      border-radius: 4px;
+      flex-shrink: 0;
+      transition: color 0.12s;
+    }
+
+    .modal-close:hover { color: #1e293b; }
+
+    .modal-body {
+      padding: 1rem 1.5rem 1.5rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+
+    .modal-imgs {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.75rem;
+    }
+
+    .modal-img-wrap {
+      aspect-ratio: 1;
+      background: #f1f5f9;
+      border-radius: var(--border-radius);
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .modal-img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      display: block;
+    }
+
+    .modal-img-label {
+      font-size: 0.75rem;
+      color: #64748b;
+      text-align: center;
+      margin-top: 0.25rem;
+    }
+
+    .modal-meta {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+    }
+
+    .meta-tag {
+      background: #f1f5f9;
+      border-radius: 4px;
+      padding: 0.2rem 0.5rem;
+      font-size: 0.8rem;
+      color: #475569;
+      font-family: ui-monospace, monospace;
+    }
+
+    .section-label {
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: #94a3b8;
+      margin-bottom: 0.25rem;
+    }
+
+    .ocr-text {
+      font-family: ui-monospace, monospace;
+      font-size: 0.85rem;
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: var(--border-radius);
+      padding: 0.75rem;
+      white-space: pre-wrap;
+      color: #334155;
+      max-height: 120px;
+      overflow-y: auto;
+    }
+
+    .objects-text {
+      font-size: 0.875rem;
+      color: #334155;
+      line-height: 1.6;
+    }
+
+    .modal-actions {
+      display: flex;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+    }
+
+    .btn {
+      padding: 0.5rem 1rem;
+      border-radius: var(--border-radius);
+      font-size: 0.875rem;
+      font-weight: 500;
+      cursor: pointer;
+      border: none;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.375rem;
+      transition: background 0.12s;
+    }
+
+    .btn-primary {
+      background: var(--primary-color);
+      color: white;
+    }
+
+    .btn-primary:hover { background: #1d4ed8; }
+
+    .btn-secondary {
+      background: #f1f5f9;
+      color: #334155;
+      border: 1px solid #e2e8f0;
+    }
+
+    .btn-secondary:hover { background: #e2e8f0; }
+
+    .btn-disabled {
+      background: #f1f5f9;
+      color: #cbd5e1;
+      cursor: not-allowed;
+      border: 1px solid #e2e8f0;
+    }
+
+    @media (max-width: 500px) {
+      .modal-imgs { grid-template-columns: 1fr; }
+      .grid-container { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+    }
+  </style>
+</head>
+<body>
+
+<!-- Header -->
+<div class="header">
+  <span class="header-title">Stampin' Up Stamp Catalog</span>
+  <span class="header-subtitle" id="total-count"></span>
+  <input
+    class="search-input"
+    type="search"
+    id="search"
+    placeholder="Search by name, ID, keywords…"
+    autocomplete="off"
+    spellcheck="false"
+  >
+</div>
+
+<!-- Filter bar -->
+<div class="filter-bar">
+  <button class="chip" data-lang="all">All</button>
+  <button class="chip active" data-lang="english">🇬🇧 English</button>
+  <button class="chip" data-lang="french">🇫🇷 French</button>
+  <button class="chip" data-lang="german">🇩🇪 German</button>
+  <button class="chip" data-lang="dutch">🇳🇱 Dutch</button>
+  <div class="filter-spacer"></div>
+  <span class="result-count" id="result-count"></span>
+</div>
+
+<!-- Grid -->
+<div class="grid-container" id="grid">
+  <div class="loading" style="grid-column:1/-1">
+    <div class="spinner"></div>
+    Loading catalog…
+  </div>
+</div>
+
+<!-- Modal -->
+<div class="modal-backdrop" id="modal-backdrop" role="dialog" aria-modal="true">
+  <div class="modal" id="modal">
+    <div class="modal-header">
+      <div class="modal-title" id="modal-title"></div>
+      <button class="modal-close" id="modal-close" aria-label="Close">&#x2715;</button>
+    </div>
+    <div class="modal-body">
+      <div class="modal-imgs" id="modal-imgs"></div>
+      <div class="modal-meta" id="modal-meta"></div>
+      <div id="modal-ocr-section" style="display:none">
+        <div class="section-label">OCR Text</div>
+        <pre class="ocr-text" id="modal-ocr"></pre>
+      </div>
+      <div id="modal-objects-section" style="display:none">
+        <div class="section-label">Objects</div>
+        <div class="objects-text" id="modal-objects"></div>
+      </div>
+      <div class="modal-actions" id="modal-actions"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+  const CLOUDINARY_BASE = 'https://res.cloudinary.com/stampin-up/image/upload/prod/images/default-source/product-image/';
+  const B2_BASE = 'https://stamps.charo.fun/';
+
+  const LANG_FLAGS = { english: '🇬🇧', french: '🇫🇷', german: '🇩🇪', dutch: '🇳🇱' };
+
+  let allProducts = [];
+  let activeFilter = 'english';
+  let searchQuery = '';
+  let debounceTimer = null;
+
+  // ── Fetch catalog ─────────────────────────────────────────────────────────
+  async function loadCatalog() {
+    // CATALOG_DATA is set by catalog-data.js (works on file:// and HTTP alike)
+    const data = window.CATALOG_DATA;
+    allProducts = Object.values(data.products);
+
+    document.getElementById('total-count').textContent =
+      allProducts.length.toLocaleString() + ' stamps';
+
+    render();
+  }
+
+  // ── Filtering & searching ─────────────────────────────────────────────────
+  function filterProducts() {
+    let results = allProducts;
+
+    if (activeFilter !== 'all') {
+      results = results.filter(p => p.language === activeFilter);
+    }
+
+    if (searchQuery) {
+      // Parse quoted phrases and bare words from the query
+      const phrases = [];
+      const words = [];
+      const re = /"([^"]+)"|(\S+)/g;
+      let m;
+      while ((m = re.exec(searchQuery.toLowerCase())) !== null) {
+        if (m[1] !== undefined) phrases.push(m[1]); // quoted phrase
+        else words.push(m[2]);                       // bare word
+      }
+
+      results = results.filter(p => {
+        const haystack = [
+          p.display_name,
+          p.stamp_set_name,
+          p.ocr_text,
+          p.objects_description,
+          p.product_id
+        ].filter(Boolean).join(' ').toLowerCase();
+
+        return phrases.every(ph => haystack.includes(ph)) &&
+               words.every(w => haystack.includes(w));
+      });
+    }
+
+    return results;
+  }
+
+  // ── Render grid ───────────────────────────────────────────────────────────
+  function render() {
+    const results = filterProducts();
+    const grid = document.getElementById('grid');
+    const countEl = document.getElementById('result-count');
+
+    countEl.textContent = results.length === allProducts.length
+      ? allProducts.length.toLocaleString() + ' results'
+      : results.length.toLocaleString() + ' of ' + allProducts.length.toLocaleString();
+
+    if (results.length === 0) {
+      grid.innerHTML = '<div class="empty-state"><div style="font-size:2rem">🔍</div><p>No stamps found. Try a different search.</p></div>';
+      return;
+    }
+
+    const fragment = document.createDocumentFragment();
+    for (const p of results) {
+      fragment.appendChild(makeCard(p));
+    }
+    grid.innerHTML = '';
+    grid.appendChild(fragment);
+  }
+
+  function makeCard(p) {
+    const name = p.display_name || titleCase(p.stamp_set_name) || p.product_id;
+    const flag = LANG_FLAGS[p.language] || '';
+
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.setAttribute('data-id', p.product_id);
+
+    const imgWrap = document.createElement('div');
+    imgWrap.className = 'card-img-wrap';
+
+    if (p.jpg_file || p.product_id) {
+      const img = document.createElement('img');
+      img.className = 'card-img';
+      img.alt = name;
+      img.loading = 'lazy';
+      const cloudUrl = CLOUDINARY_BASE + p.product_id + '.jpg';
+      const b2Url = p.jpg_file ? B2_BASE + p.jpg_file : null;
+      img.src = cloudUrl;
+      img.onerror = () => {
+        if (b2Url && img.src !== b2Url) {
+          img.src = b2Url;
+        } else {
+          imgWrap.innerHTML = '<div class="card-img-placeholder">🖼️</div>';
+        }
+      };
+      imgWrap.appendChild(img);
+    } else {
+      imgWrap.innerHTML = '<div class="card-img-placeholder">🖼️</div>';
+    }
+
+    const body = document.createElement('div');
+    body.className = 'card-body';
+
+    const nameEl = document.createElement('div');
+    nameEl.className = 'card-name';
+    nameEl.textContent = name;
+
+    const meta = document.createElement('div');
+    meta.className = 'card-meta';
+
+    const idEl = document.createElement('span');
+    idEl.className = 'card-id';
+    idEl.textContent = '#' + p.product_id;
+
+    const langEl = document.createElement('span');
+    langEl.className = 'lang-badge';
+    langEl.textContent = flag;
+    langEl.title = p.language || '';
+
+    meta.appendChild(idEl);
+    if (flag) meta.appendChild(langEl);
+
+    body.appendChild(nameEl);
+    body.appendChild(meta);
+
+    card.appendChild(imgWrap);
+    card.appendChild(body);
+
+    card.addEventListener('click', () => openModal(p));
+    return card;
+  }
+
+  // ── Modal ─────────────────────────────────────────────────────────────────
+  function openModal(p) {
+    const name = p.display_name || titleCase(p.stamp_set_name) || p.product_id;
+    const flag = LANG_FLAGS[p.language] || '';
+
+    document.getElementById('modal-title').textContent = name;
+
+    // Images
+    const imgsEl = document.getElementById('modal-imgs');
+    imgsEl.innerHTML = '';
+
+    const mainWrap = document.createElement('div');
+    const mainImg = makeModalImg(
+      CLOUDINARY_BASE + p.product_id + '.jpg',
+      p.jpg_file ? B2_BASE + p.jpg_file : null,
+      name
+    );
+    const mainLabel = document.createElement('div');
+    mainLabel.className = 'modal-img-label';
+    mainLabel.textContent = 'Main image';
+    mainWrap.appendChild(mainImg);
+    mainWrap.appendChild(mainLabel);
+
+    const outlineWrap = document.createElement('div');
+    const outlineImg = makeModalImg(
+      CLOUDINARY_BASE + p.product_id + 'o01.jpg',
+      p.png_file ? B2_BASE + p.png_file : null,
+      name + ' outline'
+    );
+    const outlineLabel = document.createElement('div');
+    outlineLabel.className = 'modal-img-label';
+    outlineLabel.textContent = 'Outline';
+    outlineWrap.appendChild(outlineImg);
+    outlineWrap.appendChild(outlineLabel);
+
+    imgsEl.appendChild(mainWrap);
+    imgsEl.appendChild(outlineWrap);
+
+    // Meta tags
+    const metaEl = document.getElementById('modal-meta');
+    metaEl.innerHTML = '';
+    addTag(metaEl, '#' + p.product_id);
+    if (flag) addTag(metaEl, flag + ' ' + (p.language || ''));
+
+    // OCR
+    const ocrSection = document.getElementById('modal-ocr-section');
+    if (p.ocr_text && p.ocr_text.trim()) {
+      document.getElementById('modal-ocr').textContent = p.ocr_text.trim();
+      ocrSection.style.display = '';
+    } else {
+      ocrSection.style.display = 'none';
+    }
+
+    // Objects
+    const objSection = document.getElementById('modal-objects-section');
+    if (p.objects_description && p.objects_description.trim()) {
+      document.getElementById('modal-objects').textContent = p.objects_description.trim();
+      objSection.style.display = '';
+    } else {
+      objSection.style.display = 'none';
+    }
+
+    // Actions
+    const actionsEl = document.getElementById('modal-actions');
+    actionsEl.innerHTML = '';
+
+    if (p.png_file) {
+      const pngBtn = makeLink(B2_BASE + p.png_file, '⬇ PNG', 'btn btn-secondary', true);
+      actionsEl.appendChild(pngBtn);
+    }
+
+    if (p.svg_file) {
+      const svgBtn = makeLink(B2_BASE + p.svg_file, '⬇ SVG', 'btn btn-primary', true);
+      actionsEl.appendChild(svgBtn);
+    } else {
+      const noSvg = document.createElement('span');
+      noSvg.className = 'btn btn-disabled';
+      noSvg.textContent = 'No SVG';
+      actionsEl.appendChild(noSvg);
+    }
+
+    const viewerBtn = makeLink(
+      '../index.html?id=' + p.product_id,
+      '🔍 Open in viewer',
+      'btn btn-secondary',
+      false
+    );
+    actionsEl.appendChild(viewerBtn);
+
+    document.getElementById('modal-backdrop').classList.add('open');
+    document.body.style.overflow = 'hidden';
+  }
+
+  function makeModalImg(primary, fallback, alt) {
+    const wrap = document.createElement('div');
+    wrap.className = 'modal-img-wrap';
+    const img = document.createElement('img');
+    img.className = 'modal-img';
+    img.alt = alt;
+    img.src = primary;
+    img.onerror = () => {
+      if (fallback && img.src !== fallback) {
+        img.src = fallback;
+      } else {
+        wrap.textContent = '—';
+        wrap.style.color = '#cbd5e1';
+      }
+    };
+    wrap.appendChild(img);
+    return wrap;
+  }
+
+  function addTag(parent, text) {
+    const el = document.createElement('span');
+    el.className = 'meta-tag';
+    el.textContent = text;
+    parent.appendChild(el);
+  }
+
+  function makeLink(href, text, className, download) {
+    const a = document.createElement('a');
+    a.href = href;
+    a.className = className;
+    a.textContent = text;
+    if (download) a.download = '';
+    a.target = '_blank';
+    a.rel = 'noopener';
+    return a;
+  }
+
+  function closeModal() {
+    document.getElementById('modal-backdrop').classList.remove('open');
+    document.body.style.overflow = '';
+  }
+
+  // ── Event listeners ───────────────────────────────────────────────────────
+  document.getElementById('modal-close').addEventListener('click', closeModal);
+
+  document.getElementById('modal-backdrop').addEventListener('click', e => {
+    if (e.target === document.getElementById('modal-backdrop')) closeModal();
+  });
+
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') closeModal();
+  });
+
+  document.getElementById('search').addEventListener('input', e => {
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(() => {
+      searchQuery = e.target.value.trim();
+      render();
+    }, 150);
+  });
+
+  document.querySelectorAll('.chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+      chip.classList.add('active');
+      activeFilter = chip.dataset.lang;
+      render();
+    });
+  });
+
+  // ── Utilities ─────────────────────────────────────────────────────────────
+  function titleCase(str) {
+    if (!str) return '';
+    return str.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+  }
+
+  // ── Boot ──────────────────────────────────────────────────────────────────
+  loadCatalog().catch(err => {
+    document.getElementById('grid').innerHTML =
+      '<div class="empty-state"><div style="font-size:2rem">⚠️</div><p>Failed to load catalog: ' + err.message + '</p></div>';
+  });
+</script>
+</body>
+</html>

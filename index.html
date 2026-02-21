@@ -567,7 +567,13 @@
         });
 
         // Load images automatically on page load
+        // If ?id= is present in the URL, pre-populate the product ID input
         window.onload = function() {
+            const params = new URLSearchParams(window.location.search);
+            const idParam = params.get('id');
+            if (idParam) {
+                document.getElementById('productId').value = idParam;
+            }
             loadImages();
         };
 
