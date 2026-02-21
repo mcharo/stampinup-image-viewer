@@ -405,6 +405,45 @@
       .modal-imgs { grid-template-columns: 1fr; }
       .grid-container { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
     }
+
+    /* ── Lightbox ── */
+    .lightbox {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.9);
+      z-index: 200;
+      align-items: center;
+      justify-content: center;
+      cursor: zoom-out;
+    }
+
+    .lightbox.open { display: flex; }
+
+    .lightbox img {
+      max-width: 92vw;
+      max-height: 92vh;
+      object-fit: contain;
+      border-radius: 4px;
+      box-shadow: 0 8px 40px rgba(0,0,0,0.6);
+    }
+
+    .lightbox-close {
+      position: absolute;
+      top: 1rem;
+      right: 1.25rem;
+      background: none;
+      border: none;
+      color: rgba(255,255,255,0.8);
+      font-size: 2rem;
+      line-height: 1;
+      cursor: pointer;
+      padding: 0.25rem 0.5rem;
+    }
+
+    .lightbox-close:hover { color: white; }
+
+    .modal-img-wrap { cursor: zoom-in; }
   </style>
 </head>
 <body>
@@ -463,6 +502,12 @@
       <div class="modal-actions" id="modal-actions"></div>
     </div>
   </div>
+</div>
+
+<!-- Lightbox -->
+<div class="lightbox" id="lightbox">
+  <button class="lightbox-close" id="lightbox-close" aria-label="Close">&#x2715;</button>
+  <img id="lightbox-img" src="" alt="">
 </div>
 
 <script>
@@ -716,11 +761,31 @@
       } else {
         wrap.textContent = '—';
         wrap.style.color = '#cbd5e1';
+        wrap.style.cursor = 'default';
       }
     };
+    wrap.addEventListener('click', () => openLightbox(img.src, alt));
     wrap.appendChild(img);
     return wrap;
   }
+
+  // ── Lightbox ──────────────────────────────────────────────────────────────
+  function openLightbox(src, alt) {
+    const lb = document.getElementById('lightbox');
+    const lbImg = document.getElementById('lightbox-img');
+    lbImg.src = src;
+    lbImg.alt = alt;
+    lb.classList.add('open');
+  }
+
+  function closeLightbox() {
+    document.getElementById('lightbox').classList.remove('open');
+  }
+
+  document.getElementById('lightbox-close').addEventListener('click', closeLightbox);
+  document.getElementById('lightbox').addEventListener('click', e => {
+    if (e.target !== document.getElementById('lightbox-img')) closeLightbox();
+  });
 
   function addTag(parent, text) {
     const el = document.createElement('span');
@@ -753,7 +818,10 @@
   });
 
   document.addEventListener('keydown', e => {
-    if (e.key === 'Escape') closeModal();
+    if (e.key === 'Escape') {
+      if (document.getElementById('lightbox').classList.contains('open')) closeLightbox();
+      else closeModal();
+    }
   });
 
   document.getElementById('search').addEventListener('input', e => {
