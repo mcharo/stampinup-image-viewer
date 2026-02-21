@@ -727,7 +727,10 @@
     }
 
     if (p.svg_file) {
-      const svgBtn = makeLink(B2_BASE + p.svg_file, '⬇ SVG', 'btn btn-primary', true);
+      const svgBtn = document.createElement('button');
+      svgBtn.className = 'btn btn-primary';
+      svgBtn.textContent = '⬇ SVG';
+      svgBtn.addEventListener('click', () => downloadViaBlob(B2_BASE + p.svg_file, p.svg_file));
       actionsEl.appendChild(svgBtn);
     } else {
       const noSvg = document.createElement('span');
@@ -842,6 +845,20 @@
   });
 
   // ── Utilities ─────────────────────────────────────────────────────────────
+  async function downloadViaBlob(url, filename) {
+    try {
+      const res = await fetch(url);
+      const blob = await res.blob();
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    } catch (e) {
+      window.open(url, '_blank');
+    }
+  }
+
   function titleCase(str) {
     if (!str) return '';
     return str.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
