@@ -1,0 +1,1349 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stampin' Up Image Viewer</title>
+    <script src="potrace.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+    <style>
+        :root {
+            --primary-color: #2563eb;
+            --border-radius: 8px;
+            --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+            --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem;
+            background-color: #f8fafc;
+            color: #1e293b;
+        }
+
+        .container {
+            display: flex;
+            flex-direction: column;
+            gap: 2rem;
+        }
+
+        h1 {
+            font-size: 2rem;
+            font-weight: 600;
+            margin: 0;
+            color: #0f172a;
+        }
+
+        .input-group {
+            display: flex;
+            gap: 1rem;
+            align-items: center;
+            background: white;
+            padding: 1.5rem;
+            border-radius: var(--border-radius);
+            box-shadow: var(--shadow-sm);
+        }
+
+        input[type="number"] {
+            padding: 0.75rem 1rem;
+            border: 1px solid #e2e8f0;
+            border-radius: var(--border-radius);
+            font-size: 1rem;
+            width: 200px;
+            transition: border-color 0.15s ease;
+        }
+
+        input[type="number"]:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+        }
+
+        button {
+            padding: 0.75rem 1.5rem;
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            border-radius: var(--border-radius);
+            font-size: 1rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background-color 0.15s ease;
+        }
+
+        button:hover {
+            background-color: #1d4ed8;
+        }
+
+        .image-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2rem;
+            width: 100%;
+        }
+
+        .image-wrapper {
+            background: white;
+            padding: 1.5rem;
+            border-radius: var(--border-radius);
+            box-shadow: var(--shadow);
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .image-wrapper img {
+            max-width: 100%;
+            height: auto;
+            border-radius: calc(var(--border-radius) - 2px);
+        }
+
+        .controls {
+            display: flex;
+            gap: 1rem;
+            padding-top: 0.5rem;
+            border-top: 1px solid #e2e8f0;
+            align-items: center;
+            flex-direction: column;
+        }
+
+        .color-control {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            width: 100%;
+            justify-content: space-between;
+        }
+
+        .color-palette {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            padding: 0.75rem;
+            background: #f8fafc;
+            border-radius: var(--border-radius);
+            width: 100%;
+            justify-content: center;
+            border: 1px solid #e2e8f0;
+        }
+
+        .color-swatch {
+            width: 28px;
+            height: 28px;
+            border-radius: 6px;
+            cursor: pointer;
+            border: 2px solid #fff;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            transition: all 0.15s ease;
+        }
+
+        .color-swatch:hover {
+            transform: scale(1.15);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+        }
+
+        .color-swatch.active {
+            outline: 3px solid var(--primary-color);
+            outline-offset: 2px;
+            transform: scale(1.1);
+        }
+
+        .palette-selector {
+            padding: 0.5rem 0.75rem;
+            border: 1px solid #e2e8f0;
+            border-radius: var(--border-radius);
+            font-size: 0.875rem;
+            background: white;
+            cursor: pointer;
+            min-width: 120px;
+        }
+
+        .palette-selector:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+        }
+
+        .color-inputs {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .color-picker {
+            width: 50px;
+            height: 40px;
+            padding: 0;
+            border: 1px solid #e2e8f0;
+            border-radius: var(--border-radius);
+            cursor: pointer;
+        }
+
+        .hex-input {
+            width: 90px;
+            padding: 0.5rem;
+            border: 1px solid #e2e8f0;
+            border-radius: var(--border-radius);
+            font-family: monospace;
+            font-size: 0.875rem;
+        }
+
+        .hex-input:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+        }
+
+        .error {
+            color: #dc2626;
+            font-size: 0.875rem;
+            padding: 0.75rem 1rem;
+            background-color: #fef2f2;
+            border: 1px solid #fee2e2;
+            border-radius: var(--border-radius);
+            display: none;
+        }
+
+        .error:not(:empty) {
+            display: block;
+        }
+
+        .svg-container {
+            margin: 0;
+            border: 1px solid #e2e8f0;
+            padding: 0;
+            width: 100%;
+            aspect-ratio: 1;
+            overflow: hidden;
+            position: relative;
+            background: #fff;
+            border-radius: calc(var(--border-radius) - 2px);
+        }
+
+        .svg-container svg {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+        }
+
+        .potrace-controls {
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: var(--border-radius);
+            padding: 1rem;
+            margin-top: 1rem;
+        }
+
+        .potrace-controls h4 {
+            margin: 0 0 0.75rem 0;
+            font-size: 0.875rem;
+            font-weight: 600;
+            color: #374151;
+        }
+
+        .slider-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+
+        .slider-control {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .slider-control label {
+            font-size: 0.8rem;
+            color: #6b7280;
+            min-width: 80px;
+            text-align: right;
+        }
+
+        .slider-control input[type="range"] {
+            flex: 1;
+            height: 6px;
+            border-radius: 3px;
+            background: #e2e8f0;
+            outline: none;
+            -webkit-appearance: none;
+        }
+
+        .slider-control input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: var(--primary-color);
+            cursor: pointer;
+        }
+
+        .slider-control input[type="range"]::-moz-range-thumb {
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: var(--primary-color);
+            cursor: pointer;
+            border: none;
+        }
+
+        .slider-control .slider-value {
+            font-size: 0.8rem;
+            color: #374151;
+            min-width: 40px;
+            text-align: left;
+            font-family: monospace;
+        }
+
+        .checkbox-control {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .checkbox-control input[type="checkbox"] {
+            width: 16px;
+            height: 16px;
+        }
+
+        .checkbox-control label {
+            font-size: 0.8rem;
+            color: #6b7280;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Stampin' Up Image Viewer</h1>
+        <div class="input-group">
+            <input type="number" id="productId" placeholder="Enter product ID" min="1" value="165346">
+            <button onclick="loadImages()">Load Images</button>
+        </div>
+        <div class="input-group">
+            <input type="file" id="imageUpload" accept="image/*" style="display: none;">
+            <button onclick="document.getElementById('imageUpload').click()">Upload Your Own Image</button>
+            <span id="uploadStatus" style="margin-left: 1rem; color: #6b7280;"></span>
+        </div>
+        <div id="stampSetInfo" style="padding: 0.25rem 1.5rem; font-size: 0.875rem; color: #6b7280; min-height: 1.5em;"></div>
+        <div id="error" class="error"></div>
+        <div class="image-container" id="imageContainer"></div>
+    </div>
+
+    <script>
+        const baseUrl = 'https://res.cloudinary.com/stampin-up/image/upload/prod/images/default-source/product-image';
+        let detectedStampSetName = '';
+
+        function findBannerRegion(img) {
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+
+            // Analyze the left 60%, top 50% of the image where packaging appears
+            const scanW = Math.floor(img.naturalWidth * 0.6);
+            const scanH = Math.floor(img.naturalHeight * 0.5);
+            canvas.width = scanW;
+            canvas.height = scanH;
+            ctx.drawImage(img, 0, 0, scanW, scanH, 0, 0, scanW, scanH);
+
+            const imageData = ctx.getImageData(0, 0, scanW, scanH);
+            const pixels = imageData.data;
+            const DARK = 50;
+
+            function lum(i) {
+                return pixels[i] * 0.299 + pixels[i + 1] * 0.587 + pixels[i + 2] * 0.114;
+            }
+
+            // Per-row: fraction of pixels darker than threshold
+            const rowDark = new Float32Array(scanH);
+            for (let y = 0; y < scanH; y++) {
+                let n = 0;
+                for (let x = 0; x < scanW; x++) {
+                    if (lum((y * scanW + x) * 4) < DARK) n++;
+                }
+                rowDark[y] = n / scanW;
+            }
+
+            // Collect contiguous dark-row bands (>= 25% dark pixels per row)
+            const ROW_TH = 0.25;
+            const rawBands = [];
+            let start = null;
+            for (let y = 0; y < scanH; y++) {
+                if (rowDark[y] >= ROW_TH) {
+                    if (start === null) start = y;
+                } else if (start !== null) {
+                    rawBands.push({ y0: start, y1: y });
+                    start = null;
+                }
+            }
+            if (start !== null) rawBands.push({ y0: start, y1: scanH });
+            if (rawBands.length === 0) return null;
+
+            // Merge bands separated by small gaps (handles white text box inside banner)
+            const MERGE_GAP = Math.floor(scanH * 0.06);
+            const merged = [{ ...rawBands[0] }];
+            for (let i = 1; i < rawBands.length; i++) {
+                const prev = merged[merged.length - 1];
+                if (rawBands[i].y0 - prev.y1 <= MERGE_GAP) {
+                    prev.y1 = rawBands[i].y1;
+                } else {
+                    merged.push({ ...rawBands[i] });
+                }
+            }
+
+            // Pick the tallest band that meets minimum height
+            const MIN_H = Math.max(20, scanH * 0.05);
+            const tallest = merged
+                .filter(b => (b.y1 - b.y0) >= MIN_H)
+                .sort((a, b) => (b.y1 - b.y0) - (a.y1 - a.y0))[0];
+            if (!tallest) return null;
+
+            // Find horizontal extent: first and last columns with >= 20% dark pixels in the band
+            const bandH = tallest.y1 - tallest.y0;
+            const COL_TH = 0.2;
+            let x0 = 0, x1 = scanW;
+
+            for (let x = 0; x < scanW; x++) {
+                let n = 0;
+                for (let y = tallest.y0; y < tallest.y1; y++) {
+                    if (lum((y * scanW + x) * 4) < DARK) n++;
+                }
+                if (n / bandH >= COL_TH) { x0 = x; break; }
+            }
+            for (let x = scanW - 1; x >= 0; x--) {
+                let n = 0;
+                for (let y = tallest.y0; y < tallest.y1; y++) {
+                    if (lum((y * scanW + x) * 4) < DARK) n++;
+                }
+                if (n / bandH >= COL_TH) { x1 = x + 1; break; }
+            }
+
+            // Small padding so text at edges isn't clipped
+            const padY = Math.max(2, Math.floor(bandH * 0.05));
+            const padX = Math.max(2, Math.floor((x1 - x0) * 0.02));
+            return {
+                x0: Math.max(0, x0 - padX),
+                y0: Math.max(0, tallest.y0 - padY),
+                x1: Math.min(img.naturalWidth, x1 + padX),
+                y1: Math.min(img.naturalHeight, tallest.y1 + padY)
+            };
+        }
+
+        function extractOCRLines(data) {
+            if (data.lines && data.lines.length > 0) return data.lines;
+            const lines = [];
+            for (const block of (data.blocks || [])) {
+                for (const para of (block.paragraphs || [])) {
+                    for (const line of (para.lines || [])) {
+                        lines.push(line);
+                    }
+                }
+            }
+            return lines;
+        }
+
+        function cleanOCRText(text) {
+            return text.replace(/[|[\]{}]/g, '').replace(/\s+/g, ' ').trim();
+        }
+
+        async function detectStampSetName(imageBlob) {
+            const infoDiv = document.getElementById('stampSetInfo');
+            infoDiv.textContent = 'Detecting stamp set name...';
+            detectedStampSetName = '';
+
+            try {
+                const img = new Image();
+                img.src = URL.createObjectURL(imageBlob);
+                await new Promise(resolve => { img.onload = resolve; });
+
+                // Step 1: Find the black banner region via pixel analysis
+                const region = findBannerRegion(img);
+                if (!region) {
+                    URL.revokeObjectURL(img.src);
+                    infoDiv.textContent = '';
+                    return;
+                }
+
+                // Step 2: Crop to just the banner
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                const rw = region.x1 - region.x0;
+                const rh = region.y1 - region.y0;
+                canvas.width = rw;
+                canvas.height = rh;
+                ctx.drawImage(img, region.x0, region.y0, rw, rh, 0, 0, rw, rh);
+
+                // Step 3: Invert colors (white text on black → black text on white for OCR)
+                const imageData = ctx.getImageData(0, 0, rw, rh);
+                const px = imageData.data;
+                for (let i = 0; i < px.length; i += 4) {
+                    px[i] = 255 - px[i];
+                    px[i + 1] = 255 - px[i + 1];
+                    px[i + 2] = 255 - px[i + 2];
+                }
+                ctx.putImageData(imageData, 0, 0);
+                URL.revokeObjectURL(img.src);
+
+                // Step 4: OCR just the banner
+                const worker = await Tesseract.createWorker('eng');
+                const result = await worker.recognize(canvas);
+                await worker.terminate();
+
+                // Step 5: Find the stamp set name using anchor-based approach
+                const anchorPatterns = [/photopolymer/i, /stamp\s*set/i, /cling/i, /clear.?mount/i, /wood.?mount/i];
+                const ocrLines = extractOCRLines(result.data);
+
+                const anchorLines = [];
+                const candidateLines = [];
+                for (const line of ocrLines) {
+                    const text = cleanOCRText(line.text);
+                    if (text.length < 2) continue;
+                    if (anchorPatterns.some(p => p.test(text))) {
+                        anchorLines.push(line);
+                    } else {
+                        candidateLines.push(line);
+                    }
+                }
+
+                if (anchorLines.length > 0 && candidateLines.length > 0) {
+                    let bestCandidate = null;
+                    let bestDistance = Infinity;
+                    for (const candidate of candidateLines) {
+                        const cy = (candidate.bbox.y0 + candidate.bbox.y1) / 2;
+                        for (const anchor of anchorLines) {
+                            const ay = (anchor.bbox.y0 + anchor.bbox.y1) / 2;
+                            const dist = Math.abs(cy - ay);
+                            if (dist < bestDistance) {
+                                bestDistance = dist;
+                                bestCandidate = candidate;
+                            }
+                        }
+                    }
+                    if (bestCandidate) {
+                        detectedStampSetName = cleanOCRText(bestCandidate.text);
+                        infoDiv.textContent = `Stamp set: ${detectedStampSetName}`;
+                        return;
+                    }
+                }
+
+                // Fallback: filter out anchor text and take the first remaining line
+                const textLines = result.data.text
+                    .split('\n')
+                    .map(l => cleanOCRText(l))
+                    .filter(l => l.length > 1)
+                    .filter(l => !anchorPatterns.some(p => p.test(l)));
+
+                if (textLines.length > 0) {
+                    detectedStampSetName = textLines[0];
+                    infoDiv.textContent = `Stamp set: ${detectedStampSetName}`;
+                } else {
+                    infoDiv.textContent = '';
+                }
+            } catch (err) {
+                console.error('OCR detection failed:', err);
+                infoDiv.textContent = '';
+            }
+        }
+
+        // Add event listener for Enter key
+        document.getElementById('productId').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                loadImages();
+            }
+        });
+
+        // Add event listener for file upload
+        document.getElementById('imageUpload').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (file) {
+                processUploadedImage(file);
+            }
+        });
+
+        // Load images automatically on page load
+        // If ?id= is present in the URL, pre-populate the product ID input
+        window.onload = function() {
+            const params = new URLSearchParams(window.location.search);
+            const idParam = params.get('id');
+            if (idParam) {
+                document.getElementById('productId').value = idParam;
+            }
+            loadImages();
+        };
+
+        async function loadImages() {
+            const productId = document.getElementById('productId').value;
+            const errorDiv = document.getElementById('error');
+            const imageContainer = document.getElementById('imageContainer');
+            detectedStampSetName = '';
+            document.getElementById('stampSetInfo').textContent = '';
+            
+            if (!productId) {
+                errorDiv.textContent = 'Please enter a product ID';
+                return;
+            }
+
+            errorDiv.textContent = '';
+            imageContainer.innerHTML = '';
+
+            const imageUrls = [
+                `${baseUrl}/${productId}.jpg`,
+                `${baseUrl}/${productId}o01.jpg`
+            ];
+
+            for (const url of imageUrls) {
+                try {
+                    const response = await fetch(url);
+                    if (response.ok) {
+                        const blob = await response.blob();
+                        
+                        const imageWrapper = document.createElement('div');
+                        imageWrapper.className = 'image-wrapper';
+                        
+                        if (url.includes('o01')) {
+                            // Create a temporary image to get dimensions
+                            const tempImg = document.createElement('img');
+                            tempImg.src = URL.createObjectURL(blob);
+                            
+                            // Wait for image to load
+                            await new Promise(resolve => {
+                                tempImg.onload = resolve;
+                            });
+                            
+                            const originalWidth = tempImg.naturalWidth;
+                            const originalHeight = tempImg.naturalHeight;
+                            
+                            const isBW = await isBlackAndWhite(tempImg);
+                            if (isBW) {
+                                // Store the image data as canvas data URL for reconversion
+                                const canvas = document.createElement('canvas');
+                                const ctx = canvas.getContext('2d');
+                                canvas.width = originalWidth;
+                                canvas.height = originalHeight;
+                                ctx.drawImage(tempImg, 0, 0);
+                                const originalImageDataUrl = canvas.toDataURL('image/png');
+                                
+                                // Convert to SVG automatically
+                                const svg = await convertToSVG(tempImg, originalWidth, originalHeight);
+                                const svgContainer = document.createElement('div');
+                                svgContainer.className = 'svg-container';
+                                
+                                // Store original image data for reconversion
+                                svgContainer.dataset.originalImageSrc = originalImageDataUrl;
+                                
+                                // Scale the SVG for display
+                                const displayScale = Math.min(280 / originalWidth, 280 / originalHeight);
+                                const scaledSvg = svg.replace(/<svg([^>]*)>/, (match, attributes) => {
+                                    return `<svg${attributes} viewBox="0 0 ${originalWidth} ${originalHeight}" width="100%" height="100%">`;
+                                });
+                                
+                                svgContainer.innerHTML = scaledSvg;
+                                imageWrapper.appendChild(svgContainer);
+                                
+                                // Add controls using the shared function
+                                addSVGControls(imageWrapper, svgContainer, productId, originalWidth, originalHeight);
+                            } else {
+                                // If not black and white, show original image
+                                const img = document.createElement('img');
+                                img.src = URL.createObjectURL(blob);
+                                img.alt = `Product ${productId}`;
+                                imageWrapper.appendChild(img);
+                            }
+                            
+                            // Clean up the temporary URL
+                            URL.revokeObjectURL(tempImg.src);
+                        } else {
+                            // For regular images, just show them
+                            const img = document.createElement('img');
+                            img.src = URL.createObjectURL(blob);
+                            img.alt = `Product ${productId}`;
+                            imageWrapper.appendChild(img);
+
+                            // Kick off OCR detection in the background for the product photo
+                            detectStampSetName(blob);
+                        }
+
+                        imageContainer.appendChild(imageWrapper);
+                    }
+                } catch (error) {
+                    console.error(`Error loading image ${url}:`, error);
+                }
+            }
+
+            if (imageContainer.children.length === 0) {
+                errorDiv.textContent = 'No images found for this product ID';
+            }
+        }
+
+        async function processUploadedImage(file) {
+            const uploadStatus = document.getElementById('uploadStatus');
+            const imageContainer = document.getElementById('imageContainer');
+            
+            // Validate file type
+            if (!file.type.startsWith('image/')) {
+                uploadStatus.textContent = 'Please select a valid image file';
+                uploadStatus.style.color = '#dc2626';
+                return;
+            }
+            
+            uploadStatus.textContent = 'Processing image...';
+            uploadStatus.style.color = '#6b7280';
+            
+            try {
+                // Create a temporary image to process
+                const tempImg = document.createElement('img');
+                tempImg.src = URL.createObjectURL(file);
+                
+                // Wait for image to load
+                await new Promise((resolve, reject) => {
+                    tempImg.onload = resolve;
+                    tempImg.onerror = reject;
+                });
+                
+                const originalWidth = tempImg.naturalWidth;
+                const originalHeight = tempImg.naturalHeight;
+                
+                // Check if it's suitable for conversion (has enough contrast)
+                const isBW = await isBlackAndWhite(tempImg);
+                
+                const imageWrapper = document.createElement('div');
+                imageWrapper.className = 'image-wrapper';
+                
+                if (isBW) {
+                    uploadStatus.textContent = 'Converting to SVG...';
+                    
+                    // Store the image data as canvas data URL for reconversion
+                    const canvas = document.createElement('canvas');
+                    const ctx = canvas.getContext('2d');
+                    canvas.width = originalWidth;
+                    canvas.height = originalHeight;
+                    ctx.drawImage(tempImg, 0, 0);
+                    const originalImageDataUrl = canvas.toDataURL('image/png');
+                    
+                    // Convert to SVG using the same pipeline
+                    const svg = await convertToSVG(tempImg, originalWidth, originalHeight);
+                    const svgContainer = document.createElement('div');
+                    svgContainer.className = 'svg-container';
+                    
+                    // Store original image data for reconversion
+                    svgContainer.dataset.originalImageSrc = originalImageDataUrl;
+                    
+                    // Scale the SVG for display
+                    const scaledSvg = svg.replace(/<svg([^>]*)>/, (match, attributes) => {
+                        return `<svg${attributes} viewBox="0 0 ${originalWidth} ${originalHeight}" width="100%" height="100%">`;
+                    });
+                    
+                    svgContainer.innerHTML = scaledSvg;
+                    imageWrapper.appendChild(svgContainer);
+                    
+                    // Add the same controls as the product images
+                    addSVGControls(imageWrapper, svgContainer, 'uploaded', originalWidth, originalHeight);
+                    
+                    uploadStatus.textContent = 'Image converted successfully!';
+                    uploadStatus.style.color = '#059669';
+                } else {
+                    // If not suitable for SVG conversion, still show the image but with a note
+                    const img = document.createElement('img');
+                    img.src = URL.createObjectURL(file);
+                    img.alt = 'Uploaded image';
+                    imageWrapper.appendChild(img);
+                    
+                    const note = document.createElement('p');
+                    note.style.color = '#f59e0b';
+                    note.style.fontSize = '0.875rem';
+                    note.style.margin = '0.5rem 0 0 0';
+                    note.textContent = 'This image may not be ideal for SVG conversion. Best results with high-contrast black and white images.';
+                    imageWrapper.appendChild(note);
+                    
+                    uploadStatus.textContent = 'Image uploaded (not converted to SVG)';
+                    uploadStatus.style.color = '#f59e0b';
+                }
+                
+                // Add the uploaded image to the container (at the beginning)
+                imageContainer.insertBefore(imageWrapper, imageContainer.firstChild);
+                
+                // Clean up
+                URL.revokeObjectURL(tempImg.src);
+                
+            } catch (error) {
+                console.error('Error processing uploaded image:', error);
+                uploadStatus.textContent = 'Error processing image';
+                uploadStatus.style.color = '#dc2626';
+            }
+        }
+
+        function addSVGControls(imageWrapper, svgContainer, identifier, originalWidth, originalHeight) {
+            // Add controls
+            const controls = document.createElement('div');
+            controls.className = 'controls';
+            
+            const colorControl = document.createElement('div');
+            colorControl.className = 'color-control';
+            
+            // Create color inputs container
+            const colorInputs = document.createElement('div');
+            colorInputs.className = 'color-inputs';
+            
+            const colorPicker = document.createElement('input');
+            colorPicker.type = 'color';
+            colorPicker.className = 'color-picker';
+            colorPicker.value = '#000000';
+            
+            const hexInput = document.createElement('input');
+            hexInput.type = 'text';
+            hexInput.className = 'hex-input';
+            hexInput.value = '#000000';
+            hexInput.placeholder = '#000000';
+
+            // Add palette selector
+            const paletteSelector = document.createElement('select');
+            paletteSelector.className = 'palette-selector';
+            
+            // Add color palettes
+            const colorPalettes = {
+                "2025-2027 In Colors": {
+                    "Strawberry Slush": "#f26b73",
+                    "Timid Tiger": "#f68e4f",
+                    "Darling Duckling": "#f0d34f",
+                    "Cloud Cover": "#b4c5c0",
+                    "Secret Sea": "#334249"
+                },
+                "2024-2026 In Colors": {
+                    "Pretty in Pink": "#f8abb6",
+                    "Peach Pie": "#fab474",
+                    "Shy Shamrock": "#49bc8f",
+                    "Summer Splash": "#63c4b1",
+                    "Petunia Pop": "#d37eb4"
+                },
+                "Basics": {
+                    "Basic Beige": "#e3dbc5",
+                    "Very Vanilla": "#fff7e1",
+                    "Basic White": "#ffffff",
+                    "White Willow": "#ffffff",
+                    "Basic Black": "#000000",
+                    "Bronze & Ivory": "#a97448",
+                    "Crumb Cake": "#c8ad8c"
+                },
+                "Subtles": {
+                    "Petal Pink": "#fcd1bb",
+                    "Calypso Coral": "#f47e63",
+                    "Lemon Lolly": "#fff8a2",
+                    "Soft Sea Foam": "#e6f1d2",
+                    "Lost Lagoon": "#7baaa1",
+                    "Pool Party": "#a9dbd6",
+                    "Balmy Blue": "#a0d6ea",
+                    "Highland Heather": "#ad95c6",
+                    "Fresh Freesia": "#e6b7d6",
+                    "Bubble Bath": "#fad5e6"
+                },
+                "Brights": {
+                    "Poppy Parade": "#ed193a",
+                    "Melon Mambo": "#e94d87",
+                    "Flirty Flamingo": "#f5928b",
+                    "Pumpkin Pie": "#f89433",
+                    "Daffodil Delight": "#ffdc67",
+                    "Lemon Lime Twist": "#dee568",
+                    "Granny Apple Green": "#a3c149",
+                    "Coastal Cabana": "#90d2be",
+                    "Azure Afternoon": "#27a0d6",
+                    "Berry Burst": "#b74985"
+                },
+                "Regals": {
+                    "Cherry Cobbler": "#a10637",
+                    "Real Red": "#c52342",
+                    "Cajun Craze": "#c0492d",
+                    "Crushed Curry": "#f8bd16",
+                    "Old Olive": "#98a04d",
+                    "Garden Green": "#4d8b56",
+                    "Shaded Spruce": "#00815b",
+                    "Pretty Peacock": "#006f71",
+                    "Blueberry Bushel": "#0d5993",
+                    "Gorgeous Grape": "#855da4"
+                },
+                "Neutrals": {
+                    "Mossy Meadow": "#656739",
+                    "Misty Moonlight": "#58728e",
+                    "Night of Navy": "#213e6d",
+                    "Blackberry Bliss": "#582752",
+                    "Early Espresso": "#63412c",
+                    "Pecan Pie": "#a97448",
+                    "Crumb Cake": "#c8ad8c",
+                    "Gray Granite": "#b3aba1",
+                    "Smoky Slate": "#bdbdbe",
+                    "Basic Gray": "#767e85"
+                }
+            };
+
+            // Add options to palette selector
+            Object.keys(colorPalettes).forEach(paletteName => {
+                const option = document.createElement('option');
+                option.value = paletteName;
+                option.textContent = paletteName;
+                paletteSelector.appendChild(option);
+            });
+
+            // Create color palette container
+            const colorPalette = document.createElement('div');
+            colorPalette.className = 'color-palette';
+
+            // Function to update color palette
+            function updateColorPalette(paletteName) {
+                colorPalette.innerHTML = '';
+                const colors = colorPalettes[paletteName];
+                
+                Object.entries(colors).forEach(([name, hex]) => {
+                    const swatch = document.createElement('div');
+                    swatch.className = 'color-swatch';
+                    swatch.style.backgroundColor = hex;
+                    swatch.title = name;
+                    
+                    swatch.addEventListener('click', () => {
+                        // Remove active class from all swatches
+                        colorPalette.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('active'));
+                        // Add active class to clicked swatch
+                        swatch.classList.add('active');
+                        
+                        // Update color picker and hex input
+                        colorPicker.value = hex;
+                        hexInput.value = hex;
+                        tintSVG(svgContainer.querySelector('svg'), hex);
+                    });
+                    
+                    colorPalette.appendChild(swatch);
+                });
+            }
+
+            // Initial palette update
+            updateColorPalette(paletteSelector.value);
+
+            // Update palette when selection changes
+            paletteSelector.addEventListener('change', (e) => {
+                updateColorPalette(e.target.value);
+            });
+            
+            // Sync color picker and hex input
+            colorPicker.addEventListener('input', (e) => {
+                const color = e.target.value;
+                hexInput.value = color;
+                tintSVG(svgContainer.querySelector('svg'), color);
+                // Remove active class from all swatches
+                colorPalette.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('active'));
+            });
+            
+            hexInput.addEventListener('input', (e) => {
+                let color = e.target.value;
+                // Add # if missing
+                if (color.charAt(0) !== '#') {
+                    color = '#' + color;
+                }
+                // Validate hex color
+                if (/^#[0-9A-Fa-f]{6}$/.test(color)) {
+                    colorPicker.value = color;
+                    tintSVG(svgContainer.querySelector('svg'), color);
+                    // Remove active class from all swatches
+                    colorPalette.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('active'));
+                }
+            });
+            
+            // Assemble the structure
+            colorInputs.appendChild(colorPicker);
+            colorInputs.appendChild(hexInput);
+            
+            colorControl.appendChild(colorInputs);
+            colorControl.appendChild(paletteSelector);
+            
+            // Add Potrace controls
+            const potraceControls = document.createElement('div');
+            potraceControls.className = 'potrace-controls';
+            
+            const potraceTitle = document.createElement('h4');
+            potraceTitle.textContent = 'SVG Conversion Settings';
+            potraceControls.appendChild(potraceTitle);
+            
+            const sliderGroup = document.createElement('div');
+            sliderGroup.className = 'slider-group';
+            
+            // Create sliders for each parameter
+            const sliders = [
+                { name: 'threshold', label: 'Threshold', min: 0, max: 255, value: 128, step: 1, tooltip: 'Black/white threshold (0-255)' },
+                { name: 'turdsize', label: 'Detail Level', min: 0, max: 100, value: 25, step: 1, tooltip: 'Minimum area of paths (higher = fewer details)' },
+                { name: 'alphamax', label: 'Corner Smooth', min: 0, max: 1.3, value: 0.8, step: 0.1, tooltip: 'Corner smoothness (0-1.3)' },
+                { name: 'opttolerance', label: 'Curve Smooth', min: 0, max: 1, value: 0.2, step: 0.1, tooltip: 'Curve optimization tolerance' }
+            ];
+            
+            const sliderValues = {};
+            
+            sliders.forEach(slider => {
+                const sliderControl = document.createElement('div');
+                sliderControl.className = 'slider-control';
+                
+                const label = document.createElement('label');
+                label.textContent = slider.label;
+                label.title = slider.tooltip;
+                
+                const input = document.createElement('input');
+                input.type = 'range';
+                input.min = slider.min;
+                input.max = slider.max;
+                input.value = slider.value;
+                input.step = slider.step;
+                
+                const valueDisplay = document.createElement('span');
+                valueDisplay.className = 'slider-value';
+                valueDisplay.textContent = slider.value;
+                
+                sliderValues[slider.name] = slider.value;
+                
+                input.addEventListener('input', (e) => {
+                    const value = parseFloat(e.target.value);
+                    valueDisplay.textContent = value;
+                    sliderValues[slider.name] = value;
+                    
+                    // Debounce the conversion to avoid too many calls
+                    clearTimeout(input.debounceTimer);
+                    input.debounceTimer = setTimeout(() => {
+                        reconvertSVG();
+                    }, 300);
+                });
+                
+                sliderControl.appendChild(label);
+                sliderControl.appendChild(input);
+                sliderControl.appendChild(valueDisplay);
+                sliderGroup.appendChild(sliderControl);
+            });
+            
+            // Add optimize curves checkbox
+            const checkboxControl = document.createElement('div');
+            checkboxControl.className = 'checkbox-control';
+            
+            const optimizeCheckbox = document.createElement('input');
+            optimizeCheckbox.type = 'checkbox';
+            optimizeCheckbox.checked = true;
+            optimizeCheckbox.id = `optcurve-${identifier}`;
+            
+            const optimizeLabel = document.createElement('label');
+            optimizeLabel.textContent = 'Optimize curves';
+            optimizeLabel.htmlFor = `optcurve-${identifier}`;
+            optimizeLabel.title = 'Enable curve optimization for smoother paths';
+            
+            sliderValues.optcurve = true;
+            
+            optimizeCheckbox.addEventListener('change', (e) => {
+                sliderValues.optcurve = e.target.checked;
+                reconvertSVG();
+            });
+            
+            checkboxControl.appendChild(optimizeCheckbox);
+            checkboxControl.appendChild(optimizeLabel);
+            sliderGroup.appendChild(checkboxControl);
+            
+            potraceControls.appendChild(sliderGroup);
+            
+            // Store original image for reconversion
+            const originalImage = document.createElement('img');
+            originalImage.src = svgContainer.dataset.originalImageSrc || '';
+            
+            // Function to reconvert SVG with new parameters
+            async function reconvertSVG() {
+                if (!originalImage.src) return;
+                
+                try {
+                    const tempImg = document.createElement('img');
+                    tempImg.src = originalImage.src;
+                    
+                    await new Promise(resolve => {
+                        tempImg.onload = resolve;
+                    });
+                    
+                    const svg = await convertToSVG(tempImg, originalWidth, originalHeight, sliderValues);
+                    const scaledSvg = svg.replace(/<svg([^>]*)>/, (match, attributes) => {
+                        return `<svg${attributes} viewBox="0 0 ${originalWidth} ${originalHeight}" width="100%" height="100%">`;
+                    });
+                    
+                    svgContainer.innerHTML = scaledSvg;
+                    
+                    // Reapply current color
+                    const currentColor = colorPicker.value;
+                    tintSVG(svgContainer.querySelector('svg'), currentColor);
+                } catch (error) {
+                    console.error('Error reconverting SVG:', error);
+                }
+            }
+            
+            const downloadButton = document.createElement('button');
+            downloadButton.textContent = 'Download SVG';
+            downloadButton.onclick = () => downloadSVG(svgContainer.querySelector('svg'), identifier, originalWidth, originalHeight);
+
+            const downloadPngButton = document.createElement('button');
+            downloadPngButton.textContent = 'Download PNG';
+            downloadPngButton.onclick = () => downloadPNG(svgContainer.querySelector('svg'), identifier, originalWidth, originalHeight);
+
+            const downloadJpgButton = document.createElement('button');
+            downloadJpgButton.textContent = 'Download JPG';
+            downloadJpgButton.onclick = () => downloadJPG(svgContainer.querySelector('svg'), identifier, originalWidth, originalHeight);
+
+            controls.appendChild(colorControl);
+            controls.appendChild(colorPalette);
+            controls.appendChild(potraceControls);
+            controls.appendChild(downloadButton);
+            controls.appendChild(downloadPngButton);
+            controls.appendChild(downloadJpgButton);
+            
+            imageWrapper.appendChild(controls);
+        }
+
+        function blobToDataUrl(blob) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onloadend = () => resolve(reader.result);
+                reader.onerror = reject;
+                reader.readAsDataURL(blob);
+            });
+        }
+
+        function adjustImageHue(img, color) {
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            
+            canvas.width = img.naturalWidth;
+            canvas.height = img.naturalHeight;
+            
+            ctx.drawImage(img, 0, 0);
+            
+            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const data = imageData.data;
+            
+            const r = parseInt(color.slice(1, 3), 16);
+            const g = parseInt(color.slice(3, 5), 16);
+            const b = parseInt(color.slice(5, 7), 16);
+            
+            for (let i = 0; i < data.length; i += 4) {
+                if (data[i] < 250 || data[i + 1] < 250 || data[i + 2] < 250) {
+                    data[i] = r;
+                    data[i + 1] = g;
+                    data[i + 2] = b;
+                }
+            }
+            
+            ctx.putImageData(imageData, 0, 0);
+            img.src = canvas.toDataURL();
+        }
+
+        async function isBlackAndWhite(img) {
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            
+            canvas.width = img.naturalWidth;
+            canvas.height = img.naturalHeight;
+            
+            ctx.drawImage(img, 0, 0);
+            
+            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const data = imageData.data;
+            
+            let blackPixels = 0;
+            let whitePixels = 0;
+            let totalPixels = 0;
+            
+            for (let i = 0; i < data.length; i += 4) {
+                const r = data[i];
+                const g = data[i + 1];
+                const b = data[i + 2];
+                
+                // Check if pixel is black (all channels close to 0)
+                if (r < 50 && g < 50 && b < 50) {
+                    blackPixels++;
+                }
+                // Check if pixel is white (all channels close to 255)
+                else if (r > 200 && g > 200 && b > 200) {
+                    whitePixels++;
+                }
+                totalPixels++;
+            }
+            
+            const blackPercentage = (blackPixels / totalPixels) * 100;
+            const whitePercentage = (whitePixels / totalPixels) * 100;
+            
+            // Consider it black and white if more than 90% of pixels are either black or white
+            return (blackPercentage + whitePercentage) > 90;
+        }
+
+        async function convertToSVG(img, originalWidth, originalHeight, params = {}) {
+            // Default parameters
+            const defaultParams = {
+                turdsize: 25,
+                alphamax: 0.8,
+                optcurve: true,
+                opttolerance: 0.2,
+                threshold: 128
+            };
+            
+            const finalParams = { ...defaultParams, ...params };
+            
+            return new Promise((resolve, reject) => {
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                
+                canvas.width = originalWidth;
+                canvas.height = originalHeight;
+                
+                ctx.drawImage(img, 0, 0);
+                
+                // Convert to black and white using the threshold parameter
+                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                const data = imageData.data;
+                
+                for (let i = 0; i < data.length; i += 4) {
+                    const r = data[i];
+                    const g = data[i + 1];
+                    const b = data[i + 2];
+                    const gray = (r + g + b) / 3;
+                    
+                    data[i] = data[i + 1] = data[i + 2] = gray < finalParams.threshold ? 0 : 255;
+                }
+                
+                ctx.putImageData(imageData, 0, 0);
+                
+                // Get the image data as a data URL
+                const dataUrl = canvas.toDataURL('image/png');
+                
+                // Set Potrace parameters
+                Potrace.setParameter({
+                    turdsize: finalParams.turdsize,
+                    alphamax: finalParams.alphamax,
+                    optcurve: finalParams.optcurve,
+                    opttolerance: finalParams.opttolerance,
+                    threshold: finalParams.threshold
+                });
+                
+                // Load the image and process it
+                Potrace.loadImageFromUrl(dataUrl);
+                
+                // Process the image and get SVG
+                Potrace.process(function() {
+                    // Get SVG at original size
+                    const svg = Potrace.getSVG(1); // Use scale of 1 for original size
+                    resolve(svg);
+                });
+            });
+        }
+
+        function tintSVG(svg, color) {
+            if (!svg) return;
+            
+            // Get the path element
+            const path = svg.querySelector('path');
+            if (!path) return;
+            
+            // Update the fill color
+            path.setAttribute('fill', color);
+        }
+
+        function sanitizeForFilename(name) {
+            return name
+                .trim()
+                .toLowerCase()
+                .replace(/[^a-z0-9\s-]/g, '')
+                .replace(/\s+/g, '_')
+                .replace(/_+/g, '_')
+                .replace(/^_|_$/g, '');
+        }
+
+        function buildDownloadFilename(productId, suffix) {
+            const sanitized = sanitizeForFilename(detectedStampSetName);
+            const parts = ['stampinup', productId];
+            if (sanitized) parts.push(sanitized);
+            if (suffix) parts.push(suffix);
+            return parts.join('_') + '.svg';
+        }
+
+        function downloadSVG(svg, productId, originalWidth, originalHeight) {
+            if (!svg) return;
+
+            // Create a copy of the SVG to modify
+            const svgCopy = svg.cloneNode(true);
+
+            // Set the viewBox to match original dimensions
+            svgCopy.setAttribute('viewBox', `0 0 ${originalWidth} ${originalHeight}`);
+
+            // Set width and height to match original dimensions
+            svgCopy.setAttribute('width', originalWidth);
+            svgCopy.setAttribute('height', originalHeight);
+
+            // Create a blob from the SVG
+            const svgData = new XMLSerializer().serializeToString(svgCopy);
+            const blob = new Blob([svgData], { type: 'image/svg+xml' });
+
+            // Create a download link
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = buildDownloadFilename(productId);
+
+            // Trigger the download
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+        }
+
+        function svgToImageBlob(svg, originalWidth, originalHeight, mimeType, callback) {
+            const svgCopy = svg.cloneNode(true);
+            svgCopy.setAttribute('viewBox', `0 0 ${originalWidth} ${originalHeight}`);
+            svgCopy.setAttribute('width', originalWidth);
+            svgCopy.setAttribute('height', originalHeight);
+
+            const svgData = new XMLSerializer().serializeToString(svgCopy);
+            const svgBlob = new Blob([svgData], { type: 'image/svg+xml' });
+            const svgUrl = URL.createObjectURL(svgBlob);
+
+            const img = new Image();
+            img.onload = () => {
+                const canvas = document.createElement('canvas');
+                canvas.width = originalWidth;
+                canvas.height = originalHeight;
+                const ctx = canvas.getContext('2d');
+                if (mimeType === 'image/jpeg') {
+                    ctx.fillStyle = '#ffffff';
+                    ctx.fillRect(0, 0, originalWidth, originalHeight);
+                }
+                ctx.drawImage(img, 0, 0);
+                URL.revokeObjectURL(svgUrl);
+                canvas.toBlob(callback, mimeType);
+            };
+            img.src = svgUrl;
+        }
+
+        function downloadPNG(svg, productId, originalWidth, originalHeight) {
+            if (!svg) return;
+            svgToImageBlob(svg, originalWidth, originalHeight, 'image/png', blob => {
+                triggerDownload(blob, buildDownloadFilename(productId).replace(/\.svg$/, '.png'));
+            });
+        }
+
+        function downloadJPG(svg, productId, originalWidth, originalHeight) {
+            if (!svg) return;
+            svgToImageBlob(svg, originalWidth, originalHeight, 'image/jpeg', blob => {
+                triggerDownload(blob, buildDownloadFilename(productId).replace(/\.svg$/, '.jpg'));
+            });
+        }
+
+        function triggerDownload(blob, filename) {
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = filename;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+        }
+    </script>
+</body>
+</html> 
