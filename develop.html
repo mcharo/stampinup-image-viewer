@@ -1038,11 +1038,21 @@
                                 const downloadButton = document.createElement('button');
                                 downloadButton.textContent = 'Download SVG';
                                 downloadButton.onclick = () => downloadSVG(svgContainer.querySelector('svg'), productId, originalWidth, originalHeight);
+
+                                const downloadPngButton = document.createElement('button');
+                                downloadPngButton.textContent = 'Download PNG';
+                                downloadPngButton.onclick = () => downloadPNG(svgContainer.querySelector('svg'), productId, originalWidth, originalHeight);
+
+                                const downloadJpgButton = document.createElement('button');
+                                downloadJpgButton.textContent = 'Download JPG';
+                                downloadJpgButton.onclick = () => downloadJPG(svgContainer.querySelector('svg'), productId, originalWidth, originalHeight);
                                 
                                 controls.appendChild(colorControl);
                                 controls.appendChild(colorPalette);
                                 controls.appendChild(downloadButton);
-                                
+                                controls.appendChild(downloadPngButton);
+                                controls.appendChild(downloadJpgButton);
+
                                 imageWrapper.appendChild(controls);
 
                                 // Create container for individual objects
@@ -1931,10 +1941,20 @@
             removeButton.onclick = () => objectCard.remove();
             
             const downloadButton = document.createElement('button');
-            downloadButton.textContent = 'Download';
+            downloadButton.textContent = 'Download SVG';
             downloadButton.onclick = () => downloadObjectSVG(svg, productId, width, height);
-            
+
+            const downloadPngButton = document.createElement('button');
+            downloadPngButton.textContent = 'Download PNG';
+            downloadPngButton.onclick = () => downloadObjectPNG(svg, productId, width, height);
+
+            const downloadJpgButton = document.createElement('button');
+            downloadJpgButton.textContent = 'Download JPG';
+            downloadJpgButton.onclick = () => downloadObjectJPG(svg, productId, width, height);
+
             actions.appendChild(downloadButton);
+            actions.appendChild(downloadPngButton);
+            actions.appendChild(downloadJpgButton);
             actions.appendChild(removeButton);
             
             header.appendChild(title);
@@ -2162,32 +2182,38 @@
 
         function downloadObjectSVG(svg, productId, originalWidth, originalHeight) {
             if (!svg) return;
-            
-            // Create a copy of the SVG to modify
+
             const svgCopy = svg.cloneNode(true);
-            
-            // Set the viewBox to match original dimensions
             svgCopy.setAttribute('viewBox', `0 0 ${originalWidth} ${originalHeight}`);
-            
-            // Set width and height to match original dimensions
             svgCopy.setAttribute('width', originalWidth);
             svgCopy.setAttribute('height', originalHeight);
-            
-            // Create a blob from the SVG
+
             const svgData = new XMLSerializer().serializeToString(svgCopy);
             const blob = new Blob([svgData], { type: 'image/svg+xml' });
-            
-            // Create a download link
+
             const url = URL.createObjectURL(blob);
             const link = document.createElement('a');
             link.href = url;
             link.download = buildDownloadFilename(productId, `object_${Date.now()}`);
-            
-            // Trigger the download
+
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
             URL.revokeObjectURL(url);
+        }
+
+        function downloadObjectPNG(svg, productId, originalWidth, originalHeight) {
+            if (!svg) return;
+            svgToImageBlob(svg, originalWidth, originalHeight, 'image/png', blob => {
+                triggerDownload(blob, buildDownloadFilename(productId, `object_${Date.now()}`).replace(/\.svg$/, '.png'));
+            });
+        }
+
+        function downloadObjectJPG(svg, productId, originalWidth, originalHeight) {
+            if (!svg) return;
+            svgToImageBlob(svg, originalWidth, originalHeight, 'image/jpeg', blob => {
+                triggerDownload(blob, buildDownloadFilename(productId, `object_${Date.now()}`).replace(/\.svg$/, '.jpg'));
+            });
         }
 
         function downloadSVG(svg, productId, originalWidth, originalHeight) {
@@ -2218,6 +2244,58 @@
             link.click();
             document.body.removeChild(link);
             URL.revokeObjectURL(url);
+        }
+
+        function svgToImageBlob(svg, originalWidth, originalHeight, mimeType, callback) {
+            const svgCopy = svg.cloneNode(true);
+            svgCopy.setAttribute('viewBox', `0 0 ${originalWidth} ${originalHeight}`);
+            svgCopy.setAttribute('width', originalWidth);
+            svgCopy.setAttribute('height', originalHeight);
+
+            const svgData = new XMLSerializer().serializeToString(svgCopy);
+            const svgBlob = new Blob([svgData], { type: 'image/svg+xml' });
+            const svgUrl = URL.createObjectURL(svgBlob);
+
+            const img = new Image();
+            img.onload = () => {
+                const canvas = document.createElement('canvas');
+                canvas.width = originalWidth;
+                canvas.height = originalHeight;
+                const ctx = canvas.getContext('2d');
+                if (mimeType === 'image/jpeg') {
+                    ctx.fillStyle = '#ffffff';
+                    ctx.fillRect(0, 0, originalWidth, originalHeight);
+                }
+                ctx.drawImage(img, 0, 0);
+                URL.revokeObjectURL(svgUrl);
+                canvas.toBlob(callback, mimeType);
+            };
+            img.src = svgUrl;
+        }
+
+        function triggerDownload(blob, filename) {
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = filename;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+        }
+
+        function downloadPNG(svg, productId, originalWidth, originalHeight) {
+            if (!svg) return;
+            svgToImageBlob(svg, originalWidth, originalHeight, 'image/png', blob => {
+                triggerDownload(blob, buildDownloadFilename(productId).replace(/\.svg$/, '.png'));
+            });
+        }
+
+        function downloadJPG(svg, productId, originalWidth, originalHeight) {
+            if (!svg) return;
+            svgToImageBlob(svg, originalWidth, originalHeight, 'image/jpeg', blob => {
+                triggerDownload(blob, buildDownloadFilename(productId).replace(/\.svg$/, '.jpg'));
+            });
         }
     </script>
 </body>
