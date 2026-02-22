@@ -852,7 +852,13 @@
         });
 
         // Load images automatically on page load
+        // Pre-populate product ID from ?id= query parameter if present
         window.onload = function() {
+            const params = new URLSearchParams(window.location.search);
+            const idParam = params.get('id');
+            if (idParam) {
+                document.getElementById('productId').value = idParam;
+            }
             loadImages();
         };
 
