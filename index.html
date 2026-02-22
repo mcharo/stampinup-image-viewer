@@ -2586,17 +2586,43 @@
                 if (y < th - 1) enqueue2(idx + tw);
             }
 
-            // Step 6: Compose final image — white for anything inside the wall
+            // Step 6: Smooth the outer edge of the white region with a small blur.
+            // This anti-aliases the pixel staircase on the border without visibly
+            // changing the border size — interior pixels stay fully opaque (255),
+            // only the outermost few pixels get a smooth alpha falloff.
+            const edgeSrc = document.createElement('canvas');
+            edgeSrc.width = tw;
+            edgeSrc.height = th;
+            const edgeSrcCtx = edgeSrc.getContext('2d');
+            const edgeSrcData = edgeSrcCtx.createImageData(tw, th);
+            for (let i = 0; i < n; i++) {
+                if (dilated[i] || !trulyExterior[i]) {
+                    edgeSrcData.data[i * 4]     = 255;
+                    edgeSrcData.data[i * 4 + 1] = 255;
+                    edgeSrcData.data[i * 4 + 2] = 255;
+                    edgeSrcData.data[i * 4 + 3] = 255;
+                }
+            }
+            edgeSrcCtx.putImageData(edgeSrcData, 0, 0);
+
+            const edgeDst = document.createElement('canvas');
+            edgeDst.width = tw;
+            edgeDst.height = th;
+            const edgeDstCtx = edgeDst.getContext('2d');
+            edgeDstCtx.filter = 'blur(1.5px)';
+            edgeDstCtx.drawImage(edgeSrc, 0, 0);
+            edgeDstCtx.filter = 'none';
+            const smoothedEdge = edgeDstCtx.getImageData(0, 0, tw, th).data;
+
             const outData = new ImageData(tw, th);
             const out = outData.data;
             for (let i = 0; i < n; i++) {
-                if (dilated[i] || !trulyExterior[i]) {
-                    out[i * 4 + 0] = 255;  // R
-                    out[i * 4 + 1] = 255;  // G
-                    out[i * 4 + 2] = 255;  // B
-                    out[i * 4 + 3] = 255;  // A — white backing
-                } else {
-                    out[i * 4 + 3] = 0;    // transparent exterior
+                const a = smoothedEdge[i * 4 + 3];
+                if (a > 0) {
+                    out[i * 4]     = 255;
+                    out[i * 4 + 1] = 255;
+                    out[i * 4 + 2] = 255;
+                    out[i * 4 + 3] = a;   // smooth falloff at the outer edge
                 }
             }
 
