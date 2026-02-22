@@ -1777,8 +1777,11 @@
                                         component.bounds.width = component.bounds.right - component.bounds.left + 1;
                                         component.bounds.height = component.bounds.bottom - component.bounds.top + 1;
                                         
-                                        // Add lazy pixel reconstruction for extraction
-                                        component.getPixels = () => getPixelsFromBounds(component.bounds, binary, width);
+                                        // Use exact flood-fill pixels — avoids picking up
+                                        // ink from neighbouring objects sharing the bounding box
+                                        component.getPixels = () => component.pixelIndices.map(
+                                            idx => ({ x: idx % width, y: (idx / width) | 0 })
+                                        );
                                         
                                         components.push(component);
                                     }
@@ -1808,30 +1811,32 @@
             let stackTop = 0;
             stack[stackTop++] = startX;
             stack[stackTop++] = startY;
-            
+
             const component = {
                 pixelCount: 0,
-                bounds: { left: startX, top: startY, right: startX, bottom: startY }
+                bounds: { left: startX, top: startY, right: startX, bottom: startY },
+                pixelIndices: [] // exact pixels belonging to this component
             };
-            
+
             while (stackTop > 0) {
                 const y = stack[--stackTop];
                 const x = stack[--stackTop];
                 const idx = y * width + x;
-                
+
                 if (x < 0 || x >= width || y < 0 || y >= height || visited[idx] || !binary[idx]) {
                     continue;
                 }
-                
+
                 visited[idx] = 1;
                 component.pixelCount++;
-                
+                component.pixelIndices.push(idx);
+
                 // Update bounds with bitwise operations for slight performance gain
                 if (x < component.bounds.left) component.bounds.left = x;
                 if (x > component.bounds.right) component.bounds.right = x;
                 if (y < component.bounds.top) component.bounds.top = y;
                 if (y > component.bounds.bottom) component.bounds.bottom = y;
-                
+
                 // Add 4-connected neighbors - unrolled for better performance
                 if (x + 1 < width) {
                     stack[stackTop++] = x + 1;
@@ -1850,7 +1855,7 @@
                     stack[stackTop++] = y - 1;
                 }
             }
-            
+
             return component;
         }
 
@@ -2031,7 +2036,7 @@
             bufferInput.type = 'number';
             bufferInput.min = '5';
             bufferInput.max = '60';
-            bufferInput.value = '15';
+            bufferInput.value = '25';
             bufferInput.title = 'Cricut cut border (px)';
 
             const cricutButton = document.createElement('button');
@@ -2431,66 +2436,65 @@
             });
         }
 
-        function dilateBox(mask, w, h, radius) {
-            // 2-pass sliding window box dilation, O(w*h)
-            const temp = new Uint8Array(w * h);
+        function dilateCircular(silhouette, w, h, radius) {
+            // Circular dilation via canvas Gaussian blur + alpha threshold.
+            // Produces smooth, rounded borders (no boxy/flat edges from box kernels).
+            // sigma = radius/3 so the 3-sigma point sits at ~radius px from the silhouette.
+            const sigma = radius / 3;
+
+            // Draw silhouette as white-on-transparent onto a source canvas
+            const srcCanvas = document.createElement('canvas');
+            srcCanvas.width = w;
+            srcCanvas.height = h;
+            const srcCtx = srcCanvas.getContext('2d');
+            const imgData = srcCtx.createImageData(w, h);
+            for (let i = 0; i < silhouette.length; i++) {
+                if (silhouette[i]) {
+                    imgData.data[i * 4]     = 255;
+                    imgData.data[i * 4 + 1] = 255;
+                    imgData.data[i * 4 + 2] = 255;
+                    imgData.data[i * 4 + 3] = 255;
+                }
+            }
+            srcCtx.putImageData(imgData, 0, 0);
+
+            // Blur onto a destination canvas — spreads signal circularly
+            const dstCanvas = document.createElement('canvas');
+            dstCanvas.width = w;
+            dstCanvas.height = h;
+            const dstCtx = dstCanvas.getContext('2d');
+            dstCtx.filter = `blur(${sigma}px)`;
+            dstCtx.drawImage(srcCanvas, 0, 0);
+            dstCtx.filter = 'none';
+
+            // Threshold alpha > 1: captures all pixels within ~radius of the silhouette
+            const blurred = dstCtx.getImageData(0, 0, w, h);
             const result = new Uint8Array(w * h);
-
-            // Horizontal pass: for each row, slide a window of width (2*radius+1)
-            for (let y = 0; y < h; y++) {
-                let count = 0;
-                // Prime the window
-                for (let x = 0; x <= Math.min(radius, w - 1); x++) {
-                    if (mask[y * w + x]) count++;
-                }
-                for (let x = 0; x < w; x++) {
-                    // Add right edge of window
-                    const addX = x + radius;
-                    if (addX < w && addX > radius) {
-                        if (mask[y * w + addX]) count++;
-                    }
-                    // Remove left edge that fell out
-                    const removeX = x - radius - 1;
-                    if (removeX >= 0) {
-                        if (mask[y * w + removeX]) count--;
-                    }
-                    temp[y * w + x] = count > 0 ? 1 : 0;
-                }
+            for (let i = 0; i < result.length; i++) {
+                result[i] = blurred.data[i * 4 + 3] > 1 ? 1 : 0;
             }
-
-            // Vertical pass on temp: for each column, slide a window of height (2*radius+1)
-            for (let x = 0; x < w; x++) {
-                let count = 0;
-                // Prime the window
-                for (let y = 0; y <= Math.min(radius, h - 1); y++) {
-                    if (temp[y * w + x]) count++;
-                }
-                for (let y = 0; y < h; y++) {
-                    // Add bottom edge of window
-                    const addY = y + radius;
-                    if (addY < h && addY > radius) {
-                        if (temp[addY * w + x]) count++;
-                    }
-                    // Remove top edge that fell out
-                    const removeY = y - radius - 1;
-                    if (removeY >= 0) {
-                        if (temp[removeY * w + x]) count--;
-                    }
-                    result[y * w + x] = count > 0 ? 1 : 0;
-                }
-            }
-
             return result;
         }
 
         async function generateCricutPNG(svg, productId, width, height, bufferPx) {
             // Render at 2x resolution for quality
             const scale = 2;
-            const tw = width * scale;
-            const th = height * scale;
             const bufferScaled = bufferPx * scale;
 
-            const renderCanvas = await renderSVGOffscreen(svg, width, height, tw, th);
+            // Pad by 2× bufferScaled on each side: the dilation expands by bufferScaled,
+            // leaving another bufferScaled of transparent space so the border never
+            // gets clipped even when ink touches the SVG's own viewBox boundary.
+            const pad = bufferScaled * 2;
+            const tw = width * scale + pad * 2;
+            const th = height * scale + pad * 2;
+
+            // Render SVG at its natural 2x size, then place it centred on the padded canvas
+            const svgCanvas = await renderSVGOffscreen(svg, width, height, width * scale, height * scale);
+            const renderCanvas = document.createElement('canvas');
+            renderCanvas.width = tw;
+            renderCanvas.height = th;
+            renderCanvas.getContext('2d').drawImage(svgCanvas, pad, pad);
+
             const ctx = renderCanvas.getContext('2d');
             const imageData = ctx.getImageData(0, 0, tw, th);
             const data = imageData.data;
@@ -2541,7 +2545,7 @@
             }
 
             // Step 4: Dilate silhouette by bufferScaled pixels
-            const dilated = dilateBox(silhouette, tw, th, bufferScaled);
+            const dilated = dilateCircular(silhouette, tw, th, bufferScaled);
 
             // Step 5: Second BFS from edges through non-dilated pixels to find the
             // true exterior. The dilated border acts as a solid wall, so any pixel
