@@ -625,6 +625,11 @@
             <input type="number" id="productId" placeholder="Enter product ID" min="1" value="165346">
             <button onclick="loadImages()">Load Images</button>
         </div>
+        <div class="input-group">
+            <input type="file" id="imageUpload" accept="image/*" style="display: none;">
+            <button onclick="document.getElementById('imageUpload').click()">Upload Your Own Image</button>
+            <span id="uploadStatus" style="color: #6b7280;"></span>
+        </div>
         <div id="stampSetInfo" style="padding: 0.25rem 1.5rem; font-size: 0.875rem; color: #6b7280; min-height: 1.5em;"></div>
         <div id="error" class="error"></div>
         <div class="image-container" id="imageContainer"></div>
@@ -849,6 +854,14 @@
             if (e.key === 'Enter') {
                 e.preventDefault();
                 loadImages();
+            }
+        });
+
+        // Add event listener for file upload
+        document.getElementById('imageUpload').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (file) {
+                processUploadedImage(file);
             }
         });
 
@@ -1183,6 +1196,208 @@
 
             if (imageContainer.children.length === 0) {
                 errorDiv.textContent = 'No images found for this product ID';
+            }
+        }
+
+        async function processUploadedImage(file) {
+            const uploadStatus = document.getElementById('uploadStatus');
+            const imageContainer = document.getElementById('imageContainer');
+
+            if (!file.type.startsWith('image/')) {
+                uploadStatus.textContent = 'Please select a valid image file';
+                uploadStatus.style.color = '#dc2626';
+                return;
+            }
+
+            uploadStatus.textContent = 'Processing image...';
+            uploadStatus.style.color = '#6b7280';
+
+            try {
+                const tempImg = document.createElement('img');
+                tempImg.src = URL.createObjectURL(file);
+
+                await new Promise((resolve, reject) => {
+                    tempImg.onload = resolve;
+                    tempImg.onerror = reject;
+                });
+
+                const originalWidth = tempImg.naturalWidth;
+                const originalHeight = tempImg.naturalHeight;
+                const isBW = await isBlackAndWhite(tempImg);
+
+                const imageWrapper = document.createElement('div');
+                imageWrapper.className = 'image-wrapper';
+
+                const uploadId = 'uploaded_' + Date.now();
+
+                if (isBW) {
+                    uploadStatus.textContent = 'Converting to SVG...';
+
+                    const svg = await convertToSVG(tempImg, originalWidth, originalHeight);
+                    const svgContainer = document.createElement('div');
+                    svgContainer.className = 'svg-container';
+
+                    const scaledSvg = svg.replace(/<svg([^>]*)>/, (match, attributes) => {
+                        return `<svg${attributes} viewBox="0 0 ${originalWidth} ${originalHeight}" width="100%" height="100%">`;
+                    });
+
+                    svgContainer.innerHTML = scaledSvg;
+                    imageWrapper.appendChild(svgContainer);
+
+                    const detectionControls = createObjectDetectionControls(tempImg, svgContainer, originalWidth, originalHeight, uploadId);
+                    imageWrapper.appendChild(detectionControls);
+
+                    const mainControlsHeader = document.createElement('h3');
+                    mainControlsHeader.textContent = 'Full Image Controls';
+                    mainControlsHeader.style.cssText = 'font-size: 1rem; font-weight: 600; color: #374151; margin: 1.5rem 0 0.5rem 0;';
+                    imageWrapper.appendChild(mainControlsHeader);
+
+                    const controls = document.createElement('div');
+                    controls.className = 'controls';
+
+                    const colorControl = document.createElement('div');
+                    colorControl.className = 'color-control';
+
+                    const colorInputs = document.createElement('div');
+                    colorInputs.className = 'color-inputs';
+
+                    const colorPicker = document.createElement('input');
+                    colorPicker.type = 'color';
+                    colorPicker.className = 'color-picker';
+                    colorPicker.value = '#000000';
+
+                    const hexInput = document.createElement('input');
+                    hexInput.type = 'text';
+                    hexInput.className = 'hex-input';
+                    hexInput.value = '#000000';
+                    hexInput.placeholder = '#000000';
+
+                    const paletteSelector = document.createElement('select');
+                    paletteSelector.className = 'palette-selector';
+
+                    const colorPalettes = {
+                        "2025-2027 In Colors": { "Strawberry Slush": "#f26b73", "Timid Tiger": "#f68e4f", "Darling Duckling": "#f0d34f", "Cloud Cover": "#b4c5c0", "Secret Sea": "#334249" },
+                        "2024-2026 In Colors": { "Pretty in Pink": "#f8abb6", "Peach Pie": "#fab474", "Shy Shamrock": "#49bc8f", "Summer Splash": "#63c4b1", "Petunia Pop": "#d37eb4" },
+                        "Basics": { "Basic Beige": "#e3dbc5", "Very Vanilla": "#fff7e1", "Basic White": "#ffffff", "White Willow": "#ffffff", "Basic Black": "#000000", "Bronze & Ivory": "#a97448", "Crumb Cake": "#c8ad8c" },
+                        "Subtles": { "Petal Pink": "#fcd1bb", "Calypso Coral": "#f47e63", "Lemon Lolly": "#fff8a2", "Soft Sea Foam": "#e6f1d2", "Lost Lagoon": "#7baaa1", "Pool Party": "#a9dbd6", "Balmy Blue": "#a0d6ea", "Highland Heather": "#ad95c6", "Fresh Freesia": "#e6b7d6", "Bubble Bath": "#fad5e6" },
+                        "Brights": { "Poppy Parade": "#ed193a", "Melon Mambo": "#e94d87", "Flirty Flamingo": "#f5928b", "Pumpkin Pie": "#f89433", "Daffodil Delight": "#ffdc67", "Lemon Lime Twist": "#dee568", "Granny Apple Green": "#a3c149", "Coastal Cabana": "#90d2be", "Azure Afternoon": "#27a0d6", "Berry Burst": "#b74985" },
+                        "Regals": { "Cherry Cobbler": "#a10637", "Real Red": "#c52342", "Cajun Craze": "#c0492d", "Crushed Curry": "#f8bd16", "Old Olive": "#98a04d", "Garden Green": "#4d8b56", "Shaded Spruce": "#00815b", "Pretty Peacock": "#006f71", "Blueberry Bushel": "#0d5993", "Gorgeous Grape": "#855da4" },
+                        "Neutrals": { "Mossy Meadow": "#656739", "Misty Moonlight": "#58728e", "Night of Navy": "#213e6d", "Blackberry Bliss": "#582752", "Early Espresso": "#63412c", "Pecan Pie": "#a97448", "Crumb Cake": "#c8ad8c", "Gray Granite": "#b3aba1", "Smoky Slate": "#bdbdbe", "Basic Gray": "#767e85" }
+                    };
+
+                    Object.keys(colorPalettes).forEach(paletteName => {
+                        const option = document.createElement('option');
+                        option.value = paletteName;
+                        option.textContent = paletteName;
+                        paletteSelector.appendChild(option);
+                    });
+
+                    const colorPalette = document.createElement('div');
+                    colorPalette.className = 'color-palette';
+
+                    function updateColorPalette(paletteName) {
+                        colorPalette.innerHTML = '';
+                        Object.entries(colorPalettes[paletteName]).forEach(([name, hex]) => {
+                            const swatch = document.createElement('div');
+                            swatch.className = 'color-swatch';
+                            swatch.style.backgroundColor = hex;
+                            swatch.title = name;
+                            swatch.addEventListener('click', () => {
+                                colorPalette.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('active'));
+                                swatch.classList.add('active');
+                                colorPicker.value = hex;
+                                hexInput.value = hex;
+                                tintSVG(svgContainer.querySelector('svg'), hex);
+                            });
+                            colorPalette.appendChild(swatch);
+                        });
+                    }
+
+                    updateColorPalette(paletteSelector.value);
+                    paletteSelector.addEventListener('change', (e) => updateColorPalette(e.target.value));
+
+                    colorPicker.addEventListener('input', (e) => {
+                        const color = e.target.value;
+                        hexInput.value = color;
+                        tintSVG(svgContainer.querySelector('svg'), color);
+                        colorPalette.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('active'));
+                    });
+
+                    hexInput.addEventListener('input', (e) => {
+                        let color = e.target.value;
+                        if (color.charAt(0) !== '#') color = '#' + color;
+                        if (/^#[0-9A-Fa-f]{6}$/.test(color)) {
+                            colorPicker.value = color;
+                            tintSVG(svgContainer.querySelector('svg'), color);
+                            colorPalette.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('active'));
+                        }
+                    });
+
+                    colorInputs.appendChild(colorPicker);
+                    colorInputs.appendChild(hexInput);
+                    colorControl.appendChild(colorInputs);
+                    colorControl.appendChild(paletteSelector);
+
+                    const dlIcon = '<svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;vertical-align:-1px;margin-right:5px"><path d="M6 1v7M3.5 5.5L6 8l2.5-2.5M2 10.5h8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+
+                    const downloadButton = document.createElement('button');
+                    downloadButton.innerHTML = dlIcon + 'SVG';
+                    downloadButton.onclick = () => downloadSVG(svgContainer.querySelector('svg'), uploadId, originalWidth, originalHeight);
+
+                    const downloadPngButton = document.createElement('button');
+                    downloadPngButton.innerHTML = dlIcon + 'PNG';
+                    downloadPngButton.onclick = () => downloadPNG(svgContainer.querySelector('svg'), uploadId, originalWidth, originalHeight);
+
+                    const downloadJpgButton = document.createElement('button');
+                    downloadJpgButton.innerHTML = dlIcon + 'JPG';
+                    downloadJpgButton.onclick = () => downloadJPG(svgContainer.querySelector('svg'), uploadId, originalWidth, originalHeight);
+
+                    const downloadRow = document.createElement('div');
+                    downloadRow.className = 'download-row';
+                    downloadRow.appendChild(downloadButton);
+                    downloadRow.appendChild(downloadPngButton);
+                    downloadRow.appendChild(downloadJpgButton);
+
+                    controls.appendChild(colorControl);
+                    controls.appendChild(colorPalette);
+                    controls.appendChild(downloadRow);
+                    imageWrapper.appendChild(controls);
+
+                    const objectsHeader = document.createElement('h3');
+                    objectsHeader.textContent = 'Individual Objects';
+                    objectsHeader.style.cssText = 'font-size: 1rem; font-weight: 600; color: #374151; margin: 1.5rem 0 0.5rem 0; display: none;';
+                    objectsHeader.id = `objectsHeader-${uploadId}`;
+                    imageWrapper.appendChild(objectsHeader);
+
+                    const objectsContainer = document.createElement('div');
+                    objectsContainer.className = 'objects-container';
+                    objectsContainer.id = `objects-${uploadId}`;
+                    imageWrapper.appendChild(objectsContainer);
+
+                    uploadStatus.textContent = 'Image converted successfully!';
+                    uploadStatus.style.color = '#059669';
+                } else {
+                    const img = document.createElement('img');
+                    img.src = URL.createObjectURL(file);
+                    img.alt = 'Uploaded image';
+                    imageWrapper.appendChild(img);
+
+                    const note = document.createElement('p');
+                    note.style.cssText = 'color: #f59e0b; font-size: 0.875rem; margin: 0.5rem 0 0 0;';
+                    note.textContent = 'This image may not be ideal for SVG conversion. Best results with high-contrast black and white images.';
+                    imageWrapper.appendChild(note);
+
+                    uploadStatus.textContent = 'Image uploaded (not converted to SVG)';
+                    uploadStatus.style.color = '#f59e0b';
+                }
+
+                imageContainer.insertBefore(imageWrapper, imageContainer.firstChild);
+                URL.revokeObjectURL(tempImg.src);
+
+            } catch (error) {
+                console.error('Error processing uploaded image:', error);
+                uploadStatus.textContent = 'Error processing image';
+                uploadStatus.style.color = '#dc2626';
             }
         }
 
