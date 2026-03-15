@@ -526,6 +526,11 @@
             background-color: rgba(16, 185, 129, 0.1);
         }
 
+        .object-overlay.selected-for-join {
+            border-color: #f59e0b;
+            background-color: rgba(245, 158, 11, 0.25);
+        }
+
         .object-count-info {
             font-size: 0.875rem;
             color: #059669;
@@ -638,6 +643,13 @@
     <script>
         const baseUrl = 'https://res.cloudinary.com/stampin-up/image/upload/prod/images/default-source/product-image';
         let detectedStampSetName = '';
+        const DIE_SET_PALETTE = [
+            [228, 222, 216], // #e4ded8
+            [151, 151, 150], // #979796
+            [244, 237, 231], // #f4ede7
+            [100, 99, 104],  // #646368
+            [124, 124, 124]  // #7c7c7c
+        ];
 
         function findBannerRegion(img) {
             const canvas = document.createElement('canvas');
@@ -895,6 +907,7 @@
                 `${baseUrl}/${productId}.jpg`,
                 `${baseUrl}/${productId}o01.jpg`
             ];
+            let dieSourceBlob = null;
 
             for (const url of imageUrls) {
                 try {
@@ -906,9 +919,10 @@
                         imageWrapper.className = 'image-wrapper';
                         
                         if (url.includes('o01')) {
+                            const sourceBlob = dieSourceBlob || blob;
                             // Create a temporary image to get dimensions
                             const tempImg = document.createElement('img');
-                            tempImg.src = URL.createObjectURL(blob);
+                            tempImg.src = URL.createObjectURL(sourceBlob);
                             
                             // Wait for image to load
                             await new Promise(resolve => {
@@ -918,10 +932,12 @@
                             const originalWidth = tempImg.naturalWidth;
                             const originalHeight = tempImg.naturalHeight;
                             
-                            const isBW = await isBlackAndWhite(tempImg);
+                            const preprocessingResult = await preprocessForSVG(tempImg);
+                            const imageForVectorization = preprocessingResult.processedImage;
+                            const isBW = await isBlackAndWhite(imageForVectorization);
                             if (isBW) {
                                 // Convert to SVG automatically
-                                const svg = await convertToSVG(tempImg, originalWidth, originalHeight);
+                                const svg = await convertToSVG(imageForVectorization, originalWidth, originalHeight);
                                 const svgContainer = document.createElement('div');
                                 svgContainer.className = 'svg-container';
                                 
@@ -935,7 +951,7 @@
                                 imageWrapper.appendChild(svgContainer);
                                 
                                 // Add object detection controls
-                                const detectionControls = createObjectDetectionControls(tempImg, svgContainer, originalWidth, originalHeight, productId);
+                                const detectionControls = createObjectDetectionControls(imageForVectorization, svgContainer, originalWidth, originalHeight, productId);
                                 imageWrapper.appendChild(detectionControls);
 
                                 // Add main image controls (before objects container)
@@ -1177,6 +1193,18 @@
                             // Clean up the temporary URL
                             URL.revokeObjectURL(tempImg.src);
                         } else {
+                            const detectionProbe = document.createElement('img');
+                            detectionProbe.src = URL.createObjectURL(blob);
+                            await new Promise((resolve, reject) => {
+                                detectionProbe.onload = resolve;
+                                detectionProbe.onerror = reject;
+                            });
+                            const dieProbeResult = await preprocessForSVG(detectionProbe);
+                            if (dieProbeResult.dieSetDetected) {
+                                dieSourceBlob = blob;
+                            }
+                            URL.revokeObjectURL(detectionProbe.src);
+
                             // For regular images, just show them
                             const img = document.createElement('img');
                             img.src = URL.createObjectURL(blob);
@@ -1223,7 +1251,9 @@
 
                 const originalWidth = tempImg.naturalWidth;
                 const originalHeight = tempImg.naturalHeight;
-                const isBW = await isBlackAndWhite(tempImg);
+                const preprocessingResult = await preprocessForSVG(tempImg);
+                const imageForVectorization = preprocessingResult.processedImage;
+                const isBW = await isBlackAndWhite(imageForVectorization);
 
                 const imageWrapper = document.createElement('div');
                 imageWrapper.className = 'image-wrapper';
@@ -1233,7 +1263,7 @@
                 if (isBW) {
                     uploadStatus.textContent = 'Converting to SVG...';
 
-                    const svg = await convertToSVG(tempImg, originalWidth, originalHeight);
+                    const svg = await convertToSVG(imageForVectorization, originalWidth, originalHeight);
                     const svgContainer = document.createElement('div');
                     svgContainer.className = 'svg-container';
 
@@ -1244,7 +1274,7 @@
                     svgContainer.innerHTML = scaledSvg;
                     imageWrapper.appendChild(svgContainer);
 
-                    const detectionControls = createObjectDetectionControls(tempImg, svgContainer, originalWidth, originalHeight, uploadId);
+                    const detectionControls = createObjectDetectionControls(imageForVectorization, svgContainer, originalWidth, originalHeight, uploadId);
                     imageWrapper.appendChild(detectionControls);
 
                     const mainControlsHeader = document.createElement('h3');
@@ -1436,6 +1466,187 @@
             
             ctx.putImageData(imageData, 0, 0);
             img.src = canvas.toDataURL();
+        }
+
+        function detectDieSetPalette(img) {
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+
+            canvas.width = img.naturalWidth;
+            canvas.height = img.naturalHeight;
+            ctx.drawImage(img, 0, 0);
+
+            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const data = imageData.data;
+            const totalPixels = canvas.width * canvas.height;
+            const sampleStep = Math.max(1, Math.floor(Math.sqrt(totalPixels / 50000)));
+
+            let sampled = 0;
+            let lowSaturation = 0;
+            let nearPalette = 0;
+            let brightPixels = 0;
+            let midDarkPixels = 0;
+            let bwExtremePixels = 0;
+
+            function minPaletteDistance(r, g, b) {
+                let minDist = Infinity;
+                for (const [pr, pg, pb] of DIE_SET_PALETTE) {
+                    const dr = r - pr;
+                    const dg = g - pg;
+                    const db = b - pb;
+                    const dist = Math.sqrt((dr * dr) + (dg * dg) + (db * db));
+                    if (dist < minDist) minDist = dist;
+                }
+                return minDist;
+            }
+
+            for (let y = 0; y < canvas.height; y += sampleStep) {
+                for (let x = 0; x < canvas.width; x += sampleStep) {
+                    const idx = (y * canvas.width + x) * 4;
+                    const r = data[idx];
+                    const g = data[idx + 1];
+                    const b = data[idx + 2];
+                    const maxC = Math.max(r, g, b);
+                    const minC = Math.min(r, g, b);
+                    const lum = (0.299 * r) + (0.587 * g) + (0.114 * b);
+
+                    sampled++;
+                    if ((maxC - minC) < 18) lowSaturation++;
+                    if (minPaletteDistance(r, g, b) < 32) nearPalette++;
+                    if (lum > 210) brightPixels++;
+                    if (lum > 70 && lum < 190) midDarkPixels++;
+                    if (lum < 50 || lum > 205) bwExtremePixels++;
+                }
+            }
+
+            if (sampled === 0) return false;
+
+            const lowSatPct = lowSaturation / sampled;
+            const palettePct = nearPalette / sampled;
+            const brightPct = brightPixels / sampled;
+            const midDarkPct = midDarkPixels / sampled;
+            const bwExtremePct = bwExtremePixels / sampled;
+
+            return (
+                lowSatPct > 0.88 &&
+                palettePct > 0.12 &&
+                brightPct > 0.25 &&
+                midDarkPct > 0.05 &&
+                bwExtremePct < 0.92
+            );
+        }
+
+        function percentileFromHistogram(histogram, total, percentile) {
+            const target = total * percentile;
+            let cumulative = 0;
+            for (let i = 0; i < 256; i++) {
+                cumulative += histogram[i];
+                if (cumulative >= target) return i;
+            }
+            return 255;
+        }
+
+        function otsuThreshold(histogram, total) {
+            let sum = 0;
+            for (let i = 0; i < 256; i++) {
+                sum += i * histogram[i];
+            }
+
+            let sumBackground = 0;
+            let weightBackground = 0;
+            let maxVariance = 0;
+            let bestThreshold = 128;
+
+            for (let i = 0; i < 256; i++) {
+                weightBackground += histogram[i];
+                if (weightBackground === 0) continue;
+
+                const weightForeground = total - weightBackground;
+                if (weightForeground === 0) break;
+
+                sumBackground += i * histogram[i];
+                const meanBackground = sumBackground / weightBackground;
+                const meanForeground = (sum - sumBackground) / weightForeground;
+                const variance = weightBackground * weightForeground * ((meanBackground - meanForeground) ** 2);
+
+                if (variance > maxVariance) {
+                    maxVariance = variance;
+                    bestThreshold = i;
+                }
+            }
+
+            return bestThreshold;
+        }
+
+        async function createNormalizedDieSetImage(img) {
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            canvas.width = img.naturalWidth;
+            canvas.height = img.naturalHeight;
+            ctx.drawImage(img, 0, 0);
+
+            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const data = imageData.data;
+            const firstHistogram = new Uint32Array(256);
+
+            for (let i = 0; i < data.length; i += 4) {
+                const gray = Math.round((0.299 * data[i]) + (0.587 * data[i + 1]) + (0.114 * data[i + 2]));
+                firstHistogram[gray]++;
+            }
+
+            const totalPixels = canvas.width * canvas.height;
+            const low = percentileFromHistogram(firstHistogram, totalPixels, 0.02);
+            const high = percentileFromHistogram(firstHistogram, totalPixels, 0.98);
+            const stretchRange = Math.max(1, high - low);
+
+            const stretchedHistogram = new Uint32Array(256);
+
+            for (let i = 0; i < data.length; i += 4) {
+                const gray = (0.299 * data[i]) + (0.587 * data[i + 1]) + (0.114 * data[i + 2]);
+                const normalized = Math.max(0, Math.min(255, ((gray - low) * 255) / stretchRange));
+                const gammaAdjusted = Math.pow(normalized / 255, 0.9) * 255;
+                const outputGray = Math.max(0, Math.min(255, Math.round(gammaAdjusted)));
+                stretchedHistogram[outputGray]++;
+                data[i] = outputGray;
+                data[i + 1] = outputGray;
+                data[i + 2] = outputGray;
+            }
+
+            let threshold = otsuThreshold(stretchedHistogram, totalPixels);
+            threshold = Math.max(90, Math.min(200, threshold));
+
+            for (let i = 0; i < data.length; i += 4) {
+                const value = data[i] < threshold ? 0 : 255;
+                data[i] = value;
+                data[i + 1] = value;
+                data[i + 2] = value;
+            }
+
+            ctx.putImageData(imageData, 0, 0);
+
+            const normalizedImage = new Image();
+            normalizedImage.src = canvas.toDataURL('image/png');
+            await new Promise((resolve, reject) => {
+                normalizedImage.onload = resolve;
+                normalizedImage.onerror = reject;
+            });
+            return normalizedImage;
+        }
+
+        async function preprocessForSVG(img) {
+            const isDieSetLike = detectDieSetPalette(img);
+            if (!isDieSetLike) {
+                return {
+                    processedImage: img,
+                    dieSetDetected: false
+                };
+            }
+
+            const normalized = await createNormalizedDieSetImage(img);
+            return {
+                processedImage: normalized,
+                dieSetDetected: true
+            };
         }
 
         async function isBlackAndWhite(img) {
@@ -1642,9 +1853,20 @@
             toggleBordersButton.id = `toggleBorders-${productId}`;
             toggleBordersButton.onclick = () => toggleObjectBorders(svgContainer, toggleBordersButton);
             
+            // Join selected objects button (initially hidden)
+            const joinButton = document.createElement('button');
+            joinButton.className = 'detect-button';
+            joinButton.textContent = 'Join 2 Selected';
+            joinButton.style.backgroundColor = '#7c3aed';
+            joinButton.style.display = 'none';
+            joinButton.onclick = () => joinSelectedObjects(svgContainer, originalImage, originalWidth, originalHeight, productId);
+            svgContainer.joinButton = joinButton;
+            svgContainer.selectedForJoin = [];
+
             buttonsContainer.appendChild(refreshButton);
             buttonsContainer.appendChild(toggleBordersButton);
-            
+            buttonsContainer.appendChild(joinButton);
+
             // Track parameter changes
             let lastMinSize = minSizeInput.value;
             let lastGapTolerance = gapInput.value;
@@ -1706,7 +1928,7 @@
             // Info about processing time
             const infoText = document.createElement('div');
             infoText.className = 'detection-warning';
-            infoText.innerHTML = 'ℹ️ <strong>Auto-Detection:</strong> Objects are automatically detected when the image is converted. Processing typically takes 10-30 seconds in the background.';
+            infoText.innerHTML = 'ℹ️ Click an object to extract it. <strong>⌘-click</strong> (Cmd/Ctrl+click) to select multiple objects, then use <strong>Join Selected</strong> to merge them into one.';
             infoText.style.fontSize = '0.8rem';
             infoText.style.color = '#374151';
             infoText.style.textAlign = 'center';
@@ -1735,6 +1957,10 @@
             // Clear any existing overlays
             const existingOverlays = svgContainer.querySelectorAll('.object-overlay');
             existingOverlays.forEach(overlay => overlay.remove());
+
+            // Reset join selection
+            svgContainer.selectedForJoin = [];
+            if (svgContainer.joinButton) svgContainer.joinButton.style.display = 'none';
             
             // Get UI elements - use the refresh button instead of old detect button
             const refreshButton = document.getElementById(`refreshButton-${productId}`);
@@ -1798,8 +2024,29 @@
                         
                         overlay.addEventListener('click', (e) => {
                             e.stopPropagation();
-                            extractObject(obj, originalImage, originalWidth, originalHeight, productId, index + 1);
-                            overlay.style.display = 'none';
+                            if (e.metaKey || e.ctrlKey) {
+                                // Toggle selection for joining
+                                const idx = (svgContainer.selectedForJoin || []).indexOf(obj);
+                                if (idx === -1) {
+                                    svgContainer.selectedForJoin.push(obj);
+                                    overlay.classList.add('selected-for-join');
+                                } else {
+                                    svgContainer.selectedForJoin.splice(idx, 1);
+                                    overlay.classList.remove('selected-for-join');
+                                }
+                                const n = svgContainer.selectedForJoin.length;
+                                if (svgContainer.joinButton) {
+                                    if (n >= 2) {
+                                        svgContainer.joinButton.style.display = 'inline-block';
+                                        svgContainer.joinButton.textContent = `Join ${n} Selected`;
+                                    } else {
+                                        svgContainer.joinButton.style.display = 'none';
+                                    }
+                                }
+                            } else {
+                                extractObject(obj, originalImage, originalWidth, originalHeight, productId, index + 1);
+                                overlay.style.display = 'none';
+                            }
                         });
                         
                         svgContainer.appendChild(overlay);
@@ -2094,6 +2341,47 @@
                 }
             }
             return pixels;
+        }
+
+        function joinSelectedObjects(svgContainer, originalImage, originalWidth, originalHeight, productId) {
+            const objects = svgContainer.selectedForJoin;
+            if (!objects || objects.length < 2) return;
+
+            // Merge bounding boxes
+            const combinedBounds = {
+                left:   Math.min(...objects.map(o => o.bounds.left)),
+                top:    Math.min(...objects.map(o => o.bounds.top)),
+                right:  Math.max(...objects.map(o => o.bounds.right)),
+                bottom: Math.max(...objects.map(o => o.bounds.bottom)),
+            };
+            combinedBounds.width  = combinedBounds.right  - combinedBounds.left + 1;
+            combinedBounds.height = combinedBounds.bottom - combinedBounds.top  + 1;
+
+            // Merge pixel indices (deduplicate via Set)
+            const allIndices = new Set();
+            objects.forEach(o => o.pixelIndices.forEach(i => allIndices.add(i)));
+            const pixelIndices = Array.from(allIndices);
+
+            const combinedObject = {
+                bounds: combinedBounds,
+                pixelIndices,
+                pixelCount: pixelIndices.length,
+                getPixels: () => pixelIndices.map(idx => ({
+                    x: idx % originalWidth,
+                    y: (idx / originalWidth) | 0
+                }))
+            };
+
+            // Hide the selected overlays
+            svgContainer.querySelectorAll('.object-overlay.selected-for-join').forEach(o => {
+                o.style.display = 'none';
+            });
+
+            // Clear selection
+            svgContainer.selectedForJoin = [];
+            if (svgContainer.joinButton) svgContainer.joinButton.style.display = 'none';
+
+            extractObject(combinedObject, originalImage, originalWidth, originalHeight, productId, 'Joined');
         }
 
         function extractObject(objectData, originalImage, originalWidth, originalHeight, productId, objectNumber) {
