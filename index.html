@@ -1479,16 +1479,19 @@
             const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
             const data = imageData.data;
             const totalPixels = canvas.width * canvas.height;
+            // Sample large images sparsely to keep detection quick and predictable.
             const sampleStep = Math.max(1, Math.floor(Math.sqrt(totalPixels / 50000)));
 
             let sampled = 0;
-            let lowSaturation = 0;
-            let nearPalette = 0;
-            let brightPixels = 0;
-            let midDarkPixels = 0;
-            let bwExtremePixels = 0;
+            let activePixels = 0;
+            let activeLowSaturation = 0;
+            let activeNearPalette = 0;
+            let activeFarFromPalette = 0;
+            let activeMidDark = 0;
+            let activeVivid = 0;
 
             function minPaletteDistance(r, g, b) {
+                // Distance to the closest known die-sheet neutral tone.
                 let minDist = Infinity;
                 for (const [pr, pg, pb] of DIE_SET_PALETTE) {
                     const dr = r - pr;
@@ -1509,30 +1512,43 @@
                     const maxC = Math.max(r, g, b);
                     const minC = Math.min(r, g, b);
                     const lum = (0.299 * r) + (0.587 * g) + (0.114 * b);
+                    const paletteDist = minPaletteDistance(r, g, b);
 
                     sampled++;
-                    if ((maxC - minC) < 18) lowSaturation++;
-                    if (minPaletteDistance(r, g, b) < 32) nearPalette++;
-                    if (lum > 210) brightPixels++;
-                    if (lum > 70 && lum < 190) midDarkPixels++;
-                    if (lum < 50 || lum > 205) bwExtremePixels++;
+                    // Ignore near-white background when classifying die-set palette behavior.
+                    if (lum >= 245) continue;
+
+                    activePixels++;
+                    const chroma = maxC - minC;
+                    // Die sheets are mostly neutral grays/off-whites, so chroma stays low.
+                    if (chroma < 22) activeLowSaturation++;
+                    // "Near" and "far" bins let us require palette clustering and reject other colors.
+                    if (paletteDist < 36) activeNearPalette++;
+                    if (paletteDist > 72) activeFarFromPalette++;
+                    // Mid-dark pixels represent the gray die shapes (not just white paper).
+                    if (lum > 70 && lum < 205) activeMidDark++;
+                    // Vivid pixels indicate normal product photography and should disqualify.
+                    if (chroma > 42) activeVivid++;
                 }
             }
 
             if (sampled === 0) return false;
+            // Require enough non-background coverage to avoid classifying mostly empty frames.
+            if (activePixels < Math.max(150, sampled * 0.06)) return false;
 
-            const lowSatPct = lowSaturation / sampled;
-            const palettePct = nearPalette / sampled;
-            const brightPct = brightPixels / sampled;
-            const midDarkPct = midDarkPixels / sampled;
-            const bwExtremePct = bwExtremePixels / sampled;
+            const activeLowSatPct = activeLowSaturation / activePixels;
+            const activeNearPalettePct = activeNearPalette / activePixels;
+            const activeFarPalettePct = activeFarFromPalette / activePixels;
+            const activeMidDarkPct = activeMidDark / activePixels;
+            const activeVividPct = activeVivid / activePixels;
 
+            // Final gate: strongly neutral + palette-clustered + little color outside palette.
             return (
-                lowSatPct > 0.88 &&
-                palettePct > 0.12 &&
-                brightPct > 0.25 &&
-                midDarkPct > 0.05 &&
-                bwExtremePct < 0.92
+                activeLowSatPct > 0.9 &&
+                activeNearPalettePct > 0.62 &&
+                activeFarPalettePct < 0.16 &&
+                activeMidDarkPct > 0.12 &&
+                activeVividPct < 0.08
             );
         }
 
