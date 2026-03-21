@@ -621,13 +621,188 @@
             max-width: calc(100% - 1rem) !important;
             width: auto !important;
         }
+
+        /* ── Composer Workspace ── */
+        .composer-section {
+            background: white;
+            border-radius: var(--border-radius);
+            box-shadow: var(--shadow);
+            padding: 1.5rem;
+            margin-top: 2rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .composer-section h2 {
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: #0f172a;
+            margin: 0;
+        }
+
+        .composer-toolbar {
+            display: flex;
+            align-items: center;
+            gap: 0.35rem;
+            flex-wrap: wrap;
+            padding: 0.5rem;
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: var(--border-radius);
+        }
+
+        .composer-toolbar-group {
+            display: flex;
+            align-items: center;
+            gap: 0.25rem;
+        }
+
+        .composer-toolbar .tb-divider {
+            width: 1px;
+            height: 22px;
+            background: #d1d5db;
+            margin: 0 0.2rem;
+            flex-shrink: 0;
+        }
+
+        .composer-toolbar button {
+            padding: 0.3rem 0.6rem;
+            font-size: 0.75rem;
+            font-weight: 500;
+            border-radius: 5px;
+            white-space: nowrap;
+            line-height: 1.4;
+            background: #e2e8f0;
+            color: #374151;
+        }
+
+        .composer-toolbar button:hover {
+            background: #cbd5e1;
+        }
+
+        .composer-toolbar button.active {
+            background: var(--primary-color);
+            color: white;
+        }
+
+        .composer-toolbar button.primary-action {
+            background: #7c3aed;
+            color: white;
+        }
+
+        .composer-toolbar button.primary-action:hover {
+            background: #6d28d9;
+        }
+
+        .composer-toolbar button.danger-action {
+            background: #ef4444;
+            color: white;
+        }
+
+        .composer-toolbar button.danger-action:hover {
+            background: #dc2626;
+        }
+
+        .composer-toolbar button:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+
+        .composer-toolbar button:disabled:hover {
+            background: #e2e8f0;
+        }
+
+        .composer-toolbar .cricut-group {
+            display: flex;
+            align-items: center;
+            gap: 0.25rem;
+        }
+
+        .composer-toolbar .cricut-group input[type="number"] {
+            width: 38px;
+            padding: 0.3rem 0.25rem;
+            font-size: 0.72rem;
+            text-align: center;
+            border: 1px solid #d1d5db;
+            border-radius: 5px;
+            background: white;
+        }
+
+        .composer-canvas-wrapper {
+            position: relative;
+            border: 2px solid #e2e8f0;
+            border-radius: var(--border-radius);
+            overflow: hidden;
+            background-image:
+                linear-gradient(45deg, #f0f0f0 25%, transparent 25%),
+                linear-gradient(-45deg, #f0f0f0 25%, transparent 25%),
+                linear-gradient(45deg, transparent 75%, #f0f0f0 75%),
+                linear-gradient(-45deg, transparent 75%, #f0f0f0 75%);
+            background-size: 16px 16px;
+            background-position: 0 0, 0 8px, 8px -8px, -8px 0px;
+            background-color: #fafafa;
+        }
+
+        .composer-canvas-wrapper svg.composer-canvas {
+            display: block;
+            width: 100%;
+            height: auto;
+            cursor: default;
+        }
+
+        .composer-canvas .composer-object {
+            cursor: grab;
+        }
+
+        .composer-canvas .composer-object:active {
+            cursor: grabbing;
+        }
+
+        .composer-canvas .composer-object:hover > .hover-outline {
+            opacity: 1;
+        }
+
+        .composer-canvas .selection-rect {
+            fill: none;
+            stroke: var(--primary-color);
+            stroke-width: 1.5;
+            stroke-dasharray: 6 3;
+            pointer-events: none;
+        }
+
+        .composer-canvas .hover-outline {
+            fill: none;
+            stroke: #94a3b8;
+            stroke-width: 1;
+            stroke-dasharray: 4 2;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.12s ease;
+        }
+
+        .composer-status {
+            font-size: 0.8rem;
+            color: #6b7280;
+            text-align: center;
+            padding: 0.25rem;
+        }
+
+        .add-to-composer-btn {
+            background: #7c3aed !important;
+            color: white !important;
+        }
+
+        .add-to-composer-btn:hover {
+            background: #6d28d9 !important;
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>Stampin' Up Image Viewer</h1>
         <div class="input-group">
-            <input type="number" id="productId" placeholder="Enter product ID" min="1" value="165346">
+            <input type="number" id="productId" placeholder="Enter product ID" min="1" value="167979">
             <button onclick="loadImages()">Load Images</button>
         </div>
         <div class="input-group">
@@ -2586,10 +2761,21 @@
             cricutGroup.appendChild(bufferInput);
             cricutGroup.appendChild(cricutButton);
 
+            const composerButton = document.createElement('button');
+            composerButton.className = 'add-to-composer-btn';
+            composerButton.textContent = '+ Composer';
+            composerButton.title = 'Add to composition workspace';
+            composerButton.onclick = () => addToComposer(svg, width, height, productId);
+
             actionRow.appendChild(downloadButton);
             actionRow.appendChild(downloadJpgButton);
             actionRow.appendChild(divider);
             actionRow.appendChild(cricutGroup);
+
+            const divider2 = document.createElement('div');
+            divider2.className = 'action-divider';
+            actionRow.appendChild(divider2);
+            actionRow.appendChild(composerButton);
 
             // Create color controls for the object
             const colorControl = createObjectColorControls(svg);
@@ -3158,6 +3344,609 @@
                 const filename = buildDownloadFilename(productId, `object_${Date.now()}_cricut`).replace(/\.svg$/, '.png');
                 triggerDownload(blob, filename);
             }, 'image/png');
+        }
+
+        // ═══════════════════════════════════════════════════════
+        //  Composer Workspace
+        // ═══════════════════════════════════════════════════════
+
+        const COMPOSER_VB_W = 800;
+        const COMPOSER_VB_H = 800;
+        let composerSection = null;
+        let composerSvg = null;
+        let composerStatus = null;
+        let composerProductId = null;
+        let composerNextId = 1;
+        let composerSelected = [];   // array of <g> elements
+        let composerDrag = null;     // {el, startX, startY, origTx, origTy}
+
+        // ── Lazy init ──
+
+        function ensureComposer(productId) {
+            if (composerSection) {
+                composerSection.style.display = '';
+                composerSection.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                if (productId) composerProductId = productId;
+                return;
+            }
+            composerProductId = productId;
+
+            composerSection = document.createElement('div');
+            composerSection.className = 'composer-section';
+            composerSection.id = 'composerSection';
+
+            const heading = document.createElement('h2');
+            heading.textContent = 'Composition Workspace';
+            composerSection.appendChild(heading);
+
+            // Toolbar
+            const toolbar = document.createElement('div');
+            toolbar.className = 'composer-toolbar';
+
+            const mkBtn = (label, cls, onclick) => {
+                const b = document.createElement('button');
+                b.textContent = label;
+                if (cls) b.className = cls;
+                b.onclick = onclick;
+                return b;
+            };
+            const mkDivider = () => {
+                const d = document.createElement('div');
+                d.className = 'tb-divider';
+                return d;
+            };
+
+            // Selection group
+            const selGroup = document.createElement('div');
+            selGroup.className = 'composer-toolbar-group';
+            selGroup.appendChild(mkBtn('Select All', '', composerSelectAll));
+            selGroup.appendChild(mkBtn('Deselect', '', composerDeselectAll));
+            toolbar.appendChild(selGroup);
+            toolbar.appendChild(mkDivider());
+
+            // Layer group
+            const layerGroup = document.createElement('div');
+            layerGroup.className = 'composer-toolbar-group';
+            layerGroup.appendChild(mkBtn('↑ Forward', '', composerBringForward));
+            layerGroup.appendChild(mkBtn('↓ Backward', '', composerSendBackward));
+            toolbar.appendChild(layerGroup);
+            toolbar.appendChild(mkDivider());
+
+            // Align group
+            const alignGroup = document.createElement('div');
+            alignGroup.className = 'composer-toolbar-group';
+            alignGroup.appendChild(mkBtn('⫢L', '', () => composerAlign('left')));
+            alignGroup.appendChild(mkBtn('⫠H', '', () => composerAlign('center-h')));
+            alignGroup.appendChild(mkBtn('⫢R', '', () => composerAlign('right')));
+            alignGroup.appendChild(mkBtn('⊤T', '', () => composerAlign('top')));
+            alignGroup.appendChild(mkBtn('⊞V', '', () => composerAlign('center-v')));
+            alignGroup.appendChild(mkBtn('⊥B', '', () => composerAlign('bottom')));
+            alignGroup.appendChild(mkBtn('⊙ Center', '', () => composerAlign('canvas-center')));
+            toolbar.appendChild(alignGroup);
+            toolbar.appendChild(mkDivider());
+
+            // Actions
+            const actGroup = document.createElement('div');
+            actGroup.className = 'composer-toolbar-group';
+            actGroup.appendChild(mkBtn('Merge All', 'primary-action', composerMerge));
+            actGroup.appendChild(mkBtn('Remove Selected', 'danger-action', composerRemoveSelected));
+            actGroup.appendChild(mkBtn('Clear', 'danger-action', composerClear));
+            toolbar.appendChild(actGroup);
+            toolbar.appendChild(mkDivider());
+
+            // Cricut export
+            const cricutGroup = document.createElement('div');
+            cricutGroup.className = 'cricut-group';
+            const cricutBuf = document.createElement('input');
+            cricutBuf.type = 'number';
+            cricutBuf.min = '5';
+            cricutBuf.max = '60';
+            cricutBuf.value = '25';
+            cricutBuf.title = 'Cricut cut border (px)';
+            cricutBuf.id = 'composerCricutBuffer';
+            const cricutBtn = mkBtn('✂ Cricut PNG', '', () => {
+                const buf = Math.max(5, Math.min(60, parseInt(cricutBuf.value, 10) || 25));
+                composerExportCricut(buf);
+            });
+            cricutGroup.appendChild(cricutBuf);
+            cricutGroup.appendChild(cricutBtn);
+            toolbar.appendChild(cricutGroup);
+
+            composerSection.appendChild(toolbar);
+
+            // Canvas wrapper
+            const canvasWrapper = document.createElement('div');
+            canvasWrapper.className = 'composer-canvas-wrapper';
+
+            composerSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+            composerSvg.setAttribute('viewBox', `0 0 ${COMPOSER_VB_W} ${COMPOSER_VB_H}`);
+            composerSvg.setAttribute('class', 'composer-canvas');
+            composerSvg.style.aspectRatio = '1';
+
+            // Background click deselects
+            composerSvg.addEventListener('mousedown', (e) => {
+                if (e.target === composerSvg) {
+                    composerDeselectAll();
+                }
+            });
+
+            // Mouse/touch handlers for drag
+            composerSvg.addEventListener('mousedown', composerOnPointerDown);
+            composerSvg.addEventListener('mousemove', composerOnPointerMove);
+            composerSvg.addEventListener('mouseup', composerOnPointerUp);
+            composerSvg.addEventListener('mouseleave', composerOnPointerUp);
+            composerSvg.addEventListener('touchstart', composerOnPointerDown, { passive: false });
+            composerSvg.addEventListener('touchmove', composerOnPointerMove, { passive: false });
+            composerSvg.addEventListener('touchend', composerOnPointerUp);
+            composerSvg.addEventListener('touchcancel', composerOnPointerUp);
+
+            canvasWrapper.appendChild(composerSvg);
+            composerSection.appendChild(canvasWrapper);
+
+            // Status bar
+            composerStatus = document.createElement('div');
+            composerStatus.className = 'composer-status';
+            composerStatus.textContent = 'Add objects using the "+ Composer" button on any extracted object card.';
+            composerSection.appendChild(composerStatus);
+
+            document.getElementById('imageContainer').after(composerSection);
+            composerSection.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+
+        // ── Add object to composer ──
+
+        function addToComposer(sourceSvg, srcW, srcH, productId) {
+            ensureComposer(productId);
+
+            if (!sourceSvg.querySelector('path')) return;
+
+            const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+            g.setAttribute('class', 'composer-object');
+            const objId = composerNextId++;
+            g.dataset.composerId = objId;
+            g.dataset.srcW = srcW;
+            g.dataset.srcH = srcH;
+
+            // Scale object so its largest dimension fits ~40% of the canvas
+            const maxDim = Math.max(srcW, srcH);
+            const fitScale = (COMPOSER_VB_W * 0.4) / maxDim;
+            g.dataset.objScale = fitScale;
+
+            // Place centered initially
+            const offsetX = (COMPOSER_VB_W - srcW * fitScale) / 2;
+            const offsetY = (COMPOSER_VB_H - srcH * fitScale) / 2;
+            g.dataset.tx = offsetX;
+            g.dataset.ty = offsetY;
+            g.setAttribute('transform', `translate(${offsetX}, ${offsetY}) scale(${fitScale})`);
+
+            // Clone all child elements (preserves nested <g> transforms from merged objects)
+            Array.from(sourceSvg.children).forEach(child => {
+                const clone = child.cloneNode(true);
+                clone.removeAttribute('class');
+                g.appendChild(clone);
+            });
+
+            // Invisible hover outline rect (will be sized after append via getBBox)
+            const hoverRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+            hoverRect.setAttribute('class', 'hover-outline');
+            g.appendChild(hoverRect);
+
+            composerSvg.appendChild(g);
+
+            // Size hover rect to actual content
+            requestAnimationFrame(() => {
+                composerSizeHoverRect(g);
+            });
+
+            composerUpdateStatus();
+            composerDeselectAll();
+            composerSelectObject(g);
+        }
+
+        function composerSizeHoverRect(g) {
+            const hoverRect = g.querySelector('.hover-outline');
+            if (!hoverRect) return;
+            // Temporarily hide hover rect for accurate bbox
+            hoverRect.setAttribute('width', 0);
+            hoverRect.setAttribute('height', 0);
+            try {
+                const box = g.getBBox();
+                hoverRect.setAttribute('x', box.x - 2);
+                hoverRect.setAttribute('y', box.y - 2);
+                hoverRect.setAttribute('width', box.width + 4);
+                hoverRect.setAttribute('height', box.height + 4);
+            } catch (e) { /* ignore if not in DOM */ }
+        }
+
+        // ── Selection ──
+
+        function composerSelectObject(g, addToSelection) {
+            if (!addToSelection) {
+                composerDeselectAll();
+            }
+            if (composerSelected.includes(g)) return;
+            composerSelected.push(g);
+            composerUpdateSelectionVisuals();
+        }
+
+        function composerDeselectObject(g) {
+            composerSelected = composerSelected.filter(o => o !== g);
+            const sel = g.querySelector('.selection-rect');
+            if (sel) sel.remove();
+        }
+
+        function composerDeselectAll() {
+            composerSelected.forEach(g => {
+                const sel = g.querySelector('.selection-rect');
+                if (sel) sel.remove();
+            });
+            composerSelected = [];
+        }
+
+        function composerSelectAll() {
+            composerDeselectAll();
+            composerSvg.querySelectorAll('.composer-object').forEach(g => {
+                composerSelected.push(g);
+            });
+            composerUpdateSelectionVisuals();
+        }
+
+        function composerUpdateSelectionVisuals() {
+            composerSelected.forEach(g => {
+                let sel = g.querySelector('.selection-rect');
+                if (!sel) {
+                    sel = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+                    sel.setAttribute('class', 'selection-rect');
+                    g.appendChild(sel);
+                }
+                // Size to content bbox (without the selection rect itself)
+                sel.setAttribute('width', 0);
+                sel.setAttribute('height', 0);
+                try {
+                    const box = g.getBBox();
+                    sel.setAttribute('x', box.x - 4);
+                    sel.setAttribute('y', box.y - 4);
+                    sel.setAttribute('width', box.width + 8);
+                    sel.setAttribute('height', box.height + 8);
+                } catch (e) {}
+            });
+        }
+
+        function composerUpdateStatus() {
+            if (!composerStatus) return;
+            const count = composerSvg.querySelectorAll('.composer-object').length;
+            composerStatus.textContent = count === 0
+                ? 'Add objects using the "+ Composer" button on any extracted object card.'
+                : `${count} object${count !== 1 ? 's' : ''} in workspace. Click to select, drag to move. Shift-click for multi-select.`;
+        }
+
+        // ── Drag ──
+
+        function composerSvgPoint(clientX, clientY) {
+            const pt = composerSvg.createSVGPoint();
+            pt.x = clientX;
+            pt.y = clientY;
+            return pt.matrixTransform(composerSvg.getScreenCTM().inverse());
+        }
+
+        function composerGetTranslate(g) {
+            return {
+                tx: parseFloat(g.dataset.tx || 0),
+                ty: parseFloat(g.dataset.ty || 0)
+            };
+        }
+
+        function composerApplyTransform(g) {
+            const tx = parseFloat(g.dataset.tx || 0);
+            const ty = parseFloat(g.dataset.ty || 0);
+            const s = parseFloat(g.dataset.objScale || 1);
+            g.setAttribute('transform', `translate(${tx}, ${ty}) scale(${s})`);
+        }
+
+        function composerOnPointerDown(e) {
+            const gEl = e.target.closest('.composer-object');
+            if (!gEl) return;
+
+            e.preventDefault();
+
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+            const svgPt = composerSvgPoint(clientX, clientY);
+
+            // Selection handling
+            if (e.shiftKey || e.metaKey || e.ctrlKey) {
+                if (composerSelected.includes(gEl)) {
+                    composerDeselectObject(gEl);
+                } else {
+                    composerSelectObject(gEl, true);
+                }
+            } else {
+                if (!composerSelected.includes(gEl)) {
+                    composerSelectObject(gEl, false);
+                }
+            }
+
+            // Start drag for all selected objects
+            composerDrag = {
+                active: true,
+                startSvgX: svgPt.x,
+                startSvgY: svgPt.y,
+                origPositions: composerSelected.map(g => ({
+                    el: g,
+                    tx: parseFloat(g.dataset.tx || 0),
+                    ty: parseFloat(g.dataset.ty || 0)
+                }))
+            };
+        }
+
+        function composerOnPointerMove(e) {
+            if (!composerDrag || !composerDrag.active) return;
+            e.preventDefault();
+
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+            const svgPt = composerSvgPoint(clientX, clientY);
+
+            const dx = svgPt.x - composerDrag.startSvgX;
+            const dy = svgPt.y - composerDrag.startSvgY;
+
+            composerDrag.origPositions.forEach(({ el, tx, ty }) => {
+                el.dataset.tx = tx + dx;
+                el.dataset.ty = ty + dy;
+                composerApplyTransform(el);
+            });
+
+            composerUpdateSelectionVisuals();
+        }
+
+        function composerOnPointerUp(e) {
+            if (composerDrag) {
+                composerDrag.active = false;
+                composerDrag = null;
+            }
+        }
+
+        // ── Layer controls ──
+
+        function composerBringForward() {
+            for (let i = composerSelected.length - 1; i >= 0; i--) {
+                const g = composerSelected[i];
+                const next = g.nextElementSibling;
+                if (next && !composerSelected.includes(next)) {
+                    g.parentNode.insertBefore(next, g);
+                }
+            }
+        }
+
+        function composerSendBackward() {
+            composerSelected.forEach(g => {
+                const prev = g.previousElementSibling;
+                if (prev && !composerSelected.includes(prev)) {
+                    g.parentNode.insertBefore(g, prev);
+                }
+            });
+        }
+
+        // ── Alignment ──
+
+        function composerGetObjBounds(g) {
+            const tx = parseFloat(g.dataset.tx || 0);
+            const ty = parseFloat(g.dataset.ty || 0);
+            const s = parseFloat(g.dataset.objScale || 1);
+            const srcW = parseFloat(g.dataset.srcW || 0);
+            const srcH = parseFloat(g.dataset.srcH || 0);
+            const w = srcW * s;
+            const h = srcH * s;
+            return { tx, ty, w, h };
+        }
+
+        function composerAlign(mode) {
+            if (composerSelected.length === 0) return;
+
+            const bounds = composerSelected.map(g => composerGetObjBounds(g));
+
+            if (mode === 'canvas-center') {
+                composerSelected.forEach((g, i) => {
+                    const b = bounds[i];
+                    g.dataset.tx = (COMPOSER_VB_W - b.w) / 2;
+                    g.dataset.ty = (COMPOSER_VB_H - b.h) / 2;
+                    composerApplyTransform(g);
+                });
+            } else if (composerSelected.length >= 2) {
+                switch (mode) {
+                    case 'left': {
+                        const minX = Math.min(...bounds.map(b => b.tx));
+                        composerSelected.forEach((g, i) => {
+                            g.dataset.tx = minX;
+                            composerApplyTransform(g);
+                        });
+                        break;
+                    }
+                    case 'right': {
+                        const maxRight = Math.max(...bounds.map(b => b.tx + b.w));
+                        composerSelected.forEach((g, i) => {
+                            g.dataset.tx = maxRight - bounds[i].w;
+                            composerApplyTransform(g);
+                        });
+                        break;
+                    }
+                    case 'center-h': {
+                        const avgCx = bounds.reduce((s, b) => s + b.tx + b.w / 2, 0) / bounds.length;
+                        composerSelected.forEach((g, i) => {
+                            g.dataset.tx = avgCx - bounds[i].w / 2;
+                            composerApplyTransform(g);
+                        });
+                        break;
+                    }
+                    case 'top': {
+                        const minY = Math.min(...bounds.map(b => b.ty));
+                        composerSelected.forEach((g) => {
+                            g.dataset.ty = minY;
+                            composerApplyTransform(g);
+                        });
+                        break;
+                    }
+                    case 'bottom': {
+                        const maxBot = Math.max(...bounds.map(b => b.ty + b.h));
+                        composerSelected.forEach((g, i) => {
+                            g.dataset.ty = maxBot - bounds[i].h;
+                            composerApplyTransform(g);
+                        });
+                        break;
+                    }
+                    case 'center-v': {
+                        const avgCy = bounds.reduce((s, b) => s + b.ty + b.h / 2, 0) / bounds.length;
+                        composerSelected.forEach((g, i) => {
+                            g.dataset.ty = avgCy - bounds[i].h / 2;
+                            composerApplyTransform(g);
+                        });
+                        break;
+                    }
+                }
+            } else if (composerSelected.length === 1) {
+                // Single object: align relative to canvas
+                const b = bounds[0];
+                const g = composerSelected[0];
+                switch (mode) {
+                    case 'left':     g.dataset.tx = 0; break;
+                    case 'right':    g.dataset.tx = COMPOSER_VB_W - b.w; break;
+                    case 'center-h': g.dataset.tx = (COMPOSER_VB_W - b.w) / 2; break;
+                    case 'top':      g.dataset.ty = 0; break;
+                    case 'bottom':   g.dataset.ty = COMPOSER_VB_H - b.h; break;
+                    case 'center-v': g.dataset.ty = (COMPOSER_VB_H - b.h) / 2; break;
+                }
+                composerApplyTransform(g);
+            }
+
+            composerUpdateSelectionVisuals();
+        }
+
+        // ── Remove / Clear ──
+
+        function composerRemoveSelected() {
+            composerSelected.forEach(g => g.remove());
+            composerSelected = [];
+            composerUpdateStatus();
+        }
+
+        function composerClear() {
+            composerSvg.querySelectorAll('.composer-object').forEach(g => g.remove());
+            composerSelected = [];
+            composerNextId = 1;
+            composerUpdateStatus();
+        }
+
+        // ── Merge ──
+
+        function composerGetGroupBounds(g) {
+            const tx = parseFloat(g.dataset.tx || 0);
+            const ty = parseFloat(g.dataset.ty || 0);
+            const s = parseFloat(g.dataset.objScale || 1);
+
+            // Temporarily hide non-content rects for accurate bbox
+            const sel = g.querySelector('.selection-rect');
+            const hover = g.querySelector('.hover-outline');
+            if (sel) sel.style.display = 'none';
+            if (hover) hover.style.display = 'none';
+
+            let box;
+            try { box = g.getBBox(); } catch (e) { box = { x: 0, y: 0, width: 0, height: 0 }; }
+
+            if (sel) sel.style.display = '';
+            if (hover) hover.style.display = '';
+
+            return {
+                x1: tx + box.x * s,
+                y1: ty + box.y * s,
+                x2: tx + (box.x + box.width) * s,
+                y2: ty + (box.y + box.height) * s
+            };
+        }
+
+        function composerSerializeGroupContent(g) {
+            const serializer = new XMLSerializer();
+            let inner = '';
+            Array.from(g.children).forEach(child => {
+                if (child.classList && (child.classList.contains('selection-rect') || child.classList.contains('hover-outline'))) return;
+                inner += serializer.serializeToString(child);
+            });
+            return inner;
+        }
+
+        function composerMerge() {
+            const objects = composerSvg.querySelectorAll('.composer-object');
+            if (objects.length === 0) return;
+
+            let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+            objects.forEach(g => {
+                const b = composerGetGroupBounds(g);
+                minX = Math.min(minX, b.x1);
+                minY = Math.min(minY, b.y1);
+                maxX = Math.max(maxX, b.x2);
+                maxY = Math.max(maxY, b.y2);
+            });
+            if (!isFinite(minX)) return;
+
+            const mergedW = maxX - minX;
+            const mergedH = maxY - minY;
+
+            let content = '';
+            objects.forEach(g => {
+                const tx = parseFloat(g.dataset.tx || 0);
+                const ty = parseFloat(g.dataset.ty || 0);
+                const s = parseFloat(g.dataset.objScale || 1);
+                const inner = composerSerializeGroupContent(g);
+                content += `<g transform="translate(${tx - minX}, ${ty - minY}) scale(${s})">${inner}</g>`;
+            });
+
+            const mergedSvgStr = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${mergedW} ${mergedH}" width="${mergedW}" height="${mergedH}">${content}</svg>`;
+
+            const productId = composerProductId || 'composed';
+            createExtractedObjectCard(mergedSvgStr, Math.round(mergedW), Math.round(mergedH), productId, 'Merged');
+
+            composerStatus.textContent = 'Merged! New object card created. You can add it back to the composer for further composition.';
+        }
+
+        // ── Cricut export from composer ──
+
+        function composerExportCricut(bufferPx) {
+            const objects = composerSvg.querySelectorAll('.composer-object');
+            if (objects.length === 0) return;
+
+            let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+            objects.forEach(g => {
+                const b = composerGetGroupBounds(g);
+                minX = Math.min(minX, b.x1);
+                minY = Math.min(minY, b.y1);
+                maxX = Math.max(maxX, b.x2);
+                maxY = Math.max(maxY, b.y2);
+            });
+            if (!isFinite(minX)) return;
+
+            const w = maxX - minX;
+            const h = maxY - minY;
+
+            const tmpSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+            tmpSvg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+            tmpSvg.setAttribute('viewBox', `0 0 ${w} ${h}`);
+            tmpSvg.setAttribute('width', w);
+            tmpSvg.setAttribute('height', h);
+
+            objects.forEach(g => {
+                const tx = parseFloat(g.dataset.tx || 0);
+                const ty = parseFloat(g.dataset.ty || 0);
+                const s = parseFloat(g.dataset.objScale || 1);
+                const gWrap = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+                gWrap.setAttribute('transform', `translate(${tx - minX}, ${ty - minY}) scale(${s})`);
+                Array.from(g.children).forEach(child => {
+                    if (child.classList && (child.classList.contains('selection-rect') || child.classList.contains('hover-outline'))) return;
+                    gWrap.appendChild(child.cloneNode(true));
+                });
+                tmpSvg.appendChild(gWrap);
+            });
+
+            const pid = composerProductId || 'composed';
+            generateCricutPNG(tmpSvg, pid, Math.round(w), Math.round(h), bufferPx);
         }
     </script>
 </body>
