@@ -2324,6 +2324,47 @@
             });
         }
 
+        function mergeContainedComponents(components, imageWidth) {
+            if (components.length < 2) return components;
+
+            // Sort largest-area first so we test containment against the biggest parent
+            components.sort((a, b) => {
+                const areaA = a.bounds.width * a.bounds.height;
+                const areaB = b.bounds.width * b.bounds.height;
+                return areaB - areaA;
+            });
+
+            const absorbed = new Set();
+
+            for (let i = 0; i < components.length; i++) {
+                if (absorbed.has(i)) continue;
+                const parent = components[i].bounds;
+
+                for (let j = i + 1; j < components.length; j++) {
+                    if (absorbed.has(j)) continue;
+                    const child = components[j].bounds;
+
+                    if (child.left >= parent.left && child.right <= parent.right &&
+                        child.top >= parent.top && child.bottom <= parent.bottom) {
+                        // child is fully contained — merge into parent
+                        components[j].pixelIndices.forEach(idx => components[i].pixelIndices.push(idx));
+                        components[i].pixelCount += components[j].pixelCount;
+
+                        // Bounds don't need expanding (parent already encloses child)
+                        // Update getPixels to include merged indices
+                        const mergedIndices = components[i].pixelIndices;
+                        components[i].getPixels = () => mergedIndices.map(
+                            idx => ({ x: idx % imageWidth, y: (idx / imageWidth) | 0 })
+                        );
+
+                        absorbed.add(j);
+                    }
+                }
+            }
+
+            return components.filter((_, i) => !absorbed.has(i));
+        }
+
         function findConnectedComponents(image, minSize, gapTolerance) {
             return new Promise((resolve) => {
                 const canvas = document.createElement('canvas');
@@ -2454,7 +2495,7 @@
                         if (currentY < height) {
                             requestAnimationFrame(processComponentChunk);
                         } else {
-                            resolve(components);
+                            resolve(mergeContainedComponents(components, width));
                         }
                     }
                     
