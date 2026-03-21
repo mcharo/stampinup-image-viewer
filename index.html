@@ -771,6 +771,18 @@
             pointer-events: none;
         }
 
+        .composer-canvas .resize-handle {
+            fill: white;
+            stroke: var(--primary-color);
+            stroke-width: 1.5;
+            cursor: nwse-resize;
+        }
+
+        .composer-canvas .resize-handle.handle-tl { cursor: nwse-resize; }
+        .composer-canvas .resize-handle.handle-tr { cursor: nesw-resize; }
+        .composer-canvas .resize-handle.handle-bl { cursor: nesw-resize; }
+        .composer-canvas .resize-handle.handle-br { cursor: nwse-resize; }
+
         .composer-canvas .hover-outline {
             fill: none;
             stroke: #94a3b8;
@@ -779,6 +791,42 @@
             pointer-events: none;
             opacity: 0;
             transition: opacity 0.12s ease;
+        }
+
+        .composer-zoom-controls {
+            display: flex;
+            align-items: center;
+            gap: 0.35rem;
+            padding: 0.35rem 0.6rem;
+            background: white;
+            border: 1px solid #e2e8f0;
+            border-radius: var(--border-radius);
+            position: absolute;
+            bottom: 8px;
+            right: 8px;
+            box-shadow: var(--shadow-sm);
+            z-index: 2;
+        }
+
+        .composer-zoom-controls button {
+            padding: 0.15rem 0.45rem;
+            font-size: 0.8rem;
+            background: #e2e8f0;
+            color: #374151;
+            border-radius: 4px;
+            line-height: 1.3;
+        }
+
+        .composer-zoom-controls button:hover {
+            background: #cbd5e1;
+        }
+
+        .composer-zoom-controls .zoom-label {
+            font-size: 0.72rem;
+            color: #6b7280;
+            min-width: 32px;
+            text-align: center;
+            font-variant-numeric: tabular-nums;
         }
 
         .composer-status {
@@ -2683,7 +2731,7 @@
                     extractedImage.onload = async () => {
                         try {
                             const svg = await convertToSVG(extractedImage, canvas.width, canvas.height);
-                            createExtractedObjectCard(svg, canvas.width, canvas.height, productId, objectNumber);
+                            createExtractedObjectCard(svg, canvas.width, canvas.height, productId, objectNumber, originalWidth, originalHeight);
                             
                             // Restore info message
                             if (infoDiv) {
@@ -2715,7 +2763,7 @@
             }, 50);
         }
 
-        function createExtractedObjectCard(svgString, width, height, productId, objectNumber) {
+        function createExtractedObjectCard(svgString, width, height, productId, objectNumber, refW, refH) {
             const objectsContainer = document.getElementById(`objects-${productId}`);
             if (!objectsContainer) return;
             
@@ -2806,7 +2854,7 @@
             composerButton.className = 'add-to-composer-btn';
             composerButton.textContent = '+ Composer';
             composerButton.title = 'Add to composition workspace';
-            composerButton.onclick = () => addToComposer(svg, width, height, productId);
+            composerButton.onclick = () => addToComposer(svg, width, height, productId, refW, refH);
 
             actionRow.appendChild(downloadButton);
             actionRow.appendChild(downloadJpgButton);
@@ -3399,7 +3447,9 @@
         let composerProductId = null;
         let composerNextId = 1;
         let composerSelected = [];   // array of <g> elements
-        let composerDrag = null;     // {el, startX, startY, origTx, origTy}
+        let composerDrag = null;     // {active, startSvgX, startSvgY, origPositions}
+        let composerResizeDrag = null; // {g, corner, startSvgX, startSvgY, origScale, origTx, origTy, srcW, srcH}
+        let composerZoom = 1;
 
         // ── Lazy init ──
 
@@ -3451,6 +3501,20 @@
             layerGroup.appendChild(mkBtn('↑ Forward', '', composerBringForward));
             layerGroup.appendChild(mkBtn('↓ Backward', '', composerSendBackward));
             toolbar.appendChild(layerGroup);
+            toolbar.appendChild(mkDivider());
+
+            // Resize group
+            const resizeGroup = document.createElement('div');
+            resizeGroup.className = 'composer-toolbar-group';
+            resizeGroup.appendChild(mkBtn('− Smaller', '', () => composerResizeSelected(0.9)));
+            resizeGroup.appendChild(mkBtn('+ Larger', '', () => composerResizeSelected(1.1)));
+            const scaleLabel = document.createElement('span');
+            scaleLabel.id = 'composerScaleLabel';
+            scaleLabel.style.cssText = 'font-size:0.72rem; color:#6b7280; min-width:36px; text-align:center; font-variant-numeric:tabular-nums;';
+            scaleLabel.textContent = '100%';
+            resizeGroup.appendChild(scaleLabel);
+            resizeGroup.appendChild(mkBtn('Reset', '', composerResetScale));
+            toolbar.appendChild(resizeGroup);
             toolbar.appendChild(mkDivider());
 
             // Align group
@@ -3521,7 +3585,36 @@
             composerSvg.addEventListener('touchend', composerOnPointerUp);
             composerSvg.addEventListener('touchcancel', composerOnPointerUp);
 
+            // Scroll-wheel zooms the canvas
+            canvasWrapper.addEventListener('wheel', (e) => {
+                e.preventDefault();
+                composerSetZoom(composerZoom * (e.deltaY < 0 ? 1.1 : 0.9));
+            }, { passive: false });
+
             canvasWrapper.appendChild(composerSvg);
+
+            // Zoom controls overlay
+            const zoomControls = document.createElement('div');
+            zoomControls.className = 'composer-zoom-controls';
+            const zoomOut = document.createElement('button');
+            zoomOut.textContent = '−';
+            zoomOut.onclick = () => composerSetZoom(composerZoom * 0.8);
+            const zoomIn = document.createElement('button');
+            zoomIn.textContent = '+';
+            zoomIn.onclick = () => composerSetZoom(composerZoom * 1.2);
+            const zoomFit = document.createElement('button');
+            zoomFit.textContent = 'Fit';
+            zoomFit.onclick = () => composerSetZoom(1);
+            const zoomLabel = document.createElement('span');
+            zoomLabel.className = 'zoom-label';
+            zoomLabel.id = 'composerZoomLabel';
+            zoomLabel.textContent = '100%';
+            zoomControls.appendChild(zoomOut);
+            zoomControls.appendChild(zoomLabel);
+            zoomControls.appendChild(zoomIn);
+            zoomControls.appendChild(zoomFit);
+            canvasWrapper.appendChild(zoomControls);
+
             composerSection.appendChild(canvasWrapper);
 
             // Status bar
@@ -3536,7 +3629,7 @@
 
         // ── Add object to composer ──
 
-        function addToComposer(sourceSvg, srcW, srcH, productId) {
+        function addToComposer(sourceSvg, srcW, srcH, productId, refW, refH) {
             ensureComposer(productId);
 
             if (!sourceSvg.querySelector('path')) return;
@@ -3548,10 +3641,15 @@
             g.dataset.srcW = srcW;
             g.dataset.srcH = srcH;
 
-            // Scale object so its largest dimension fits ~40% of the canvas
-            const maxDim = Math.max(srcW, srcH);
-            const fitScale = (COMPOSER_VB_W * 0.4) / maxDim;
+            // Scale relative to the original source image so objects from the
+            // same stamp set keep their proportional sizes.  When no reference
+            // dimensions are available (e.g. merged objects), fall back to fitting
+            // the object itself to ~40% of the canvas.
+            const hasRef = refW && refH;
+            const refMaxDim = hasRef ? Math.max(refW, refH) : Math.max(srcW, srcH);
+            const fitScale = (COMPOSER_VB_W * 0.7) / refMaxDim;
             g.dataset.objScale = fitScale;
+            g.dataset.baseScale = fitScale;
 
             // Place centered initially
             const offsetX = (COMPOSER_VB_W - srcW * fitScale) / 2;
@@ -3587,9 +3685,8 @@
         function composerSizeHoverRect(g) {
             const hoverRect = g.querySelector('.hover-outline');
             if (!hoverRect) return;
-            // Temporarily hide hover rect for accurate bbox
-            hoverRect.setAttribute('width', 0);
-            hoverRect.setAttribute('height', 0);
+            const uiEls = g.querySelectorAll('.hover-outline, .selection-rect, .resize-handle');
+            uiEls.forEach(el => { el.setAttribute('width', 0); el.setAttribute('height', 0); });
             try {
                 const box = g.getBBox();
                 hoverRect.setAttribute('x', box.x - 2);
@@ -3608,20 +3705,21 @@
             if (composerSelected.includes(g)) return;
             composerSelected.push(g);
             composerUpdateSelectionVisuals();
+            composerUpdateScaleLabel();
         }
 
         function composerDeselectObject(g) {
             composerSelected = composerSelected.filter(o => o !== g);
-            const sel = g.querySelector('.selection-rect');
-            if (sel) sel.remove();
+            g.querySelectorAll('.selection-rect, .resize-handle').forEach(el => el.remove());
+            composerUpdateScaleLabel();
         }
 
         function composerDeselectAll() {
             composerSelected.forEach(g => {
-                const sel = g.querySelector('.selection-rect');
-                if (sel) sel.remove();
+                g.querySelectorAll('.selection-rect, .resize-handle').forEach(el => el.remove());
             });
             composerSelected = [];
+            composerUpdateScaleLabel();
         }
 
         function composerSelectAll() {
@@ -3630,9 +3728,12 @@
                 composerSelected.push(g);
             });
             composerUpdateSelectionVisuals();
+            composerUpdateScaleLabel();
         }
 
         function composerUpdateSelectionVisuals() {
+            const HANDLE_SIZE = 8 / composerZoom;
+            const PAD = 4;
             composerSelected.forEach(g => {
                 let sel = g.querySelector('.selection-rect');
                 if (!sel) {
@@ -3640,15 +3741,45 @@
                     sel.setAttribute('class', 'selection-rect');
                     g.appendChild(sel);
                 }
-                // Size to content bbox (without the selection rect itself)
+
+                // Remove old handles
+                g.querySelectorAll('.resize-handle').forEach(h => h.remove());
+
+                // Size to content bbox
                 sel.setAttribute('width', 0);
                 sel.setAttribute('height', 0);
                 try {
                     const box = g.getBBox();
-                    sel.setAttribute('x', box.x - 4);
-                    sel.setAttribute('y', box.y - 4);
-                    sel.setAttribute('width', box.width + 8);
-                    sel.setAttribute('height', box.height + 8);
+                    const bx = box.x - PAD;
+                    const by = box.y - PAD;
+                    const bw = box.width + PAD * 2;
+                    const bh = box.height + PAD * 2;
+                    sel.setAttribute('x', bx);
+                    sel.setAttribute('y', by);
+                    sel.setAttribute('width', bw);
+                    sel.setAttribute('height', bh);
+
+                    // Corner handles (only for single selection to keep it simple)
+                    if (composerSelected.length === 1) {
+                        const hs = HANDLE_SIZE;
+                        const corners = [
+                            { cls: 'handle-tl', cx: bx, cy: by },
+                            { cls: 'handle-tr', cx: bx + bw, cy: by },
+                            { cls: 'handle-bl', cx: bx, cy: by + bh },
+                            { cls: 'handle-br', cx: bx + bw, cy: by + bh },
+                        ];
+                        corners.forEach(({ cls, cx, cy }) => {
+                            const h = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+                            h.setAttribute('class', 'resize-handle ' + cls);
+                            h.setAttribute('x', cx - hs / 2);
+                            h.setAttribute('y', cy - hs / 2);
+                            h.setAttribute('width', hs);
+                            h.setAttribute('height', hs);
+                            h.setAttribute('rx', 1.5);
+                            h.dataset.corner = cls.replace('handle-', '');
+                            g.appendChild(h);
+                        });
+                    }
                 } catch (e) {}
             });
         }
@@ -3685,14 +3816,36 @@
         }
 
         function composerOnPointerDown(e) {
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+            const svgPt = composerSvgPoint(clientX, clientY);
+
+            // Check if a resize handle was clicked
+            const handle = e.target.closest('.resize-handle');
+            if (handle) {
+                e.preventDefault();
+                e.stopPropagation();
+                const gEl = handle.closest('.composer-object');
+                if (!gEl) return;
+                composerResizeDrag = {
+                    active: true,
+                    g: gEl,
+                    corner: handle.dataset.corner,
+                    startSvgX: svgPt.x,
+                    startSvgY: svgPt.y,
+                    origScale: parseFloat(gEl.dataset.objScale || 1),
+                    origTx: parseFloat(gEl.dataset.tx || 0),
+                    origTy: parseFloat(gEl.dataset.ty || 0),
+                    srcW: parseFloat(gEl.dataset.srcW || 100),
+                    srcH: parseFloat(gEl.dataset.srcH || 100),
+                };
+                return;
+            }
+
             const gEl = e.target.closest('.composer-object');
             if (!gEl) return;
 
             e.preventDefault();
-
-            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-            const svgPt = composerSvgPoint(clientX, clientY);
 
             // Selection handling
             if (e.shiftKey || e.metaKey || e.ctrlKey) {
@@ -3721,13 +3874,56 @@
         }
 
         function composerOnPointerMove(e) {
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+
+            // Handle resize drag
+            if (composerResizeDrag && composerResizeDrag.active) {
+                e.preventDefault();
+                const svgPt = composerSvgPoint(clientX, clientY);
+                const { g, corner, startSvgX, startSvgY, origScale, origTx, origTy, srcW, srcH } = composerResizeDrag;
+
+                // The anchor is the opposite corner from the one being dragged
+                const origW = srcW * origScale;
+                const origH = srcH * origScale;
+                let anchorX, anchorY;
+                if (corner === 'tl') { anchorX = origTx + origW; anchorY = origTy + origH; }
+                else if (corner === 'tr') { anchorX = origTx; anchorY = origTy + origH; }
+                else if (corner === 'bl') { anchorX = origTx + origW; anchorY = origTy; }
+                else { anchorX = origTx; anchorY = origTy; } // br
+
+                // Compute scale factor from the distance change between anchor and pointer
+                const origDist = Math.hypot(startSvgX - anchorX, startSvgY - anchorY);
+                const curDist = Math.hypot(svgPt.x - anchorX, svgPt.y - anchorY);
+                if (origDist < 1) return;
+
+                const scaleFactor = curDist / origDist;
+                const newScale = origScale * scaleFactor;
+                const newW = srcW * newScale;
+                const newH = srcH * newScale;
+
+                // Position so the anchor corner stays fixed
+                let newTx, newTy;
+                if (corner === 'tl') { newTx = anchorX - newW; newTy = anchorY - newH; }
+                else if (corner === 'tr') { newTx = anchorX; newTy = anchorY - newH; }
+                else if (corner === 'bl') { newTx = anchorX - newW; newTy = anchorY; }
+                else { newTx = anchorX; newTy = anchorY; } // br
+
+                g.dataset.objScale = newScale;
+                g.dataset.tx = newTx;
+                g.dataset.ty = newTy;
+                composerApplyTransform(g);
+                composerSizeHoverRect(g);
+                composerUpdateSelectionVisuals();
+                composerUpdateScaleLabel();
+                return;
+            }
+
+            // Handle move drag
             if (!composerDrag || !composerDrag.active) return;
             e.preventDefault();
 
-            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
             const svgPt = composerSvgPoint(clientX, clientY);
-
             const dx = svgPt.x - composerDrag.startSvgX;
             const dy = svgPt.y - composerDrag.startSvgY;
 
@@ -3741,6 +3937,10 @@
         }
 
         function composerOnPointerUp(e) {
+            if (composerResizeDrag) {
+                composerResizeDrag.active = false;
+                composerResizeDrag = null;
+            }
             if (composerDrag) {
                 composerDrag.active = false;
                 composerDrag = null;
@@ -3766,6 +3966,91 @@
                     g.parentNode.insertBefore(g, prev);
                 }
             });
+        }
+
+        // ── Zoom ──
+
+        function composerSetZoom(level) {
+            composerZoom = Math.max(0.25, Math.min(5, level));
+            if (!composerSvg) return;
+            const vw = COMPOSER_VB_W / composerZoom;
+            const vh = COMPOSER_VB_H / composerZoom;
+            const ox = (COMPOSER_VB_W - vw) / 2;
+            const oy = (COMPOSER_VB_H - vh) / 2;
+            composerSvg.setAttribute('viewBox', `${ox} ${oy} ${vw} ${vh}`);
+            const label = document.getElementById('composerZoomLabel');
+            if (label) label.textContent = Math.round(composerZoom * 100) + '%';
+        }
+
+        // ── Resize ──
+
+        function composerResizeSelected(factor) {
+            if (composerSelected.length === 0) return;
+
+            composerSelected.forEach(g => {
+                const oldScale = parseFloat(g.dataset.objScale || 1);
+                const tx = parseFloat(g.dataset.tx || 0);
+                const ty = parseFloat(g.dataset.ty || 0);
+                const srcW = parseFloat(g.dataset.srcW || 0);
+                const srcH = parseFloat(g.dataset.srcH || 0);
+
+                const newScale = oldScale * factor;
+
+                // Scale around the object's center: adjust translate so the
+                // center point stays in the same place on the canvas
+                const oldCx = tx + (srcW * oldScale) / 2;
+                const oldCy = ty + (srcH * oldScale) / 2;
+                const newTx = oldCx - (srcW * newScale) / 2;
+                const newTy = oldCy - (srcH * newScale) / 2;
+
+                g.dataset.objScale = newScale;
+                g.dataset.tx = newTx;
+                g.dataset.ty = newTy;
+                composerApplyTransform(g);
+                composerSizeHoverRect(g);
+            });
+
+            composerUpdateSelectionVisuals();
+            composerUpdateScaleLabel();
+        }
+
+        function composerResetScale() {
+            if (composerSelected.length === 0) return;
+
+            composerSelected.forEach(g => {
+                const baseScale = parseFloat(g.dataset.baseScale || g.dataset.objScale || 1);
+                const oldScale = parseFloat(g.dataset.objScale || 1);
+                const tx = parseFloat(g.dataset.tx || 0);
+                const ty = parseFloat(g.dataset.ty || 0);
+                const srcW = parseFloat(g.dataset.srcW || 0);
+                const srcH = parseFloat(g.dataset.srcH || 0);
+
+                // Re-center after reset
+                const cx = tx + (srcW * oldScale) / 2;
+                const cy = ty + (srcH * oldScale) / 2;
+                g.dataset.objScale = baseScale;
+                g.dataset.tx = cx - (srcW * baseScale) / 2;
+                g.dataset.ty = cy - (srcH * baseScale) / 2;
+                composerApplyTransform(g);
+                composerSizeHoverRect(g);
+            });
+
+            composerUpdateSelectionVisuals();
+            composerUpdateScaleLabel();
+        }
+
+        function composerUpdateScaleLabel() {
+            const label = document.getElementById('composerScaleLabel');
+            if (!label) return;
+            if (composerSelected.length === 1) {
+                const base = parseFloat(composerSelected[0].dataset.baseScale || composerSelected[0].dataset.objScale);
+                const cur = parseFloat(composerSelected[0].dataset.objScale);
+                label.textContent = Math.round((cur / base) * 100) + '%';
+            } else if (composerSelected.length > 1) {
+                label.textContent = '—';
+            } else {
+                label.textContent = '100%';
+            }
         }
 
         // ── Alignment ──
@@ -3885,16 +4170,13 @@
             const s = parseFloat(g.dataset.objScale || 1);
 
             // Temporarily hide non-content rects for accurate bbox
-            const sel = g.querySelector('.selection-rect');
-            const hover = g.querySelector('.hover-outline');
-            if (sel) sel.style.display = 'none';
-            if (hover) hover.style.display = 'none';
+            const uiEls = g.querySelectorAll('.selection-rect, .hover-outline, .resize-handle');
+            uiEls.forEach(el => el.style.display = 'none');
 
             let box;
             try { box = g.getBBox(); } catch (e) { box = { x: 0, y: 0, width: 0, height: 0 }; }
 
-            if (sel) sel.style.display = '';
-            if (hover) hover.style.display = '';
+            uiEls.forEach(el => el.style.display = '');
 
             return {
                 x1: tx + box.x * s,
@@ -3906,9 +4188,10 @@
 
         function composerSerializeGroupContent(g) {
             const serializer = new XMLSerializer();
+            const skip = ['selection-rect', 'hover-outline', 'resize-handle'];
             let inner = '';
             Array.from(g.children).forEach(child => {
-                if (child.classList && (child.classList.contains('selection-rect') || child.classList.contains('hover-outline'))) return;
+                if (child.classList && skip.some(c => child.classList.contains(c))) return;
                 inner += serializer.serializeToString(child);
             });
             return inner;
@@ -3967,27 +4250,46 @@
             const w = maxX - minX;
             const h = maxY - minY;
 
+            // The composer coordinate space is small (800-unit viewBox), so
+            // passing those raw values to generateCricutPNG produces a low-res
+            // render.  Compute an upscale factor that brings the output close
+            // to the original source-image resolution.
+            let maxSrcDim = 0;
+            let maxComposerDim = 0;
+            objects.forEach(g => {
+                const srcW = parseFloat(g.dataset.srcW || 0);
+                const srcH = parseFloat(g.dataset.srcH || 0);
+                const s = parseFloat(g.dataset.objScale || 1);
+                maxSrcDim = Math.max(maxSrcDim, srcW, srcH);
+                maxComposerDim = Math.max(maxComposerDim, srcW * s, srcH * s);
+            });
+            const upscale = maxComposerDim > 0 ? Math.max(1, maxSrcDim / maxComposerDim) : 1;
+
+            const W = w * upscale;
+            const H = h * upscale;
+
             const tmpSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
             tmpSvg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
-            tmpSvg.setAttribute('viewBox', `0 0 ${w} ${h}`);
-            tmpSvg.setAttribute('width', w);
-            tmpSvg.setAttribute('height', h);
+            tmpSvg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+            tmpSvg.setAttribute('width', W);
+            tmpSvg.setAttribute('height', H);
 
             objects.forEach(g => {
                 const tx = parseFloat(g.dataset.tx || 0);
                 const ty = parseFloat(g.dataset.ty || 0);
                 const s = parseFloat(g.dataset.objScale || 1);
                 const gWrap = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-                gWrap.setAttribute('transform', `translate(${tx - minX}, ${ty - minY}) scale(${s})`);
+                gWrap.setAttribute('transform', `translate(${(tx - minX) * upscale}, ${(ty - minY) * upscale}) scale(${s * upscale})`);
+                const skipCls = ['selection-rect', 'hover-outline', 'resize-handle'];
                 Array.from(g.children).forEach(child => {
-                    if (child.classList && (child.classList.contains('selection-rect') || child.classList.contains('hover-outline'))) return;
+                    if (child.classList && skipCls.some(c => child.classList.contains(c))) return;
                     gWrap.appendChild(child.cloneNode(true));
                 });
                 tmpSvg.appendChild(gWrap);
             });
 
             const pid = composerProductId || 'composed';
-            generateCricutPNG(tmpSvg, pid, Math.round(w), Math.round(h), bufferPx);
+            generateCricutPNG(tmpSvg, pid, Math.round(W), Math.round(H), bufferPx);
         }
     </script>
 </body>
