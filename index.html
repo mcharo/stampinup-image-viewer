@@ -874,6 +874,166 @@
             [124, 124, 124]  // #7c7c7c
         ];
 
+        const COLOR_PALETTES = {
+            "2026-2028 In Colors": {
+                "Crisp Cantaloupe": "#fbbb98",
+                "Barely Blush": "#fde3dc",
+                "Golden Glow": "#f4bc6c",
+                "Peaceful Pine": "#789372",
+                "Hydrangea Hue": "#94afdb"
+            },
+            "2025-2027 In Colors": {
+                "Strawberry Slush": "#f26b73",
+                "Timid Tiger": "#f68e4f",
+                "Darling Duckling": "#f0d34f",
+                "Cloud Cover": "#b4c5c0",
+                "Secret Sea": "#334249"
+            },
+            "2024-2026 In Colors": {
+                "Pretty in Pink": "#f8abb6",
+                "Peach Pie": "#fab474",
+                "Shy Shamrock": "#49bc8f",
+                "Summer Splash": "#63c4b1",
+                "Petunia Pop": "#d37eb4"
+            },
+            "Basics": {
+                "Basic Beige": "#e3dbc5",
+                "Very Vanilla": "#fff7e1",
+                "Basic White": "#ffffff",
+                "White Willow": "#ffffff",
+                "Basic Black": "#000000",
+                "Bronze & Ivory": "#a97448",
+                "Crumb Cake": "#c8ad8c"
+            },
+            "Subtles": {
+                "Petal Pink": "#fcd1bb",
+                "Calypso Coral": "#f47e63",
+                "Lemon Lolly": "#fff8a2",
+                "Soft Sea Foam": "#e6f1d2",
+                "Lost Lagoon": "#7baaa1",
+                "Pool Party": "#a9dbd6",
+                "Balmy Blue": "#a0d6ea",
+                "Highland Heather": "#ad95c6",
+                "Fresh Freesia": "#e6b7d6",
+                "Bubble Bath": "#fad5e6"
+            },
+            "Brights": {
+                "Poppy Parade": "#ed193a",
+                "Melon Mambo": "#e94d87",
+                "Flirty Flamingo": "#f5928b",
+                "Pumpkin Pie": "#f89433",
+                "Daffodil Delight": "#ffdc67",
+                "Lemon Lime Twist": "#dee568",
+                "Granny Apple Green": "#a3c149",
+                "Coastal Cabana": "#90d2be",
+                "Azure Afternoon": "#27a0d6",
+                "Berry Burst": "#b74985"
+            },
+            "Regals": {
+                "Cherry Cobbler": "#a10637",
+                "Real Red": "#c52342",
+                "Cajun Craze": "#c0492d",
+                "Crushed Curry": "#f8bd16",
+                "Old Olive": "#98a04d",
+                "Garden Green": "#4d8b56",
+                "Shaded Spruce": "#00815b",
+                "Pretty Peacock": "#006f71",
+                "Blueberry Bushel": "#0d5993",
+                "Gorgeous Grape": "#855da4"
+            },
+            "Neutrals": {
+                "Mossy Meadow": "#656739",
+                "Misty Moonlight": "#58728e",
+                "Night of Navy": "#213e6d",
+                "Blackberry Bliss": "#582752",
+                "Early Espresso": "#63412c",
+                "Pecan Pie": "#a97448",
+                "Crumb Cake": "#c8ad8c",
+                "Gray Granite": "#b3aba1",
+                "Smoky Slate": "#bdbdbe",
+                "Basic Gray": "#767e85"
+            }
+        };
+
+        function createColorControls(onColorApply) {
+            const colorControl = document.createElement('div');
+            colorControl.className = 'color-control';
+
+            const colorInputs = document.createElement('div');
+            colorInputs.className = 'color-inputs';
+
+            const colorPicker = document.createElement('input');
+            colorPicker.type = 'color';
+            colorPicker.className = 'color-picker';
+            colorPicker.value = '#000000';
+
+            const hexInput = document.createElement('input');
+            hexInput.type = 'text';
+            hexInput.className = 'hex-input';
+            hexInput.value = '#000000';
+            hexInput.placeholder = '#000000';
+
+            const paletteSelector = document.createElement('select');
+            paletteSelector.className = 'palette-selector';
+
+            Object.keys(COLOR_PALETTES).forEach(paletteName => {
+                const option = document.createElement('option');
+                option.value = paletteName;
+                option.textContent = paletteName;
+                paletteSelector.appendChild(option);
+            });
+
+            const colorPalette = document.createElement('div');
+            colorPalette.className = 'color-palette';
+
+            function updatePalette(paletteName) {
+                colorPalette.innerHTML = '';
+                const colors = COLOR_PALETTES[paletteName];
+                if (!colors) return;
+                Object.entries(colors).forEach(([name, hex]) => {
+                    const swatch = document.createElement('div');
+                    swatch.className = 'color-swatch';
+                    swatch.style.backgroundColor = hex;
+                    swatch.title = name;
+                    swatch.addEventListener('click', () => {
+                        colorPalette.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('active'));
+                        swatch.classList.add('active');
+                        colorPicker.value = hex;
+                        hexInput.value = hex;
+                        onColorApply(hex);
+                    });
+                    colorPalette.appendChild(swatch);
+                });
+            }
+
+            updatePalette(paletteSelector.value);
+            paletteSelector.addEventListener('change', (e) => updatePalette(e.target.value));
+
+            colorPicker.addEventListener('input', (e) => {
+                const color = e.target.value;
+                hexInput.value = color;
+                onColorApply(color);
+                colorPalette.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('active'));
+            });
+
+            hexInput.addEventListener('input', (e) => {
+                let color = e.target.value;
+                if (color.charAt(0) !== '#') color = '#' + color;
+                if (/^#[0-9A-Fa-f]{6}$/.test(color)) {
+                    colorPicker.value = color;
+                    onColorApply(color);
+                    colorPalette.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('active'));
+                }
+            });
+
+            colorInputs.appendChild(colorPicker);
+            colorInputs.appendChild(hexInput);
+            colorControl.appendChild(colorInputs);
+            colorControl.appendChild(paletteSelector);
+
+            return { colorControl, colorPalette };
+        }
+
         function findBannerRegion(img) {
             const canvas = document.createElement('canvas');
             const ctx = canvas.getContext('2d');
@@ -1189,180 +1349,9 @@
                                 const controls = document.createElement('div');
                                 controls.className = 'controls';
                                 
-                                const colorControl = document.createElement('div');
-                                colorControl.className = 'color-control';
-                                
-                                // Create color inputs container
-                                const colorInputs = document.createElement('div');
-                                colorInputs.className = 'color-inputs';
-                                
-                                const colorPicker = document.createElement('input');
-                                colorPicker.type = 'color';
-                                colorPicker.className = 'color-picker';
-                                colorPicker.value = '#000000';
-                                
-                                const hexInput = document.createElement('input');
-                                hexInput.type = 'text';
-                                hexInput.className = 'hex-input';
-                                hexInput.value = '#000000';
-                                hexInput.placeholder = '#000000';
-
-                                // Add palette selector
-                                const paletteSelector = document.createElement('select');
-                                paletteSelector.className = 'palette-selector';
-                                
-                                // Add color palettes
-                                const colorPalettes = {
-                                    "2025-2027 In Colors": {
-                                        "Strawberry Slush": "#f26b73",
-                                        "Timid Tiger": "#f68e4f",
-                                        "Darling Duckling": "#f0d34f",
-                                        "Cloud Cover": "#b4c5c0",
-                                        "Secret Sea": "#334249"
-                                    },
-                                    "2024-2026 In Colors": {
-                                        "Pretty in Pink": "#f8abb6",
-                                        "Peach Pie": "#fab474",
-                                        "Shy Shamrock": "#49bc8f",
-                                        "Summer Splash": "#63c4b1",
-                                        "Petunia Pop": "#d37eb4"
-                                    },
-                                    "Basics": {
-                                        "Basic Beige": "#e3dbc5",
-                                        "Very Vanilla": "#fff7e1",
-                                        "Basic White": "#ffffff",
-                                        "White Willow": "#ffffff",
-                                        "Basic Black": "#000000",
-                                        "Bronze & Ivory": "#a97448",
-                                        "Crumb Cake": "#c8ad8c"
-                                    },
-                                    "Subtles": {
-                                        "Petal Pink": "#fcd1bb",
-                                        "Calypso Coral": "#f47e63",
-                                        "Lemon Lolly": "#fff8a2",
-                                        "Soft Sea Foam": "#e6f1d2",
-                                        "Lost Lagoon": "#7baaa1",
-                                        "Pool Party": "#a9dbd6",
-                                        "Balmy Blue": "#a0d6ea",
-                                        "Highland Heather": "#ad95c6",
-                                        "Fresh Freesia": "#e6b7d6",
-                                        "Bubble Bath": "#fad5e6"
-                                    },
-                                    "Brights": {
-                                        "Poppy Parade": "#ed193a",
-                                        "Melon Mambo": "#e94d87",
-                                        "Flirty Flamingo": "#f5928b",
-                                        "Pumpkin Pie": "#f89433",
-                                        "Daffodil Delight": "#ffdc67",
-                                        "Lemon Lime Twist": "#dee568",
-                                        "Granny Apple Green": "#a3c149",
-                                        "Coastal Cabana": "#90d2be",
-                                        "Azure Afternoon": "#27a0d6",
-                                        "Berry Burst": "#b74985"
-                                    },
-                                    "Regals": {
-                                        "Cherry Cobbler": "#a10637",
-                                        "Real Red": "#c52342",
-                                        "Cajun Craze": "#c0492d",
-                                        "Crushed Curry": "#f8bd16",
-                                        "Old Olive": "#98a04d",
-                                        "Garden Green": "#4d8b56",
-                                        "Shaded Spruce": "#00815b",
-                                        "Pretty Peacock": "#006f71",
-                                        "Blueberry Bushel": "#0d5993",
-                                        "Gorgeous Grape": "#855da4"
-                                    },
-                                    "Neutrals": {
-                                        "Mossy Meadow": "#656739",
-                                        "Misty Moonlight": "#58728e",
-                                        "Night of Navy": "#213e6d",
-                                        "Blackberry Bliss": "#582752",
-                                        "Early Espresso": "#63412c",
-                                        "Pecan Pie": "#a97448",
-                                        "Crumb Cake": "#c8ad8c",
-                                        "Gray Granite": "#b3aba1",
-                                        "Smoky Slate": "#bdbdbe",
-                                        "Basic Gray": "#767e85"
-                                    }
-                                };
-
-                                // Add options to palette selector
-                                Object.keys(colorPalettes).forEach(paletteName => {
-                                    const option = document.createElement('option');
-                                    option.value = paletteName;
-                                    option.textContent = paletteName;
-                                    paletteSelector.appendChild(option);
-                                });
-
-                                // Create color palette container
-                                const colorPalette = document.createElement('div');
-                                colorPalette.className = 'color-palette';
-
-                                // Function to update color palette
-                                function updateColorPalette(paletteName) {
-                                    colorPalette.innerHTML = '';
-                                    const colors = colorPalettes[paletteName];
-                                    
-                                    Object.entries(colors).forEach(([name, hex]) => {
-                                        const swatch = document.createElement('div');
-                                        swatch.className = 'color-swatch';
-                                        swatch.style.backgroundColor = hex;
-                                        swatch.title = name;
-                                        
-                                        swatch.addEventListener('click', () => {
-                                            // Remove active class from all swatches
-                                            colorPalette.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('active'));
-                                            // Add active class to clicked swatch
-                                            swatch.classList.add('active');
-                                            
-                                            // Update color picker and hex input
-                                            colorPicker.value = hex;
-                                            hexInput.value = hex;
-                                            tintSVG(svgContainer.querySelector('svg'), hex);
-                                        });
-                                        
-                                        colorPalette.appendChild(swatch);
-                                    });
-                                }
-
-                                // Initial palette update
-                                updateColorPalette(paletteSelector.value);
-
-                                // Update palette when selection changes
-                                paletteSelector.addEventListener('change', (e) => {
-                                    updateColorPalette(e.target.value);
-                                });
-                                
-                                // Sync color picker and hex input
-                                colorPicker.addEventListener('input', (e) => {
-                                    const color = e.target.value;
-                                    hexInput.value = color;
-                                    tintSVG(svgContainer.querySelector('svg'), color);
-                                    // Remove active class from all swatches
-                                    colorPalette.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('active'));
-                                });
-                                
-                                hexInput.addEventListener('input', (e) => {
-                                    let color = e.target.value;
-                                    // Add # if missing
-                                    if (color.charAt(0) !== '#') {
-                                        color = '#' + color;
-                                    }
-                                    // Validate hex color
-                                    if (/^#[0-9A-Fa-f]{6}$/.test(color)) {
-                                        colorPicker.value = color;
-                                        tintSVG(svgContainer.querySelector('svg'), color);
-                                        // Remove active class from all swatches
-                                        colorPalette.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('active'));
-                                    }
-                                });
-                                
-                                // Assemble the structure
-                                colorInputs.appendChild(colorPicker);
-                                colorInputs.appendChild(hexInput);
-                                
-                                colorControl.appendChild(colorInputs);
-                                colorControl.appendChild(paletteSelector);
+                                const { colorControl, colorPalette } = createColorControls(
+                                    (color) => tintSVG(svgContainer.querySelector('svg'), color)
+                                );
                                 
                                 const dlIcon = '<svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;vertical-align:-1px;margin-right:5px"><path d="M6 1v7M3.5 5.5L6 8l2.5-2.5M2 10.5h8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 
@@ -1406,11 +1395,20 @@
                                 objectsContainer.id = `objects-${productId}`;
                                 imageWrapper.appendChild(objectsContainer);
                             } else {
-                                // If not black and white, show original image
                                 const img = document.createElement('img');
                                 img.src = URL.createObjectURL(blob);
                                 img.alt = `Product ${productId}`;
                                 imageWrapper.appendChild(img);
+
+                                const forceBtn = document.createElement('button');
+                                forceBtn.textContent = 'Force Convert to SVG';
+                                forceBtn.style.cssText = 'margin-top: 0.5rem; background-color: #f59e0b;';
+                                forceBtn.onclick = () => {
+                                    forceBtn.textContent = 'Converting...';
+                                    forceBtn.disabled = true;
+                                    forceConvertImage(blob, originalWidth, originalHeight, productId, imageWrapper);
+                                };
+                                imageWrapper.appendChild(forceBtn);
                             }
                             
                             // Clean up the temporary URL
@@ -1428,7 +1426,6 @@
                             }
                             URL.revokeObjectURL(detectionProbe.src);
 
-                            // For regular images, just show them
                             const img = document.createElement('img');
                             img.src = URL.createObjectURL(blob);
                             img.alt = `Product ${productId}`;
@@ -1436,6 +1433,22 @@
 
                             // Kick off OCR detection in the background for the product photo
                             detectStampSetName(blob);
+
+                            const forceBtn = document.createElement('button');
+                            forceBtn.textContent = 'Force Convert to SVG';
+                            forceBtn.style.cssText = 'margin-top: 0.5rem; background-color: #f59e0b;';
+                            forceBtn.onclick = async () => {
+                                forceBtn.textContent = 'Converting...';
+                                forceBtn.disabled = true;
+                                const probeImg = document.createElement('img');
+                                probeImg.src = URL.createObjectURL(blob);
+                                await new Promise(r => { probeImg.onload = r; });
+                                const pw = probeImg.naturalWidth;
+                                const ph = probeImg.naturalHeight;
+                                URL.revokeObjectURL(probeImg.src);
+                                forceConvertImage(blob, pw, ph, productId, imageWrapper);
+                            };
+                            imageWrapper.appendChild(forceBtn);
                         }
 
                         imageContainer.appendChild(imageWrapper);
@@ -1508,88 +1521,9 @@
                     const controls = document.createElement('div');
                     controls.className = 'controls';
 
-                    const colorControl = document.createElement('div');
-                    colorControl.className = 'color-control';
-
-                    const colorInputs = document.createElement('div');
-                    colorInputs.className = 'color-inputs';
-
-                    const colorPicker = document.createElement('input');
-                    colorPicker.type = 'color';
-                    colorPicker.className = 'color-picker';
-                    colorPicker.value = '#000000';
-
-                    const hexInput = document.createElement('input');
-                    hexInput.type = 'text';
-                    hexInput.className = 'hex-input';
-                    hexInput.value = '#000000';
-                    hexInput.placeholder = '#000000';
-
-                    const paletteSelector = document.createElement('select');
-                    paletteSelector.className = 'palette-selector';
-
-                    const colorPalettes = {
-                        "2025-2027 In Colors": { "Strawberry Slush": "#f26b73", "Timid Tiger": "#f68e4f", "Darling Duckling": "#f0d34f", "Cloud Cover": "#b4c5c0", "Secret Sea": "#334249" },
-                        "2024-2026 In Colors": { "Pretty in Pink": "#f8abb6", "Peach Pie": "#fab474", "Shy Shamrock": "#49bc8f", "Summer Splash": "#63c4b1", "Petunia Pop": "#d37eb4" },
-                        "Basics": { "Basic Beige": "#e3dbc5", "Very Vanilla": "#fff7e1", "Basic White": "#ffffff", "White Willow": "#ffffff", "Basic Black": "#000000", "Bronze & Ivory": "#a97448", "Crumb Cake": "#c8ad8c" },
-                        "Subtles": { "Petal Pink": "#fcd1bb", "Calypso Coral": "#f47e63", "Lemon Lolly": "#fff8a2", "Soft Sea Foam": "#e6f1d2", "Lost Lagoon": "#7baaa1", "Pool Party": "#a9dbd6", "Balmy Blue": "#a0d6ea", "Highland Heather": "#ad95c6", "Fresh Freesia": "#e6b7d6", "Bubble Bath": "#fad5e6" },
-                        "Brights": { "Poppy Parade": "#ed193a", "Melon Mambo": "#e94d87", "Flirty Flamingo": "#f5928b", "Pumpkin Pie": "#f89433", "Daffodil Delight": "#ffdc67", "Lemon Lime Twist": "#dee568", "Granny Apple Green": "#a3c149", "Coastal Cabana": "#90d2be", "Azure Afternoon": "#27a0d6", "Berry Burst": "#b74985" },
-                        "Regals": { "Cherry Cobbler": "#a10637", "Real Red": "#c52342", "Cajun Craze": "#c0492d", "Crushed Curry": "#f8bd16", "Old Olive": "#98a04d", "Garden Green": "#4d8b56", "Shaded Spruce": "#00815b", "Pretty Peacock": "#006f71", "Blueberry Bushel": "#0d5993", "Gorgeous Grape": "#855da4" },
-                        "Neutrals": { "Mossy Meadow": "#656739", "Misty Moonlight": "#58728e", "Night of Navy": "#213e6d", "Blackberry Bliss": "#582752", "Early Espresso": "#63412c", "Pecan Pie": "#a97448", "Crumb Cake": "#c8ad8c", "Gray Granite": "#b3aba1", "Smoky Slate": "#bdbdbe", "Basic Gray": "#767e85" }
-                    };
-
-                    Object.keys(colorPalettes).forEach(paletteName => {
-                        const option = document.createElement('option');
-                        option.value = paletteName;
-                        option.textContent = paletteName;
-                        paletteSelector.appendChild(option);
-                    });
-
-                    const colorPalette = document.createElement('div');
-                    colorPalette.className = 'color-palette';
-
-                    function updateColorPalette(paletteName) {
-                        colorPalette.innerHTML = '';
-                        Object.entries(colorPalettes[paletteName]).forEach(([name, hex]) => {
-                            const swatch = document.createElement('div');
-                            swatch.className = 'color-swatch';
-                            swatch.style.backgroundColor = hex;
-                            swatch.title = name;
-                            swatch.addEventListener('click', () => {
-                                colorPalette.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('active'));
-                                swatch.classList.add('active');
-                                colorPicker.value = hex;
-                                hexInput.value = hex;
-                                tintSVG(svgContainer.querySelector('svg'), hex);
-                            });
-                            colorPalette.appendChild(swatch);
-                        });
-                    }
-
-                    updateColorPalette(paletteSelector.value);
-                    paletteSelector.addEventListener('change', (e) => updateColorPalette(e.target.value));
-
-                    colorPicker.addEventListener('input', (e) => {
-                        const color = e.target.value;
-                        hexInput.value = color;
-                        tintSVG(svgContainer.querySelector('svg'), color);
-                        colorPalette.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('active'));
-                    });
-
-                    hexInput.addEventListener('input', (e) => {
-                        let color = e.target.value;
-                        if (color.charAt(0) !== '#') color = '#' + color;
-                        if (/^#[0-9A-Fa-f]{6}$/.test(color)) {
-                            colorPicker.value = color;
-                            tintSVG(svgContainer.querySelector('svg'), color);
-                            colorPalette.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('active'));
-                        }
-                    });
-
-                    colorInputs.appendChild(colorPicker);
-                    colorInputs.appendChild(hexInput);
-                    colorControl.appendChild(colorInputs);
-                    colorControl.appendChild(paletteSelector);
+                    const { colorControl, colorPalette } = createColorControls(
+                        (color) => tintSVG(svgContainer.querySelector('svg'), color)
+                    );
 
                     const dlIcon = '<svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;vertical-align:-1px;margin-right:5px"><path d="M6 1v7M3.5 5.5L6 8l2.5-2.5M2 10.5h8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 
@@ -1640,6 +1574,21 @@
                     note.textContent = 'This image may not be ideal for SVG conversion. Best results with high-contrast black and white images.';
                     imageWrapper.appendChild(note);
 
+                    const forceBtn = document.createElement('button');
+                    forceBtn.textContent = 'Force Convert to SVG';
+                    forceBtn.style.cssText = 'margin-top: 0.5rem; background-color: #f59e0b;';
+                    forceBtn.onclick = () => {
+                        forceBtn.textContent = 'Converting...';
+                        forceBtn.disabled = true;
+                        uploadStatus.textContent = 'Force-converting to SVG...';
+                        uploadStatus.style.color = '#6b7280';
+                        forceConvertImage(file, originalWidth, originalHeight, uploadId, imageWrapper).then(() => {
+                            uploadStatus.textContent = 'Image force-converted to SVG!';
+                            uploadStatus.style.color = '#059669';
+                        });
+                    };
+                    imageWrapper.appendChild(forceBtn);
+
                     uploadStatus.textContent = 'Image uploaded (not converted to SVG)';
                     uploadStatus.style.color = '#f59e0b';
                 }
@@ -1652,6 +1601,78 @@
                 uploadStatus.textContent = 'Error processing image';
                 uploadStatus.style.color = '#dc2626';
             }
+        }
+
+        async function forceConvertImage(blob, originalWidth, originalHeight, productId, imageWrapper) {
+            imageWrapper.innerHTML = '';
+
+            // Load original (color) image from blob
+            const img = document.createElement('img');
+            img.src = URL.createObjectURL(blob);
+            await new Promise((resolve, reject) => { img.onload = resolve; img.onerror = reject; });
+
+            const svg = await convertToColorSVG(img, originalWidth, originalHeight);
+            const svgContainer = document.createElement('div');
+            svgContainer.className = 'svg-container';
+
+            const scaledSvg = svg.replace(/<svg([^>]*)>/, (match, attributes) => {
+                return `<svg${attributes} viewBox="0 0 ${originalWidth} ${originalHeight}" width="100%" height="100%">`;
+            });
+
+            svgContainer.innerHTML = scaledSvg;
+            imageWrapper.appendChild(svgContainer);
+
+            const detectionControls = createObjectDetectionControls(img, svgContainer, originalWidth, originalHeight, productId);
+            imageWrapper.appendChild(detectionControls);
+
+            const mainControlsHeader = document.createElement('h3');
+            mainControlsHeader.textContent = 'Full Image Controls';
+            mainControlsHeader.style.cssText = 'font-size: 1rem; font-weight: 600; color: #374151; margin: 1.5rem 0 0.5rem 0;';
+            imageWrapper.appendChild(mainControlsHeader);
+
+            const controls = document.createElement('div');
+            controls.className = 'controls';
+
+            const { colorControl, colorPalette } = createColorControls((color) => {
+                const mainSvg = svgContainer.querySelector('svg');
+                if (mainSvg) mainSvg.querySelectorAll('path').forEach(p => p.setAttribute('fill', color));
+            });
+
+            const dlIcon = '<svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;vertical-align:-1px;margin-right:5px"><path d="M6 1v7M3.5 5.5L6 8l2.5-2.5M2 10.5h8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+
+            const downloadButton = document.createElement('button');
+            downloadButton.innerHTML = dlIcon + 'SVG';
+            downloadButton.onclick = () => downloadSVG(svgContainer.querySelector('svg'), productId, originalWidth, originalHeight);
+
+            const downloadPngButton = document.createElement('button');
+            downloadPngButton.innerHTML = dlIcon + 'PNG';
+            downloadPngButton.onclick = () => downloadPNG(svgContainer.querySelector('svg'), productId, originalWidth, originalHeight);
+
+            const downloadJpgButton = document.createElement('button');
+            downloadJpgButton.innerHTML = dlIcon + 'JPG';
+            downloadJpgButton.onclick = () => downloadJPG(svgContainer.querySelector('svg'), productId, originalWidth, originalHeight);
+
+            const downloadRow = document.createElement('div');
+            downloadRow.className = 'download-row';
+            downloadRow.appendChild(downloadButton);
+            downloadRow.appendChild(downloadPngButton);
+            downloadRow.appendChild(downloadJpgButton);
+
+            controls.appendChild(colorControl);
+            controls.appendChild(colorPalette);
+            controls.appendChild(downloadRow);
+            imageWrapper.appendChild(controls);
+
+            const objectsHeader = document.createElement('h3');
+            objectsHeader.textContent = 'Individual Objects';
+            objectsHeader.style.cssText = 'font-size: 1rem; font-weight: 600; color: #374151; margin: 1.5rem 0 0.5rem 0; display: none;';
+            objectsHeader.id = `objectsHeader-${productId}`;
+            imageWrapper.appendChild(objectsHeader);
+
+            const objectsContainer = document.createElement('div');
+            objectsContainer.className = 'objects-container';
+            objectsContainer.id = `objects-${productId}`;
+            imageWrapper.appendChild(objectsContainer);
         }
 
         function blobToDataUrl(blob) {
@@ -1925,6 +1946,131 @@
             
             // Consider it black and white if more than 90% of pixels are either black or white
             return (blackPercentage + whitePercentage) > 90;
+        }
+
+        function medianCutQuantize(pixels, numColors) {
+            if (pixels.length === 0) return [[0, 0, 0]];
+            let buckets = [pixels];
+            while (buckets.length < numColors) {
+                let maxRange = -1, maxIdx = 0, maxCh = 0;
+                for (let bi = 0; bi < buckets.length; bi++) {
+                    const bk = buckets[bi];
+                    if (bk.length < 2) continue;
+                    for (let ch = 0; ch < 3; ch++) {
+                        let lo = 255, hi = 0;
+                        for (const p of bk) { if (p[ch] < lo) lo = p[ch]; if (p[ch] > hi) hi = p[ch]; }
+                        if (hi - lo > maxRange) { maxRange = hi - lo; maxIdx = bi; maxCh = ch; }
+                    }
+                }
+                if (maxRange <= 0) break;
+                const bk = buckets[maxIdx];
+                bk.sort((a, b) => a[maxCh] - b[maxCh]);
+                const mid = bk.length >> 1;
+                buckets.splice(maxIdx, 1, bk.slice(0, mid), bk.slice(mid));
+            }
+            return buckets.map(bk => {
+                if (bk.length === 0) return [0, 0, 0];
+                let sr = 0, sg = 0, sb = 0;
+                for (const p of bk) { sr += p[0]; sg += p[1]; sb += p[2]; }
+                const n = bk.length;
+                return [Math.round(sr / n), Math.round(sg / n), Math.round(sb / n)];
+            });
+        }
+
+        function traceLayerWithPotrace(dataUrl) {
+            return new Promise(resolve => {
+                Potrace.setParameter({ turdsize: 25, alphamax: 0.8, optcurve: true, opttolerance: 0.2 });
+                Potrace.loadImageFromUrl(dataUrl);
+                Potrace.process(function() {
+                    const svg = Potrace.getSVG(1);
+                    const match = svg.match(/<path[^>]*\bd="([^"]*)"/);
+                    resolve(match && match[1] && match[1].trim() ? match[1] : null);
+                });
+            });
+        }
+
+        async function convertToColorSVG(img, originalWidth, originalHeight, numColors) {
+            numColors = numColors || 8;
+            const canvas = document.createElement('canvas');
+            canvas.width = originalWidth;
+            canvas.height = originalHeight;
+            const ctx = canvas.getContext('2d', { willReadFrequently: true });
+            ctx.drawImage(img, 0, 0, originalWidth, originalHeight);
+            const imageData = ctx.getImageData(0, 0, originalWidth, originalHeight);
+            const data = imageData.data;
+            const totalPx = originalWidth * originalHeight;
+
+            // Sample pixels for quantization (every Nth pixel for speed)
+            const step = Math.max(1, Math.floor(Math.sqrt(totalPx / 60000)));
+            const sampled = [];
+            for (let y = 0; y < originalHeight; y += step) {
+                for (let x = 0; x < originalWidth; x += step) {
+                    const i = (y * originalWidth + x) * 4;
+                    const r = data[i], g = data[i + 1], b = data[i + 2], a = data[i + 3];
+                    if (a < 128) continue;
+                    if (r > 240 && g > 240 && b > 240) continue;
+                    sampled.push([r, g, b]);
+                }
+            }
+
+            const palette = medianCutQuantize(sampled, numColors);
+
+            // Pre-assign every pixel to its nearest palette index
+            const assignment = new Uint8Array(totalPx);
+            const BG_INDEX = 255;
+            for (let i = 0, pi = 0; i < data.length; i += 4, pi++) {
+                const r = data[i], g = data[i + 1], b = data[i + 2], a = data[i + 3];
+                if (a < 128 || (r > 240 && g > 240 && b > 240)) {
+                    assignment[pi] = BG_INDEX;
+                    continue;
+                }
+                let minD = Infinity, best = 0;
+                for (let ci = 0; ci < palette.length; ci++) {
+                    const dr = r - palette[ci][0], dg = g - palette[ci][1], db = b - palette[ci][2];
+                    const d = dr * dr + dg * dg + db * db;
+                    if (d < minD) { minD = d; best = ci; }
+                }
+                assignment[pi] = best;
+            }
+
+            // Trace each color layer
+            const maskCanvas = document.createElement('canvas');
+            maskCanvas.width = originalWidth;
+            maskCanvas.height = originalHeight;
+            const maskCtx = maskCanvas.getContext('2d', { willReadFrequently: true });
+
+            const layers = [];
+            for (let ci = 0; ci < palette.length; ci++) {
+                const maskData = maskCtx.createImageData(originalWidth, originalHeight);
+                const md = maskData.data;
+                let hasPixels = false;
+                for (let pi = 0; pi < totalPx; pi++) {
+                    const oi = pi * 4;
+                    if (assignment[pi] === ci) {
+                        md[oi] = md[oi + 1] = md[oi + 2] = 0;
+                        hasPixels = true;
+                    } else {
+                        md[oi] = md[oi + 1] = md[oi + 2] = 255;
+                    }
+                    md[oi + 3] = 255;
+                }
+                if (!hasPixels) continue;
+
+                maskCtx.putImageData(maskData, 0, 0);
+                const maskUrl = maskCanvas.toDataURL('image/png');
+                const pathD = await traceLayerWithPotrace(maskUrl);
+                if (pathD) {
+                    const hex = '#' + palette[ci].map(c => c.toString(16).padStart(2, '0')).join('');
+                    layers.push({ color: hex, pathD });
+                }
+            }
+
+            let svg = `<svg id="svg" version="1.1" width="${originalWidth}" height="${originalHeight}" xmlns="http://www.w3.org/2000/svg">`;
+            for (const layer of layers) {
+                svg += `<path d="${layer.pathD}" fill="${layer.color}" fill-rule="evenodd" stroke="none"/>`;
+            }
+            svg += '</svg>';
+            return svg;
         }
 
         async function convertToSVG(img, originalWidth, originalHeight) {
@@ -2726,11 +2872,13 @@
                     
                     ctx.putImageData(newImageData, 0, 0);
                     
-                    // Convert to image and then to SVG
                     const extractedImage = new Image();
                     extractedImage.onload = async () => {
                         try {
-                            const svg = await convertToSVG(extractedImage, canvas.width, canvas.height);
+                            const bw = await isBlackAndWhite(extractedImage);
+                            const svg = bw
+                                ? await convertToSVG(extractedImage, canvas.width, canvas.height)
+                                : await convertToColorSVG(extractedImage, canvas.width, canvas.height);
                             createExtractedObjectCard(svg, canvas.width, canvas.height, productId, objectNumber, originalWidth, originalHeight);
                             
                             // Restore info message
@@ -2883,189 +3031,14 @@
         }
 
         function createObjectColorControls(svg) {
-            const colorControl = document.createElement('div');
-            colorControl.className = 'color-control';
-            
-            // Create color inputs container
-            const colorInputs = document.createElement('div');
-            colorInputs.className = 'color-inputs';
-            
-            const colorPicker = document.createElement('input');
-            colorPicker.type = 'color';
-            colorPicker.className = 'color-picker';
-            colorPicker.value = '#000000';
-            
-            const hexInput = document.createElement('input');
-            hexInput.type = 'text';
-            hexInput.className = 'hex-input';
-            hexInput.value = '#000000';
-            hexInput.placeholder = '#000000';
+            const { colorControl, colorPalette } = createColorControls(
+                (color) => tintSVG(svg, color)
+            );
 
-            // Add palette selector
-            const paletteSelector = document.createElement('select');
-            paletteSelector.className = 'palette-selector';
-            
-            // Add color palettes (reusing the same palettes from main controls)
-            const colorPalettes = {
-                "2025-2027 In Colors": {
-                    "Strawberry Slush": "#f26b73",
-                    "Timid Tiger": "#f68e4f",
-                    "Darling Duckling": "#f0d34f",
-                    "Cloud Cover": "#b4c5c0",
-                    "Secret Sea": "#334249"
-                },
-                "2024-2026 In Colors": {
-                    "Pretty in Pink": "#f8abb6",
-                    "Peach Pie": "#fab474",
-                    "Shy Shamrock": "#49bc8f",
-                    "Summer Splash": "#63c4b1",
-                    "Petunia Pop": "#d37eb4"
-                },
-                "Basics": {
-                    "Basic Beige": "#e3dbc5",
-                    "Very Vanilla": "#fff7e1",
-                    "Basic White": "#ffffff",
-                    "White Willow": "#ffffff",
-                    "Basic Black": "#000000",
-                    "Bronze & Ivory": "#a97448",
-                    "Crumb Cake": "#c8ad8c"
-                },
-                "Subtles": {
-                    "Petal Pink": "#fcd1bb",
-                    "Calypso Coral": "#f47e63",
-                    "Lemon Lolly": "#fff8a2",
-                    "Soft Sea Foam": "#e6f1d2",
-                    "Lost Lagoon": "#7baaa1",
-                    "Pool Party": "#a9dbd6",
-                    "Balmy Blue": "#a0d6ea",
-                    "Highland Heather": "#ad95c6",
-                    "Fresh Freesia": "#e6b7d6",
-                    "Bubble Bath": "#fad5e6"
-                },
-                "Brights": {
-                    "Poppy Parade": "#ed193a",
-                    "Melon Mambo": "#e94d87",
-                    "Flirty Flamingo": "#f5928b",
-                    "Pumpkin Pie": "#f89433",
-                    "Daffodil Delight": "#ffdc67",
-                    "Lemon Lime Twist": "#dee568",
-                    "Granny Apple Green": "#a3c149",
-                    "Coastal Cabana": "#90d2be",
-                    "Azure Afternoon": "#27a0d6",
-                    "Berry Burst": "#b74985"
-                },
-                "Regals": {
-                    "Cherry Cobbler": "#a10637",
-                    "Real Red": "#c52342",
-                    "Cajun Craze": "#c0492d",
-                    "Crushed Curry": "#f8bd16",
-                    "Old Olive": "#98a04d",
-                    "Garden Green": "#4d8b56",
-                    "Shaded Spruce": "#00815b",
-                    "Pretty Peacock": "#006f71",
-                    "Blueberry Bushel": "#0d5993",
-                    "Gorgeous Grape": "#855da4"
-                },
-                "Neutrals": {
-                    "Mossy Meadow": "#656739",
-                    "Misty Moonlight": "#58728e",
-                    "Night of Navy": "#213e6d",
-                    "Blackberry Bliss": "#582752",
-                    "Early Espresso": "#63412c",
-                    "Pecan Pie": "#a97448",
-                    "Crumb Cake": "#c8ad8c",
-                    "Gray Granite": "#b3aba1",
-                    "Smoky Slate": "#bdbdbe",
-                    "Basic Gray": "#767e85"
-                }
-            };
-
-            // Add options to palette selector
-            Object.keys(colorPalettes).forEach(paletteName => {
-                const option = document.createElement('option');
-                option.value = paletteName;
-                option.textContent = paletteName;
-                paletteSelector.appendChild(option);
-            });
-
-            // Create color palette container
-            const colorPalette = document.createElement('div');
-            colorPalette.className = 'color-palette';
-
-            // Function to update color palette
-            function updateColorPalette(paletteName) {
-                colorPalette.innerHTML = '';
-                const colors = colorPalettes[paletteName];
-                
-                Object.entries(colors).forEach(([name, hex]) => {
-                    const swatch = document.createElement('div');
-                    swatch.className = 'color-swatch';
-                    swatch.style.backgroundColor = hex;
-                    swatch.title = name;
-                    
-                    swatch.addEventListener('click', () => {
-                        // Remove active class from all swatches
-                        colorPalette.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('active'));
-                        // Add active class to clicked swatch
-                        swatch.classList.add('active');
-                        
-                        // Update color picker and hex input
-                        colorPicker.value = hex;
-                        hexInput.value = hex;
-                        tintSVG(svg, hex);
-                    });
-                    
-                    colorPalette.appendChild(swatch);
-                });
-            }
-
-            // Initial palette update
-            updateColorPalette(paletteSelector.value);
-
-            // Update palette when selection changes
-            paletteSelector.addEventListener('change', (e) => {
-                updateColorPalette(e.target.value);
-            });
-            
-            // Sync color picker and hex input
-            colorPicker.addEventListener('input', (e) => {
-                const color = e.target.value;
-                hexInput.value = color;
-                tintSVG(svg, color);
-                // Remove active class from all swatches
-                colorPalette.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('active'));
-            });
-            
-            hexInput.addEventListener('input', (e) => {
-                let color = e.target.value;
-                // Add # if missing
-                if (color.charAt(0) !== '#') {
-                    color = '#' + color;
-                }
-                // Validate hex color
-                if (/^#[0-9A-Fa-f]{6}$/.test(color)) {
-                    colorPicker.value = color;
-                    tintSVG(svg, color);
-                    // Remove active class from all swatches
-                    colorPalette.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('active'));
-                }
-            });
-            
-            // Assemble the structure
-            colorInputs.appendChild(colorPicker);
-            colorInputs.appendChild(hexInput);
-            
-            colorControl.appendChild(colorInputs);
-            colorControl.appendChild(paletteSelector);
-            
-            // Create a container for the palette
-            const paletteContainer = document.createElement('div');
-            paletteContainer.appendChild(colorPalette);
-            
             const fullControl = document.createElement('div');
             fullControl.appendChild(colorControl);
-            fullControl.appendChild(paletteContainer);
-            
+            fullControl.appendChild(colorPalette);
+
             return fullControl;
         }
 
