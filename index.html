@@ -139,6 +139,23 @@
             box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
             transition: all 0.15s ease;
             flex-shrink: 0;
+            position: relative;
+        }
+
+        .color-swatch[data-tooltip]:hover::after {
+            content: attr(data-tooltip);
+            position: absolute;
+            bottom: calc(100% + 6px);
+            left: 50%;
+            transform: translateX(-50%);
+            background: #1f2937;
+            color: #fff;
+            font-size: 11px;
+            padding: 4px 8px;
+            border-radius: 4px;
+            white-space: nowrap;
+            pointer-events: none;
+            z-index: 10;
         }
 
         /* Responsive color palette for individual object cards */
@@ -994,7 +1011,7 @@
                     const swatch = document.createElement('div');
                     swatch.className = 'color-swatch';
                     swatch.style.backgroundColor = hex;
-                    swatch.title = name;
+                    swatch.dataset.tooltip = name;
                     swatch.addEventListener('click', () => {
                         colorPalette.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('active'));
                         swatch.classList.add('active');
