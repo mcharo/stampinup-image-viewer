@@ -2640,6 +2640,29 @@
             });
         }
 
+        function hasNearbyParentInk(parent, child, imageWidth) {
+            const parentPixels = new Set(parent.pixelIndices);
+            const maxDistance = Math.max(16, Math.min(40, Math.round(imageWidth * 0.035)));
+
+            for (const childIdx of child.pixelIndices) {
+                const childX = childIdx % imageWidth;
+                const childY = (childIdx / imageWidth) | 0;
+
+                for (let dy = -maxDistance; dy <= maxDistance; dy++) {
+                    const y = childY + dy;
+                    if (y < parent.bounds.top || y > parent.bounds.bottom) continue;
+
+                    for (let dx = -maxDistance; dx <= maxDistance; dx++) {
+                        const x = childX + dx;
+                        if (x < parent.bounds.left || x > parent.bounds.right) continue;
+                        if (parentPixels.has(y * imageWidth + x)) return true;
+                    }
+                }
+            }
+
+            return false;
+        }
+
         function mergeContainedComponents(components, imageWidth) {
             if (components.length < 2) return components;
 
@@ -2661,7 +2684,8 @@
                     const child = components[j].bounds;
 
                     if (child.left >= parent.left && child.right <= parent.right &&
-                        child.top >= parent.top && child.bottom <= parent.bottom) {
+                        child.top >= parent.top && child.bottom <= parent.bottom &&
+                        hasNearbyParentInk(components[i], components[j], imageWidth)) {
                         // child is fully contained — merge into parent
                         components[j].pixelIndices.forEach(idx => components[i].pixelIndices.push(idx));
                         components[i].pixelCount += components[j].pixelCount;
