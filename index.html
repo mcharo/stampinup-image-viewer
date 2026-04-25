@@ -1684,7 +1684,10 @@
             img.src = URL.createObjectURL(blob);
             await new Promise((resolve, reject) => { img.onload = resolve; img.onerror = reject; });
 
-            const svg = await convertToColorSVG(img, originalWidth, originalHeight);
+            const isBW = await isBlackAndWhite(img);
+            const svg = isBW
+                ? await convertToSVG(img, originalWidth, originalHeight)
+                : await convertToColorSVG(img, originalWidth, originalHeight);
             const svgContainer = document.createElement('div');
             svgContainer.className = 'svg-container';
 
@@ -1785,7 +1788,48 @@
             img.src = canvas.toDataURL();
         }
 
+        function hasStampPackageHeader(img) {
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+
+            canvas.width = img.naturalWidth;
+            canvas.height = img.naturalHeight;
+            ctx.drawImage(img, 0, 0);
+
+            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const data = imageData.data;
+            const totalPixels = canvas.width * canvas.height;
+            const sampleStep = Math.max(1, Math.floor(Math.sqrt(totalPixels / 50000)));
+
+            let sampled = 0;
+            let nearBlack = 0;
+            let topSampled = 0;
+            let topNearBlack = 0;
+
+            for (let y = 0; y < canvas.height; y += sampleStep) {
+                for (let x = 0; x < canvas.width; x += sampleStep) {
+                    const idx = (y * canvas.width + x) * 4;
+                    const r = data[idx];
+                    const g = data[idx + 1];
+                    const b = data[idx + 2];
+                    const isNearBlack = r < 45 && g < 45 && b < 45;
+
+                    sampled++;
+                    if (isNearBlack) nearBlack++;
+                    if (y < canvas.height * 0.55) {
+                        topSampled++;
+                        if (isNearBlack) topNearBlack++;
+                    }
+                }
+            }
+
+            if (sampled === 0 || topSampled === 0) return false;
+            return (nearBlack / sampled) > 0.008 && (topNearBlack / topSampled) > 0.012;
+        }
+
         function detectDieSetPalette(img) {
+            if (hasStampPackageHeader(img)) return false;
+
             const canvas = document.createElement('canvas');
             const ctx = canvas.getContext('2d');
 
@@ -1806,6 +1850,7 @@
             let activeFarFromPalette = 0;
             let activeMidDark = 0;
             let activeVivid = 0;
+            let solidDieShape = 0;
 
             function minPaletteDistance(r, g, b) {
                 // Distance to the closest known die-sheet neutral tone.
@@ -1846,6 +1891,8 @@
                     if (lum > 70 && lum < 205) activeMidDark++;
                     // Vivid pixels indicate normal product photography and should disqualify.
                     if (chroma > 42) activeVivid++;
+                    // Standalone die photos have a meaningful amount of flat dark-gray material.
+                    if (chroma < 18 && paletteDist < 28 && lum > 65 && lum < 155) solidDieShape++;
                 }
             }
 
@@ -1858,14 +1905,16 @@
             const activeFarPalettePct = activeFarFromPalette / activePixels;
             const activeMidDarkPct = activeMidDark / activePixels;
             const activeVividPct = activeVivid / activePixels;
+            const solidDieShapePct = solidDieShape / sampled;
 
             // Final gate: strongly neutral + palette-clustered + little color outside palette.
             return (
                 activeLowSatPct > 0.9 &&
-                activeNearPalettePct > 0.62 &&
+                activeNearPalettePct > 0.9 &&
                 activeFarPalettePct < 0.16 &&
                 activeMidDarkPct > 0.12 &&
-                activeVividPct < 0.08
+                activeVividPct < 0.08 &&
+                solidDieShapePct > 0.04
             );
         }
 
