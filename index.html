@@ -405,16 +405,59 @@
             display: flex;
             align-items: center;
             gap: 0.25rem;
+            flex-wrap: wrap;
         }
 
         .cricut-group input[type="number"] {
-            width: 38px;
+            width: 46px;
             padding: 0.35rem 0.25rem;
             font-size: 0.75rem;
             text-align: center;
             border: 1px solid #d1d5db;
             border-radius: 6px;
             background: white;
+        }
+
+        .cricut-field {
+            display: flex;
+            align-items: center;
+            gap: 0.2rem;
+            font-size: 0.72rem;
+            color: #4b5563;
+            white-space: nowrap;
+        }
+
+        .cricut-preview {
+            background-image:
+                linear-gradient(45deg, rgba(255, 255, 255, 0.08) 25%, transparent 25%),
+                linear-gradient(-45deg, rgba(255, 255, 255, 0.08) 25%, transparent 25%),
+                linear-gradient(45deg, transparent 75%, rgba(255, 255, 255, 0.08) 75%),
+                linear-gradient(-45deg, transparent 75%, rgba(255, 255, 255, 0.08) 75%);
+            background-size: 16px 16px;
+            background-position: 0 0, 0 8px, 8px -8px, -8px 0px;
+            background-color: #1f2937;
+            position: relative;
+        }
+
+        .cricut-preview img {
+            max-width: 100%;
+            max-height: 100%;
+            width: auto;
+            height: auto;
+            object-fit: contain;
+        }
+
+        .cricut-preview-status {
+            position: absolute;
+            left: 0.45rem;
+            bottom: 0.35rem;
+            padding: 0.15rem 0.35rem;
+            border-radius: 4px;
+            background: rgba(255, 255, 255, 0.88);
+            color: #4b5563;
+            font-size: 0.68rem;
+            line-height: 1.2;
+            pointer-events: none;
         }
 
         .remove-object-compact {
@@ -734,16 +777,29 @@
             display: flex;
             align-items: center;
             gap: 0.25rem;
+            flex-wrap: wrap;
         }
 
         .composer-toolbar .cricut-group input[type="number"] {
-            width: 38px;
+            width: 46px;
             padding: 0.3rem 0.25rem;
             font-size: 0.72rem;
             text-align: center;
             border: 1px solid #d1d5db;
             border-radius: 5px;
             background: white;
+        }
+
+        .composer-cricut-preview {
+            width: 88px;
+            height: 54px;
+            border: 1px solid #d1d5db;
+            border-radius: 5px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            flex-shrink: 0;
         }
 
         .composer-canvas-wrapper {
@@ -2928,6 +2984,68 @@
             }, 50);
         }
 
+        const CRICUT_DEFAULT_BORDER = 25;
+        const CRICUT_DEFAULT_FLOOD = 0;
+        const CRICUT_BORDER_MAX = 120;
+        const CRICUT_FLOOD_MAX = 300;
+
+        function clampInteger(value, min, max, fallback) {
+            const parsed = parseInt(value, 10);
+            if (!Number.isFinite(parsed)) return fallback;
+            return Math.max(min, Math.min(max, parsed));
+        }
+
+        function normalizeCricutOptions(optionsOrBuffer, gapFloodPx) {
+            const raw = (optionsOrBuffer && typeof optionsOrBuffer === 'object')
+                ? optionsOrBuffer
+                : { outerBufferPx: optionsOrBuffer, gapFloodPx };
+            const scale = Number(raw.previewScale);
+            return {
+                outerBufferPx: clampInteger(raw.outerBufferPx, 0, CRICUT_BORDER_MAX, CRICUT_DEFAULT_BORDER),
+                gapFloodPx: clampInteger(raw.gapFloodPx, 0, CRICUT_FLOOD_MAX, CRICUT_DEFAULT_FLOOD),
+                previewScale: Number.isFinite(scale) && scale > 0 ? scale : 2
+            };
+        }
+
+        function readCricutOptionsFromInputs(borderInput, floodInput, writeBack = true) {
+            const options = normalizeCricutOptions({
+                outerBufferPx: borderInput.value,
+                gapFloodPx: floodInput.value
+            });
+            if (writeBack) {
+                borderInput.value = options.outerBufferPx;
+                floodInput.value = options.gapFloodPx;
+            }
+            return options;
+        }
+
+        function createCricutNumberField(labelText, defaultValue, min, max, title) {
+            const field = document.createElement('label');
+            field.className = 'cricut-field';
+
+            const label = document.createElement('span');
+            label.textContent = labelText;
+
+            const input = document.createElement('input');
+            input.type = 'number';
+            input.min = String(min);
+            input.max = String(max);
+            input.step = '1';
+            input.value = String(defaultValue);
+            input.title = title;
+            input.setAttribute('aria-label', title);
+
+            field.appendChild(label);
+            field.appendChild(input);
+            field.input = input;
+            return field;
+        }
+
+        function getCricutPreviewScale(width, height, maxPreviewDim = 360) {
+            const maxSourceDim = Math.max(width || 1, height || 1);
+            return Math.max(0.12, Math.min(0.6, maxPreviewDim / maxSourceDim));
+        }
+
         function createExtractedObjectCard(svgString, width, height, productId, objectNumber, refW, refH) {
             const objectsContainer = document.getElementById(`objects-${productId}`);
             if (!objectsContainer) return;
@@ -2944,7 +3062,7 @@
             
             // Create preview container
             const preview = document.createElement('div');
-            preview.className = 'svg-object-preview';
+            preview.className = 'svg-object-preview cricut-preview';
             
             // Create SVG element
             const svgContainer = document.createElement('div');
@@ -2956,6 +3074,14 @@
                 svg.setAttribute('height', '100%');
             }
             preview.appendChild(svg);
+
+            const cricutPreviewImg = document.createElement('img');
+            cricutPreviewImg.alt = 'Cricut PNG preview';
+
+            const cricutPreviewStatus = document.createElement('span');
+            cricutPreviewStatus.className = 'cricut-preview-status';
+            cricutPreviewStatus.textContent = 'Rendering...';
+            preview.appendChild(cricutPreviewStatus);
             
             // Create controls container
             const controls = document.createElement('div');
@@ -2987,19 +3113,64 @@
             downloadJpgButton.innerHTML = dlIcon + 'JPG';
             downloadJpgButton.onclick = () => downloadObjectJPG(svg, productId, width, height);
 
-            const bufferInput = document.createElement('input');
-            bufferInput.type = 'number';
-            bufferInput.min = '5';
-            bufferInput.max = '60';
-            bufferInput.value = '25';
-            bufferInput.title = 'Cricut cut border (px)';
+            const borderField = createCricutNumberField('Border', CRICUT_DEFAULT_BORDER, 0, CRICUT_BORDER_MAX, 'Outer cut border in px');
+            const floodField = createCricutNumberField('Flood', CRICUT_DEFAULT_FLOOD, 0, CRICUT_FLOOD_MAX, 'Connect gaps up to this px size');
+            const borderInput = borderField.input;
+            const floodInput = floodField.input;
+            let cricutPreviewTimer = null;
+            let cricutPreviewToken = 0;
+
+            const scheduleCricutPreview = () => {
+                cricutPreviewToken++;
+                const token = cricutPreviewToken;
+                clearTimeout(cricutPreviewTimer);
+                cricutPreviewStatus.textContent = 'Rendering...';
+                cricutPreviewStatus.style.display = 'inline-block';
+                cricutPreviewTimer = setTimeout(async () => {
+                    try {
+                        const options = readCricutOptionsFromInputs(borderInput, floodInput, false);
+                        const canvas = await buildCricutCanvas(svg, width, height, {
+                            ...options,
+                            previewScale: getCricutPreviewScale(width, height)
+                        });
+                        if (token !== cricutPreviewToken) return;
+                        cricutPreviewImg.src = canvas.toDataURL('image/png');
+                        if (svg.parentNode === preview) svg.remove();
+                        if (!cricutPreviewImg.parentNode) preview.insertBefore(cricutPreviewImg, cricutPreviewStatus);
+                        cricutPreviewStatus.textContent = '';
+                        cricutPreviewStatus.style.display = 'none';
+                    } catch (err) {
+                        if (token === cricutPreviewToken) {
+                            cricutPreviewStatus.textContent = 'Preview failed';
+                            cricutPreviewStatus.style.display = 'inline-block';
+                        }
+                        console.error('Cricut preview failed', err);
+                    }
+                }, 250);
+            };
 
             const cricutButton = document.createElement('button');
             cricutButton.textContent = '✂ Cricut PNG';
-            cricutButton.onclick = () => {
-                const buf = Math.max(5, Math.min(60, parseInt(bufferInput.value, 10) || 15));
-                generateCricutPNG(svg, productId, width, height, buf);
+            cricutButton.onclick = async () => {
+                const oldText = cricutButton.textContent;
+                cricutButton.disabled = true;
+                cricutButton.textContent = 'Rendering...';
+                try {
+                    const options = readCricutOptionsFromInputs(borderInput, floodInput);
+                    await generateCricutPNG(svg, productId, width, height, options);
+                } finally {
+                    cricutButton.disabled = false;
+                    cricutButton.textContent = oldText;
+                }
             };
+
+            [borderInput, floodInput].forEach(input => {
+                input.addEventListener('input', scheduleCricutPreview);
+                input.addEventListener('change', () => {
+                    readCricutOptionsFromInputs(borderInput, floodInput);
+                    scheduleCricutPreview();
+                });
+            });
 
             header.appendChild(title);
             header.appendChild(removeButton);
@@ -3012,7 +3183,8 @@
 
             const cricutGroup = document.createElement('div');
             cricutGroup.className = 'cricut-group';
-            cricutGroup.appendChild(bufferInput);
+            cricutGroup.appendChild(borderField);
+            cricutGroup.appendChild(floodField);
             cricutGroup.appendChild(cricutButton);
 
             const composerButton = document.createElement('button');
@@ -3032,7 +3204,7 @@
             actionRow.appendChild(composerButton);
 
             // Create color controls for the object
-            const colorControl = createObjectColorControls(svg);
+            const colorControl = createObjectColorControls(svg, scheduleCricutPreview);
 
             controls.appendChild(header);
             controls.appendChild(actionRow);
@@ -3042,14 +3214,18 @@
             objectCard.appendChild(controls);
             
             objectsContainer.appendChild(objectCard);
+            scheduleCricutPreview();
             
             // Scroll to the new object card
             objectCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
         }
 
-        function createObjectColorControls(svg) {
+        function createObjectColorControls(svg, onColorChange) {
             const { colorControl, colorPalette } = createColorControls(
-                (color) => tintSVG(svg, color)
+                (color) => {
+                    tintSVG(svg, color);
+                    if (onColorChange) onColorChange();
+                }
             );
 
             const fullControl = document.createElement('div');
@@ -3227,60 +3403,162 @@
             });
         }
 
-        function dilateCircular(silhouette, w, h, radius) {
-            // Circular dilation via canvas Gaussian blur + alpha threshold.
-            // Produces smooth, rounded borders (no boxy/flat edges from box kernels).
-            // sigma = radius/3 so the 3-sigma point sits at ~radius px from the silhouette.
-            const sigma = radius / 3;
-
-            // Draw silhouette as white-on-transparent onto a source canvas
-            const srcCanvas = document.createElement('canvas');
-            srcCanvas.width = w;
-            srcCanvas.height = h;
-            const srcCtx = srcCanvas.getContext('2d');
-            const imgData = srcCtx.createImageData(w, h);
-            for (let i = 0; i < silhouette.length; i++) {
-                if (silhouette[i]) {
-                    imgData.data[i * 4]     = 255;
-                    imgData.data[i * 4 + 1] = 255;
-                    imgData.data[i * 4 + 2] = 255;
-                    imgData.data[i * 4 + 3] = 255;
+        function distanceTransform1D(f, n, out, v, z, inf) {
+            let first = -1;
+            for (let i = 0; i < n; i++) {
+                if (f[i] < inf / 2) {
+                    first = i;
+                    break;
                 }
             }
-            srcCtx.putImageData(imgData, 0, 0);
 
-            // Blur onto a destination canvas — spreads signal circularly
-            const dstCanvas = document.createElement('canvas');
-            dstCanvas.width = w;
-            dstCanvas.height = h;
-            const dstCtx = dstCanvas.getContext('2d');
-            dstCtx.filter = `blur(${sigma}px)`;
-            dstCtx.drawImage(srcCanvas, 0, 0);
-            dstCtx.filter = 'none';
+            if (first === -1) {
+                for (let i = 0; i < n; i++) out[i] = inf;
+                return;
+            }
 
-            // Threshold alpha > 1: captures all pixels within ~radius of the silhouette
-            const blurred = dstCtx.getImageData(0, 0, w, h);
+            let k = 0;
+            v[0] = first;
+            z[0] = -inf;
+            z[1] = inf;
+
+            for (let q = first + 1; q < n; q++) {
+                if (f[q] >= inf / 2) continue;
+
+                let s = 0;
+                while (k >= 0) {
+                    const r = v[k];
+                    s = ((f[q] + q * q) - (f[r] + r * r)) / (2 * (q - r));
+                    if (s > z[k]) break;
+                    k--;
+                }
+
+                k++;
+                v[k] = q;
+                z[k] = k === 0 ? -inf : s;
+                z[k + 1] = inf;
+            }
+
+            k = 0;
+            for (let q = 0; q < n; q++) {
+                while (z[k + 1] < q) k++;
+                const r = v[k];
+                const d = q - r;
+                out[q] = d * d + f[r];
+            }
+        }
+
+        function distanceToMaskSquared(mask, w, h, targetValue) {
+            const n = w * h;
+            const inf = 1e12;
+            const maxDim = Math.max(w, h);
+            const temp = new Float32Array(n);
+            const f = new Float64Array(maxDim);
+            const out = new Float64Array(maxDim);
+            const v = new Int32Array(maxDim);
+            const z = new Float64Array(maxDim + 1);
+
+            for (let y = 0; y < h; y++) {
+                const row = y * w;
+                for (let x = 0; x < w; x++) {
+                    f[x] = mask[row + x] === targetValue ? 0 : inf;
+                }
+                distanceTransform1D(f, w, out, v, z, inf);
+                for (let x = 0; x < w; x++) {
+                    temp[row + x] = out[x];
+                }
+            }
+
+            for (let x = 0; x < w; x++) {
+                for (let y = 0; y < h; y++) {
+                    f[y] = temp[y * w + x];
+                }
+                distanceTransform1D(f, h, out, v, z, inf);
+                for (let y = 0; y < h; y++) {
+                    temp[y * w + x] = out[y];
+                }
+            }
+
+            return temp;
+        }
+
+        function dilateCircular(mask, w, h, radius) {
+            if (radius <= 0) return new Uint8Array(mask);
+
+            const distances = distanceToMaskSquared(mask, w, h, 1);
             const result = new Uint8Array(w * h);
+            const radiusSquared = radius * radius;
             for (let i = 0; i < result.length; i++) {
-                result[i] = blurred.data[i * 4 + 3] > 1 ? 1 : 0;
+                result[i] = distances[i] <= radiusSquared ? 1 : 0;
             }
             return result;
         }
 
-        async function generateCricutPNG(svg, productId, width, height, bufferPx) {
-            // Render at 2x resolution for quality
-            const scale = 2;
-            const bufferScaled = bufferPx * scale;
+        function erodeCircular(mask, w, h, radius) {
+            if (radius <= 0) return new Uint8Array(mask);
+            const distances = distanceToMaskSquared(mask, w, h, 0);
+            const result = new Uint8Array(w * h);
+            const radiusSquared = radius * radius;
+            for (let i = 0; i < result.length; i++) {
+                result[i] = mask[i] && distances[i] > radiusSquared ? 1 : 0;
+            }
+            return result;
+        }
 
-            // Pad by 2× bufferScaled on each side: the dilation expands by bufferScaled,
-            // leaving another bufferScaled of transparent space so the border never
-            // gets clipped even when ink touches the SVG's own viewBox boundary.
-            const pad = bufferScaled * 2;
-            const tw = width * scale + pad * 2;
-            const th = height * scale + pad * 2;
+        function closeGapsCircular(mask, w, h, radius) {
+            if (radius <= 0) return new Uint8Array(mask);
+            const expanded = dilateCircular(mask, w, h, radius);
+            return erodeCircular(expanded, w, h, radius);
+        }
 
-            // Render SVG at its natural 2x size, then place it centred on the padded canvas
-            const svgCanvas = await renderSVGOffscreen(svg, width, height, width * scale, height * scale);
+        function findExteriorPixels(blocked, w, h) {
+            const exterior = new Uint8Array(w * h);
+            const queue = new Int32Array(w * h);
+            let head = 0, tail = 0;
+
+            const enqueue = (idx) => {
+                if (blocked[idx] || exterior[idx]) return;
+                exterior[idx] = 1;
+                queue[tail++] = idx;
+            };
+
+            for (let x = 0; x < w; x++) {
+                enqueue(x);
+                enqueue((h - 1) * w + x);
+            }
+            for (let y = 0; y < h; y++) {
+                enqueue(y * w);
+                enqueue(y * w + w - 1);
+            }
+
+            while (head < tail) {
+                const idx = queue[head++];
+                const x = idx % w;
+                const y = (idx / w) | 0;
+                if (x > 0)     enqueue(idx - 1);
+                if (x < w - 1) enqueue(idx + 1);
+                if (y > 0)     enqueue(idx - w);
+                if (y < h - 1) enqueue(idx + w);
+            }
+
+            return exterior;
+        }
+
+        async function buildCricutCanvas(svg, width, height, rawOptions) {
+            const options = normalizeCricutOptions(rawOptions);
+            const scale = options.previewScale;
+            const renderW = Math.max(1, Math.round(width * scale));
+            const renderH = Math.max(1, Math.round(height * scale));
+            const bufferScaled = options.outerBufferPx * scale;
+            const closeRadiusScaled = (options.gapFloodPx * scale) / 2;
+
+            // Keep the current 25px/0px output dimensions unchanged while adding
+            // enough temporary space for aggressive gap-closing passes.
+            const pad = Math.ceil((bufferScaled * 2) + closeRadiusScaled);
+            const tw = renderW + pad * 2;
+            const th = renderH + pad * 2;
+
+            const svgCanvas = await renderSVGOffscreen(svg, width, height, renderW, renderH);
             const renderCanvas = document.createElement('canvas');
             renderCanvas.width = tw;
             renderCanvas.height = th;
@@ -3297,37 +3575,8 @@
                 isInk[i] = data[i * 4 + 3] > 32 ? 1 : 0;
             }
 
-            // Step 2: BFS flood fill from all 4 edges through non-ink pixels → isExterior
-            const isExterior = new Uint8Array(n);
-            const queue = new Int32Array(n);
-            let head = 0, tail = 0;
-
-            const enqueue = (idx) => {
-                if (isInk[idx] || isExterior[idx]) return;
-                isExterior[idx] = 1;
-                queue[tail++] = idx;
-            };
-
-            // Seed edges
-            for (let x = 0; x < tw; x++) {
-                enqueue(x);                    // top row
-                enqueue((th - 1) * tw + x);   // bottom row
-            }
-            for (let y = 0; y < th; y++) {
-                enqueue(y * tw);               // left col
-                enqueue(y * tw + tw - 1);      // right col
-            }
-
-            // BFS
-            while (head < tail) {
-                const idx = queue[head++];
-                const x = idx % tw;
-                const y = (idx / tw) | 0;
-                if (x > 0)      enqueue(idx - 1);
-                if (x < tw - 1) enqueue(idx + 1);
-                if (y > 0)      enqueue(idx - tw);
-                if (y < th - 1) enqueue(idx + tw);
-            }
+            // Step 2: Flood fill from the edges through non-ink pixels.
+            const isExterior = findExteriorPixels(isInk, tw, th);
 
             // Step 3: Build silhouette mask (ink + interior non-ink)
             const silhouette = new Uint8Array(n);
@@ -3335,41 +3584,16 @@
                 silhouette[i] = (isInk[i] || !isExterior[i]) ? 1 : 0;
             }
 
-            // Step 4: Dilate silhouette by bufferScaled pixels
-            const dilated = dilateCircular(silhouette, tw, th, bufferScaled);
+            // Step 4: Close gaps first, then apply the independent outer buffer.
+            // gapFloodPx is the max gap to bridge, so the close radius is half.
+            const closedSilhouette = closeGapsCircular(silhouette, tw, th, closeRadiusScaled);
+            const dilated = dilateCircular(closedSilhouette, tw, th, bufferScaled);
 
-            // Step 5: Second BFS from edges through non-dilated pixels to find the
+            // Step 5: Second flood fill from edges through non-dilated pixels to find the
             // true exterior. The dilated border acts as a solid wall, so any pixel
             // enclosed inside it (including interior holes that leaked through thin
             // ink seams) will NOT be reached and should be filled white.
-            const trulyExterior = new Uint8Array(n);
-            const queue2 = new Int32Array(n);
-            let head2 = 0, tail2 = 0;
-
-            const enqueue2 = (idx) => {
-                if (dilated[idx] || trulyExterior[idx]) return;
-                trulyExterior[idx] = 1;
-                queue2[tail2++] = idx;
-            };
-
-            for (let x = 0; x < tw; x++) {
-                enqueue2(x);
-                enqueue2((th - 1) * tw + x);
-            }
-            for (let y = 0; y < th; y++) {
-                enqueue2(y * tw);
-                enqueue2(y * tw + tw - 1);
-            }
-
-            while (head2 < tail2) {
-                const idx = queue2[head2++];
-                const x = idx % tw;
-                const y = (idx / tw) | 0;
-                if (x > 0)      enqueue2(idx - 1);
-                if (x < tw - 1) enqueue2(idx + 1);
-                if (y > 0)      enqueue2(idx - tw);
-                if (y < th - 1) enqueue2(idx + tw);
-            }
+            const trulyExterior = findExteriorPixels(dilated, tw, th);
 
             // Step 6: Smooth the outer edge of the white region with a small blur.
             // This anti-aliases the pixel staircase on the border without visibly
@@ -3419,10 +3643,26 @@
             outCtx.putImageData(outData, 0, 0);
             outCtx.drawImage(renderCanvas, 0, 0);
 
-            outCanvas.toBlob(blob => {
-                const filename = buildDownloadFilename(productId, `object_${Date.now()}_cricut`).replace(/\.svg$/, '.png');
-                triggerDownload(blob, filename);
-            }, 'image/png');
+            return outCanvas;
+        }
+
+        function canvasToBlob(canvas, mimeType) {
+            return new Promise(resolve => {
+                canvas.toBlob(blob => resolve(blob), mimeType);
+            });
+        }
+
+        async function generateCricutPNG(svg, productId, width, height, optionsOrBuffer, gapFloodPx) {
+            if (!svg) return;
+            const options = normalizeCricutOptions(optionsOrBuffer, gapFloodPx);
+            const outCanvas = await buildCricutCanvas(svg, width, height, {
+                ...options,
+                previewScale: 2
+            });
+            const blob = await canvasToBlob(outCanvas, 'image/png');
+            if (!blob) return;
+            const filename = buildDownloadFilename(productId, `object_${Date.now()}_cricut`).replace(/\.svg$/, '.png');
+            triggerDownload(blob, filename);
         }
 
         // ═══════════════════════════════════════════════════════
@@ -3440,6 +3680,62 @@
         let composerDrag = null;     // {active, startSvgX, startSvgY, origPositions}
         let composerResizeDrag = null; // {g, corner, startSvgX, startSvgY, origScale, origTx, origTy, srcW, srcH}
         let composerZoom = 1;
+        let composerCricutPreviewImg = null;
+        let composerCricutPreviewStatus = null;
+        let composerCricutPreviewTimer = null;
+        let composerCricutPreviewToken = 0;
+
+        function getComposerCricutOptions(writeBack = false) {
+            const borderInput = document.getElementById('composerCricutBorder');
+            const floodInput = document.getElementById('composerCricutFlood');
+            if (!borderInput || !floodInput) return normalizeCricutOptions();
+            return readCricutOptionsFromInputs(borderInput, floodInput, writeBack);
+        }
+
+        function setComposerCricutPreviewStatus(text) {
+            if (!composerCricutPreviewStatus) return;
+            composerCricutPreviewStatus.textContent = text;
+            composerCricutPreviewStatus.style.display = text ? 'inline-block' : 'none';
+        }
+
+        function composerScheduleCricutPreview() {
+            if (!composerCricutPreviewImg || !composerCricutPreviewStatus) return;
+            composerCricutPreviewToken++;
+            const token = composerCricutPreviewToken;
+            clearTimeout(composerCricutPreviewTimer);
+            setComposerCricutPreviewStatus('Rendering...');
+
+            composerCricutPreviewTimer = setTimeout(async () => {
+                try {
+                    const exportData = buildComposerCricutExportSvg();
+                    if (!exportData) {
+                        if (token === composerCricutPreviewToken) {
+                            composerCricutPreviewImg.removeAttribute('src');
+                            if (composerCricutPreviewImg.parentNode) composerCricutPreviewImg.remove();
+                            setComposerCricutPreviewStatus('Preview');
+                        }
+                        return;
+                    }
+
+                    const options = getComposerCricutOptions(false);
+                    const canvas = await buildCricutCanvas(exportData.svg, exportData.width, exportData.height, {
+                        ...options,
+                        previewScale: getCricutPreviewScale(exportData.width, exportData.height, 260)
+                    });
+                    if (token !== composerCricutPreviewToken) return;
+
+                    const frame = composerCricutPreviewStatus.parentNode;
+                    composerCricutPreviewImg.src = canvas.toDataURL('image/png');
+                    if (frame && !composerCricutPreviewImg.parentNode) {
+                        frame.insertBefore(composerCricutPreviewImg, composerCricutPreviewStatus);
+                    }
+                    setComposerCricutPreviewStatus('');
+                } catch (err) {
+                    if (token === composerCricutPreviewToken) setComposerCricutPreviewStatus('Preview failed');
+                    console.error('Composer Cricut preview failed', err);
+                }
+            }, 250);
+        }
 
         // ── Lazy init ──
 
@@ -3532,19 +3828,46 @@
             // Cricut export
             const cricutGroup = document.createElement('div');
             cricutGroup.className = 'cricut-group';
-            const cricutBuf = document.createElement('input');
-            cricutBuf.type = 'number';
-            cricutBuf.min = '5';
-            cricutBuf.max = '60';
-            cricutBuf.value = '25';
-            cricutBuf.title = 'Cricut cut border (px)';
-            cricutBuf.id = 'composerCricutBuffer';
-            const cricutBtn = mkBtn('✂ Cricut PNG', '', () => {
-                const buf = Math.max(5, Math.min(60, parseInt(cricutBuf.value, 10) || 25));
-                composerExportCricut(buf);
+            const cricutBorderField = createCricutNumberField('Border', CRICUT_DEFAULT_BORDER, 0, CRICUT_BORDER_MAX, 'Outer cut border in px');
+            const cricutFloodField = createCricutNumberField('Flood', CRICUT_DEFAULT_FLOOD, 0, CRICUT_FLOOD_MAX, 'Connect gaps up to this px size');
+            cricutBorderField.input.id = 'composerCricutBorder';
+            cricutFloodField.input.id = 'composerCricutFlood';
+
+            composerCricutPreviewImg = document.createElement('img');
+            composerCricutPreviewImg.alt = 'Cricut PNG preview';
+            composerCricutPreviewStatus = document.createElement('span');
+            composerCricutPreviewStatus.className = 'cricut-preview-status';
+            composerCricutPreviewStatus.textContent = 'Preview';
+            composerCricutPreviewStatus.style.display = 'inline-block';
+            const composerCricutPreview = document.createElement('div');
+            composerCricutPreview.className = 'composer-cricut-preview cricut-preview';
+            composerCricutPreview.appendChild(composerCricutPreviewStatus);
+
+            const cricutBtn = mkBtn('✂ Cricut PNG', '', async () => {
+                const oldText = cricutBtn.textContent;
+                cricutBtn.disabled = true;
+                cricutBtn.textContent = 'Rendering...';
+                try {
+                    const options = readCricutOptionsFromInputs(cricutBorderField.input, cricutFloodField.input);
+                    await composerExportCricut(options);
+                } finally {
+                    cricutBtn.disabled = false;
+                    cricutBtn.textContent = oldText;
+                }
             });
-            cricutGroup.appendChild(cricutBuf);
+
+            [cricutBorderField.input, cricutFloodField.input].forEach(input => {
+                input.addEventListener('input', composerScheduleCricutPreview);
+                input.addEventListener('change', () => {
+                    readCricutOptionsFromInputs(cricutBorderField.input, cricutFloodField.input);
+                    composerScheduleCricutPreview();
+                });
+            });
+
+            cricutGroup.appendChild(cricutBorderField);
+            cricutGroup.appendChild(cricutFloodField);
             cricutGroup.appendChild(cricutBtn);
+            cricutGroup.appendChild(composerCricutPreview);
             toolbar.appendChild(cricutGroup);
 
             composerSection.appendChild(toolbar);
@@ -3612,6 +3935,7 @@
             composerStatus.className = 'composer-status';
             composerStatus.textContent = 'Add objects using the "+ Composer" button on any extracted object card.';
             composerSection.appendChild(composerStatus);
+            composerScheduleCricutPreview();
 
             document.getElementById('imageContainer').after(composerSection);
             composerSection.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
@@ -3780,6 +4104,7 @@
             composerStatus.textContent = count === 0
                 ? 'Add objects using the "+ Composer" button on any extracted object card.'
                 : `${count} object${count !== 1 ? 's' : ''} in workspace. Click to select, drag to move. Shift-click for multi-select.`;
+            composerScheduleCricutPreview();
         }
 
         // ── Drag ──
@@ -3927,6 +4252,7 @@
         }
 
         function composerOnPointerUp(e) {
+            const changed = (composerResizeDrag && composerResizeDrag.active) || (composerDrag && composerDrag.active);
             if (composerResizeDrag) {
                 composerResizeDrag.active = false;
                 composerResizeDrag = null;
@@ -3935,27 +4261,34 @@
                 composerDrag.active = false;
                 composerDrag = null;
             }
+            if (changed) composerScheduleCricutPreview();
         }
 
         // ── Layer controls ──
 
         function composerBringForward() {
+            let changed = false;
             for (let i = composerSelected.length - 1; i >= 0; i--) {
                 const g = composerSelected[i];
                 const next = g.nextElementSibling;
                 if (next && !composerSelected.includes(next)) {
                     g.parentNode.insertBefore(next, g);
+                    changed = true;
                 }
             }
+            if (changed) composerScheduleCricutPreview();
         }
 
         function composerSendBackward() {
+            let changed = false;
             composerSelected.forEach(g => {
                 const prev = g.previousElementSibling;
                 if (prev && !composerSelected.includes(prev)) {
                     g.parentNode.insertBefore(g, prev);
+                    changed = true;
                 }
             });
+            if (changed) composerScheduleCricutPreview();
         }
 
         // ── Zoom ──
@@ -4002,6 +4335,7 @@
 
             composerUpdateSelectionVisuals();
             composerUpdateScaleLabel();
+            composerScheduleCricutPreview();
         }
 
         function composerResetScale() {
@@ -4027,6 +4361,7 @@
 
             composerUpdateSelectionVisuals();
             composerUpdateScaleLabel();
+            composerScheduleCricutPreview();
         }
 
         function composerUpdateScaleLabel() {
@@ -4135,6 +4470,7 @@
             }
 
             composerUpdateSelectionVisuals();
+            composerScheduleCricutPreview();
         }
 
         // ── Remove / Clear ──
@@ -4223,9 +4559,9 @@
 
         // ── Cricut export from composer ──
 
-        function composerExportCricut(bufferPx) {
+        function buildComposerCricutExportSvg() {
             const objects = composerSvg.querySelectorAll('.composer-object');
-            if (objects.length === 0) return;
+            if (objects.length === 0) return null;
 
             let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
             objects.forEach(g => {
@@ -4235,7 +4571,7 @@
                 maxX = Math.max(maxX, b.x2);
                 maxY = Math.max(maxY, b.y2);
             });
-            if (!isFinite(minX)) return;
+            if (!isFinite(minX)) return null;
 
             const w = maxX - minX;
             const h = maxY - minY;
@@ -4279,8 +4615,19 @@
             });
 
             const pid = composerProductId || 'composed';
-            generateCricutPNG(tmpSvg, pid, Math.round(W), Math.round(H), bufferPx);
+            return {
+                svg: tmpSvg,
+                productId: pid,
+                width: Math.round(W),
+                height: Math.round(H)
+            };
+        }
+
+        async function composerExportCricut(options) {
+            const exportData = buildComposerCricutExportSvg();
+            if (!exportData) return;
+            await generateCricutPNG(exportData.svg, exportData.productId, exportData.width, exportData.height, options);
         }
     </script>
 </body>
-</html> 
+</html>
