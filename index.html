@@ -110,6 +110,181 @@
             flex-direction: column;
         }
 
+        .render-mode-toggle {
+            display: flex;
+            gap: 0.4rem;
+            width: 100%;
+        }
+
+        .render-mode-toggle button {
+            flex: 1;
+            padding: 0.45rem 0.6rem;
+            font-size: 0.8rem;
+            font-weight: 500;
+            border-radius: 6px;
+            background: #e2e8f0;
+            color: #374151;
+            line-height: 1.3;
+        }
+
+        .render-mode-toggle button.active {
+            background: var(--primary-color);
+            color: white;
+        }
+
+        .render-mode-toggle button:disabled {
+            opacity: 0.6;
+            cursor: wait;
+        }
+
+        .render-mode-note {
+            font-size: 0.72rem;
+            color: #6b7280;
+            margin: 0;
+            text-align: center;
+            line-height: 1.4;
+        }
+
+        .tracer-params {
+            width: 100%;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            padding: 0;
+            background: #f8fafc;
+        }
+
+        .tracer-params > summary {
+            cursor: pointer;
+            font-size: 0.78rem;
+            font-weight: 500;
+            padding: 0.45rem 0.7rem;
+            color: #374151;
+            user-select: none;
+            list-style: none;
+        }
+
+        .tracer-params > summary::-webkit-details-marker {
+            display: none;
+        }
+
+        .tracer-params > summary::before {
+            content: '▸ ';
+            display: inline-block;
+            width: 0.9rem;
+            transition: transform 0.15s ease;
+        }
+
+        .tracer-params[open] > summary::before {
+            content: '▾ ';
+        }
+
+        .tracer-params-body {
+            padding: 0.3rem 0.7rem 0.6rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.45rem;
+        }
+
+        .tracer-param-row {
+            display: grid;
+            grid-template-columns: 6.5rem 1fr 2.6rem;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.72rem;
+            color: #4b5563;
+        }
+
+        .tracer-param-row label {
+            font-weight: 500;
+        }
+
+        .tracer-param-row input[type=range] {
+            width: 100%;
+            margin: 0;
+        }
+
+        .tracer-param-row.disabled {
+            opacity: 0.45;
+        }
+
+        .tracer-param-value {
+            font-variant-numeric: tabular-nums;
+            text-align: right;
+            color: #1f2937;
+        }
+
+        .tracer-param-actions {
+            display: flex;
+            gap: 0.35rem;
+            margin-top: 0.25rem;
+        }
+
+        .tracer-param-actions button {
+            flex: 1;
+            padding: 0.4rem 0.6rem;
+            font-size: 0.75rem;
+            font-weight: 500;
+            border-radius: 5px;
+            line-height: 1.3;
+        }
+
+        .tracer-param-actions button:disabled {
+            opacity: 0.6;
+            cursor: wait;
+        }
+
+        .tracer-preset-row {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.4rem 0;
+            border-bottom: 1px dashed #e2e8f0;
+            margin-bottom: 0.25rem;
+        }
+
+        .tracer-preset-row > label {
+            font-size: 0.75rem;
+            color: #475569;
+            font-weight: 500;
+            min-width: 50px;
+        }
+
+        .tracer-preset-buttons {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.3rem;
+            flex: 1;
+        }
+
+        .tracer-preset {
+            padding: 0.3rem 0.55rem;
+            font-size: 0.72rem;
+            font-weight: 500;
+            border-radius: 999px;
+            border: 1px solid #cbd5e1;
+            background: #f1f5f9;
+            color: #334155;
+            line-height: 1.2;
+            cursor: pointer;
+            transition: background-color 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+        }
+
+        .tracer-preset:hover:not(:disabled) {
+            background: #e2e8f0;
+            border-color: #94a3b8;
+        }
+
+        .tracer-preset.active {
+            background: var(--primary-color);
+            border-color: var(--primary-color);
+            color: white;
+        }
+
+        .tracer-preset:disabled {
+            opacity: 0.6;
+            cursor: wait;
+        }
+
         .color-control {
             display: flex;
             align-items: center;
@@ -790,20 +965,46 @@
             background: white;
         }
 
+        .composer-workspace {
+            display: flex;
+            gap: 1rem;
+            align-items: flex-start;
+            flex-wrap: wrap;
+        }
+
+        .composer-cricut-panel {
+            flex: 1 1 380px;
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .composer-cricut-panel-header {
+            font-size: 0.78rem;
+            font-weight: 600;
+            color: #475569;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            padding: 0 0.1rem;
+        }
+
         .composer-cricut-preview {
-            width: 88px;
-            height: 54px;
-            border: 1px solid #d1d5db;
-            border-radius: 5px;
+            width: 100%;
+            min-height: 380px;
+            max-height: 70vh;
+            border: 2px solid #e2e8f0;
+            border-radius: var(--border-radius);
             display: flex;
             align-items: center;
             justify-content: center;
             overflow: hidden;
-            flex-shrink: 0;
         }
 
         .composer-canvas-wrapper {
             position: relative;
+            flex: 1 1 480px;
+            min-width: 0;
             border: 2px solid #e2e8f0;
             border-radius: var(--border-radius);
             overflow: hidden;
@@ -1107,6 +1308,300 @@
             return { colorControl, colorPalette };
         }
 
+        // Tracer presets. The first entry doubles as the default — its values
+        // are cloned per image so per-plate tweaks don't bleed across plates.
+        // 'Halftone-optimized' keeps every dot (turdsize 1) and uses sharp
+        // corners (alphamax 0) so binary tracing preserves halftone fills
+        // instead of dissolving them.
+        const TRACER_PRESETS = Object.freeze([
+            Object.freeze({
+                id: 'default',
+                label: 'Default',
+                params: Object.freeze({ threshold: 128, turdsize: 25, alphamax: 0.8, opttolerance: 0.2, numColors: 8 })
+            }),
+            Object.freeze({
+                id: 'halftone',
+                label: 'Halftone-optimized',
+                params: Object.freeze({ threshold: 128, turdsize: 1, alphamax: 0.0, opttolerance: 0.2, numColors: 8 })
+            })
+        ]);
+
+        const TRACE_PARAM_DEFAULTS = TRACER_PRESETS[0].params;
+
+        function defaultTraceParams() {
+            return Object.assign({}, TRACE_PARAM_DEFAULTS);
+        }
+
+        // Vectorize an image with the selected mode. 'binary' (the default) uses
+        // a single-threshold tracer via convertToSVG and is crisp for line art —
+        // the right pick for the typical Stampin' Up product mix. 'color' uses
+        // median-cut quantization via convertToColorSVG and preserves halftone
+        // tones; flip to it for stamps with halftone fills. params overrides the
+        // defaults for the shared knobs (turdsize/alphamax/opttolerance) plus the
+        // mode-specific ones (threshold for binary, numColors for color).
+        async function vectorizeImage(image, originalWidth, originalHeight, mode, params) {
+            params = params || image._traceParams || defaultTraceParams();
+            if (mode === 'binary') {
+                return await convertToSVG(image, originalWidth, originalHeight, params);
+            }
+            return await convertToColorSVG(image, originalWidth, originalHeight, params);
+        }
+
+        // Insert a vectorized SVG into a container, scaled to fill via viewBox.
+        // Replaces only the existing <svg> element (if any) so absolutely-positioned
+        // siblings — the detection overlays in particular — survive a re-trace.
+        function insertScaledSVG(container, svgString, originalWidth, originalHeight) {
+            const scaledSvg = svgString.replace(/<svg([^>]*)>/, (_, attributes) => {
+                return `<svg${attributes} viewBox="0 0 ${originalWidth} ${originalHeight}" width="100%" height="100%">`;
+            });
+            const staging = document.createElement('div');
+            staging.innerHTML = scaledSvg;
+            const newSvg = staging.querySelector('svg');
+            if (!newSvg) {
+                container.innerHTML = scaledSvg;
+                return;
+            }
+            const existingSvg = container.querySelector('svg');
+            if (existingSvg) {
+                existingSvg.replaceWith(newSvg);
+            } else {
+                container.insertBefore(newSvg, container.firstChild);
+            }
+        }
+
+        // Two-button render-mode toggle. Stamps the chosen mode onto the source
+        // image so extractObject can mirror the plate's choice for individual
+        // extracts. Defaults to 'binary' (crisp line art) — that's the right pick
+        // for the typical Stampin' Up product mix; flip to 'color' for halftones.
+        function createRenderModeToggle(image, svgContainer, originalWidth, originalHeight, defaultMode) {
+            const wrap = document.createElement('div');
+            wrap.style.width = '100%';
+            wrap.style.display = 'flex';
+            wrap.style.flexDirection = 'column';
+            wrap.style.gap = '0.35rem';
+
+            const note = document.createElement('p');
+            note.className = 'render-mode-note';
+            note.textContent = 'Preserve keeps halftone tones (color quantize). Crisp uses a single-threshold tracer for clean line art.';
+
+            const row = document.createElement('div');
+            row.className = 'render-mode-toggle';
+
+            const colorBtn = document.createElement('button');
+            colorBtn.type = 'button';
+            colorBtn.textContent = 'Preserve halftone';
+
+            const binaryBtn = document.createElement('button');
+            binaryBtn.type = 'button';
+            binaryBtn.textContent = 'Crisp line art';
+
+            let currentMode = defaultMode === 'color' ? 'color' : 'binary';
+            image._renderMode = currentMode;
+
+            function syncButtons() {
+                colorBtn.classList.toggle('active', currentMode === 'color');
+                binaryBtn.classList.toggle('active', currentMode === 'binary');
+            }
+
+            async function setMode(mode) {
+                if (currentMode === mode) return;
+                const previous = currentMode;
+                currentMode = mode;
+                image._renderMode = mode;
+                syncButtons();
+                if (typeof wrap._onChange === 'function') wrap._onChange(mode);
+                colorBtn.disabled = true;
+                binaryBtn.disabled = true;
+                const targetBtn = mode === 'binary' ? binaryBtn : colorBtn;
+                const originalLabel = targetBtn.textContent;
+                targetBtn.textContent = 'Tracing…';
+                try {
+                    const svg = await vectorizeImage(image, originalWidth, originalHeight, mode);
+                    insertScaledSVG(svgContainer, svg, originalWidth, originalHeight);
+                } catch (err) {
+                    console.error('Render mode toggle failed', err);
+                    currentMode = previous;
+                    image._renderMode = previous;
+                    syncButtons();
+                    if (typeof wrap._onChange === 'function') wrap._onChange(previous);
+                } finally {
+                    targetBtn.textContent = originalLabel;
+                    colorBtn.disabled = false;
+                    binaryBtn.disabled = false;
+                }
+            }
+
+            colorBtn.onclick = () => setMode('color');
+            binaryBtn.onclick = () => setMode('binary');
+            syncButtons();
+
+            row.appendChild(colorBtn);
+            row.appendChild(binaryBtn);
+            wrap.appendChild(row);
+            wrap.appendChild(note);
+            wrap._setMode = setMode;
+            wrap._currentMode = () => currentMode;
+            return wrap;
+        }
+
+        // Tracer parameters panel: collapsible <details> with sliders for the
+        // Potrace knobs. Threshold is binary-mode only; numColors is color-mode
+        // only — irrelevant rows dim out (rather than disappearing) so the layout
+        // stays stable when the mode toggle is flipped.
+        function createTracerParamsPanel(image, svgContainer, originalWidth, originalHeight, getMode) {
+            const params = image._traceParams || defaultTraceParams();
+            image._traceParams = params;
+
+            const details = document.createElement('details');
+            details.className = 'tracer-params';
+
+            const summary = document.createElement('summary');
+            summary.textContent = 'Tracer parameters';
+            details.appendChild(summary);
+
+            const body = document.createElement('div');
+            body.className = 'tracer-params-body';
+
+            const SLIDERS = [
+                { key: 'threshold', label: 'Threshold', min: 0, max: 255, step: 1, fixed: 0, modes: ['binary'], hint: 'Pixel < threshold becomes black' },
+                { key: 'turdsize', label: 'Turdsize', min: 0, max: 200, step: 1, fixed: 0, modes: ['binary', 'color'], hint: 'Drop blobs smaller than this many pixels' },
+                { key: 'alphamax', label: 'Corner', min: 0, max: 1.33, step: 0.01, fixed: 2, modes: ['binary', 'color'], hint: 'Lower = sharper corners' },
+                { key: 'opttolerance', label: 'Curve fit', min: 0, max: 1, step: 0.01, fixed: 2, modes: ['binary', 'color'], hint: 'Higher = smoother curves, less detail' },
+                { key: 'numColors', label: 'Colors', min: 2, max: 16, step: 1, fixed: 0, modes: ['color'], hint: 'Median-cut palette size' }
+            ];
+
+            const presetRow = document.createElement('div');
+            presetRow.className = 'tracer-preset-row';
+            const presetLabel = document.createElement('label');
+            presetLabel.textContent = 'Preset';
+            presetRow.appendChild(presetLabel);
+            const presetButtons = document.createElement('div');
+            presetButtons.className = 'tracer-preset-buttons';
+            const presetButtonByKey = {};
+            TRACER_PRESETS.forEach(preset => {
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'tracer-preset';
+                btn.textContent = preset.label;
+                btn.dataset.preset = preset.id;
+                btn.onclick = () => applyPreset(preset);
+                presetButtons.appendChild(btn);
+                presetButtonByKey[preset.id] = btn;
+            });
+            presetRow.appendChild(presetButtons);
+            body.appendChild(presetRow);
+
+            const rows = [];
+            SLIDERS.forEach(spec => {
+                const row = document.createElement('div');
+                row.className = 'tracer-param-row';
+                row.title = spec.hint;
+
+                const label = document.createElement('label');
+                label.textContent = spec.label;
+
+                const input = document.createElement('input');
+                input.type = 'range';
+                input.min = spec.min;
+                input.max = spec.max;
+                input.step = spec.step;
+                input.value = params[spec.key];
+
+                const valueDisplay = document.createElement('span');
+                valueDisplay.className = 'tracer-param-value';
+                valueDisplay.textContent = Number(params[spec.key]).toFixed(spec.fixed);
+
+                input.addEventListener('input', () => {
+                    const v = Number(input.value);
+                    params[spec.key] = v;
+                    valueDisplay.textContent = v.toFixed(spec.fixed);
+                    clearActivePreset();
+                });
+
+                row.appendChild(label);
+                row.appendChild(input);
+                row.appendChild(valueDisplay);
+                body.appendChild(row);
+                rows.push({ spec, row, input, valueDisplay });
+            });
+
+            const actions = document.createElement('div');
+            actions.className = 'tracer-param-actions';
+
+            const retraceBtn = document.createElement('button');
+            retraceBtn.type = 'button';
+            retraceBtn.textContent = 'Re-trace';
+
+            actions.appendChild(retraceBtn);
+            body.appendChild(actions);
+
+            details.appendChild(body);
+
+            function syncActiveRows() {
+                const mode = (typeof getMode === 'function' ? getMode() : 'color') || 'color';
+                rows.forEach(({ spec, row, input }) => {
+                    const active = spec.modes.includes(mode);
+                    row.classList.toggle('disabled', !active);
+                    input.disabled = !active;
+                });
+            }
+
+            function setActivePreset(presetId) {
+                Object.entries(presetButtonByKey).forEach(([key, btn]) => {
+                    btn.classList.toggle('active', key === presetId);
+                });
+            }
+
+            function clearActivePreset() {
+                Object.values(presetButtonByKey).forEach(btn => btn.classList.remove('active'));
+            }
+
+            function applySliderValues() {
+                rows.forEach(({ spec, input, valueDisplay }) => {
+                    input.value = params[spec.key];
+                    valueDisplay.textContent = Number(params[spec.key]).toFixed(spec.fixed);
+                });
+            }
+
+            async function retrace() {
+                const mode = (typeof getMode === 'function' ? getMode() : 'color') || 'color';
+                const originalLabel = retraceBtn.textContent;
+                retraceBtn.disabled = true;
+                Object.values(presetButtonByKey).forEach(btn => { btn.disabled = true; });
+                retraceBtn.textContent = 'Tracing…';
+                try {
+                    const svg = await vectorizeImage(image, originalWidth, originalHeight, mode, params);
+                    insertScaledSVG(svgContainer, svg, originalWidth, originalHeight);
+                } catch (err) {
+                    console.error('Re-trace failed', err);
+                } finally {
+                    retraceBtn.textContent = originalLabel;
+                    retraceBtn.disabled = false;
+                    Object.values(presetButtonByKey).forEach(btn => { btn.disabled = false; });
+                }
+            }
+
+            async function applyPreset(preset) {
+                Object.assign(params, preset.params);
+                applySliderValues();
+                setActivePreset(preset.id);
+                await retrace();
+            }
+
+            retraceBtn.onclick = retrace;
+
+            // Match an active preset based on the params already on the image,
+            // so reopening the panel reflects the current state.
+            const matched = TRACER_PRESETS.find(preset =>
+                Object.entries(preset.params).every(([k, v]) => params[k] === v)
+            );
+            if (matched) setActivePreset(matched.id);
+
+            details._syncActiveRows = syncActiveRows;
+            syncActiveRows();
+            return details;
+        }
+
         function findBannerRegion(img) {
             const canvas = document.createElement('canvas');
             const ctx = canvas.getContext('2d');
@@ -1392,18 +1887,16 @@
                             const imageForVectorization = preprocessingResult.processedImage;
                             const isBW = await isBlackAndWhite(imageForVectorization);
                             if (isBW) {
-                                // Convert to SVG automatically
-                                const svg = await convertToSVG(imageForVectorization, originalWidth, originalHeight);
+                                // Default the auto-vectorize path to the color-quantize tracer
+                                // (preserves halftone tones). The render-mode toggle below lets
+                                // the user flip to the binary tracer for crisper line art.
+                                const initialMode = 'binary';
+                                imageForVectorization._renderMode = initialMode;
+                                imageForVectorization._traceParams = defaultTraceParams();
+                                const svg = await vectorizeImage(imageForVectorization, originalWidth, originalHeight, initialMode);
                                 const svgContainer = document.createElement('div');
                                 svgContainer.className = 'svg-container';
-                                
-                                // Scale the SVG for display
-                                const displayScale = Math.min(280 / originalWidth, 280 / originalHeight);
-                                const scaledSvg = svg.replace(/<svg([^>]*)>/, (match, attributes) => {
-                                    return `<svg${attributes} viewBox="0 0 ${originalWidth} ${originalHeight}" width="100%" height="100%">`;
-                                });
-                                
-                                svgContainer.innerHTML = scaledSvg;
+                                insertScaledSVG(svgContainer, svg, originalWidth, originalHeight);
                                 imageWrapper.appendChild(svgContainer);
                                 
                                 // Add object detection controls
@@ -1421,10 +1914,18 @@
 
                                 const controls = document.createElement('div');
                                 controls.className = 'controls';
-                                
-                                const { colorControl, colorPalette } = createColorControls(
-                                    (color) => tintSVG(svgContainer.querySelector('svg'), color)
-                                );
+
+                                const renderModeToggle = createRenderModeToggle(imageForVectorization, svgContainer, originalWidth, originalHeight, initialMode);
+                                controls.appendChild(renderModeToggle);
+
+                                const tracerParams = createTracerParamsPanel(imageForVectorization, svgContainer, originalWidth, originalHeight, renderModeToggle._currentMode);
+                                renderModeToggle._onChange = () => tracerParams._syncActiveRows();
+                                controls.appendChild(tracerParams);
+
+                                const { colorControl, colorPalette } = createColorControls((color) => {
+                                    const mainSvg = svgContainer.querySelector('svg');
+                                    if (mainSvg) mainSvg.querySelectorAll('path').forEach(p => p.setAttribute('fill', color));
+                                });
                                 
                                 const dlIcon = '<svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;vertical-align:-1px;margin-right:5px"><path d="M6 1v7M3.5 5.5L6 8l2.5-2.5M2 10.5h8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 
@@ -1572,15 +2073,13 @@
                 if (isBW) {
                     uploadStatus.textContent = 'Converting to SVG...';
 
-                    const svg = await convertToSVG(imageForVectorization, originalWidth, originalHeight);
+                    const initialMode = 'binary';
+                    imageForVectorization._renderMode = initialMode;
+                    imageForVectorization._traceParams = defaultTraceParams();
+                    const svg = await vectorizeImage(imageForVectorization, originalWidth, originalHeight, initialMode);
                     const svgContainer = document.createElement('div');
                     svgContainer.className = 'svg-container';
-
-                    const scaledSvg = svg.replace(/<svg([^>]*)>/, (match, attributes) => {
-                        return `<svg${attributes} viewBox="0 0 ${originalWidth} ${originalHeight}" width="100%" height="100%">`;
-                    });
-
-                    svgContainer.innerHTML = scaledSvg;
+                    insertScaledSVG(svgContainer, svg, originalWidth, originalHeight);
                     imageWrapper.appendChild(svgContainer);
 
                     const detectionControls = createObjectDetectionControls(imageForVectorization, svgContainer, originalWidth, originalHeight, uploadId);
@@ -1594,9 +2093,17 @@
                     const controls = document.createElement('div');
                     controls.className = 'controls';
 
-                    const { colorControl, colorPalette } = createColorControls(
-                        (color) => tintSVG(svgContainer.querySelector('svg'), color)
-                    );
+                    const renderModeToggle = createRenderModeToggle(imageForVectorization, svgContainer, originalWidth, originalHeight, initialMode);
+                    controls.appendChild(renderModeToggle);
+
+                    const tracerParams = createTracerParamsPanel(imageForVectorization, svgContainer, originalWidth, originalHeight, renderModeToggle._currentMode);
+                    renderModeToggle._onChange = () => tracerParams._syncActiveRows();
+                    controls.appendChild(tracerParams);
+
+                    const { colorControl, colorPalette } = createColorControls((color) => {
+                        const mainSvg = svgContainer.querySelector('svg');
+                        if (mainSvg) mainSvg.querySelectorAll('path').forEach(p => p.setAttribute('fill', color));
+                    });
 
                     const dlIcon = '<svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;vertical-align:-1px;margin-right:5px"><path d="M6 1v7M3.5 5.5L6 8l2.5-2.5M2 10.5h8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 
@@ -1684,18 +2191,13 @@
             img.src = URL.createObjectURL(blob);
             await new Promise((resolve, reject) => { img.onload = resolve; img.onerror = reject; });
 
-            const isBW = await isBlackAndWhite(img);
-            const svg = isBW
-                ? await convertToSVG(img, originalWidth, originalHeight)
-                : await convertToColorSVG(img, originalWidth, originalHeight);
+            const initialMode = 'binary';
+            img._renderMode = initialMode;
+            img._traceParams = defaultTraceParams();
+            const svg = await vectorizeImage(img, originalWidth, originalHeight, initialMode);
             const svgContainer = document.createElement('div');
             svgContainer.className = 'svg-container';
-
-            const scaledSvg = svg.replace(/<svg([^>]*)>/, (match, attributes) => {
-                return `<svg${attributes} viewBox="0 0 ${originalWidth} ${originalHeight}" width="100%" height="100%">`;
-            });
-
-            svgContainer.innerHTML = scaledSvg;
+            insertScaledSVG(svgContainer, svg, originalWidth, originalHeight);
             imageWrapper.appendChild(svgContainer);
 
             const detectionControls = createObjectDetectionControls(img, svgContainer, originalWidth, originalHeight, productId);
@@ -1708,6 +2210,13 @@
 
             const controls = document.createElement('div');
             controls.className = 'controls';
+
+            const renderModeToggle = createRenderModeToggle(img, svgContainer, originalWidth, originalHeight, initialMode);
+            controls.appendChild(renderModeToggle);
+
+            const tracerParams = createTracerParamsPanel(img, svgContainer, originalWidth, originalHeight, renderModeToggle._currentMode);
+            renderModeToggle._onChange = () => tracerParams._syncActiveRows();
+            controls.appendChild(tracerParams);
 
             const { colorControl, colorPalette } = createColorControls((color) => {
                 const mainSvg = svgContainer.querySelector('svg');
@@ -2099,9 +2608,15 @@
             });
         }
 
-        function traceLayerWithPotrace(dataUrl) {
+        function traceLayerWithPotrace(dataUrl, params) {
+            params = params || {};
             return new Promise(resolve => {
-                Potrace.setParameter({ turdsize: 25, alphamax: 0.8, optcurve: true, opttolerance: 0.2 });
+                Potrace.setParameter({
+                    turdsize: params.turdsize !== undefined ? params.turdsize : 25,
+                    alphamax: params.alphamax !== undefined ? params.alphamax : 0.8,
+                    optcurve: true,
+                    opttolerance: params.opttolerance !== undefined ? params.opttolerance : 0.2
+                });
                 Potrace.loadImageFromUrl(dataUrl);
                 Potrace.process(function() {
                     const svg = Potrace.getSVG(1);
@@ -2111,8 +2626,11 @@
             });
         }
 
-        async function convertToColorSVG(img, originalWidth, originalHeight, numColors) {
-            numColors = numColors || 8;
+        async function convertToColorSVG(img, originalWidth, originalHeight, params) {
+            // Backwards-compat: callers used to pass a raw numColors integer.
+            if (typeof params === 'number') params = { numColors: params };
+            params = params || {};
+            const numColors = params.numColors || 8;
             const canvas = document.createElement('canvas');
             canvas.width = originalWidth;
             canvas.height = originalHeight;
@@ -2180,7 +2698,7 @@
 
                 maskCtx.putImageData(maskData, 0, 0);
                 const maskUrl = maskCanvas.toDataURL('image/png');
-                const pathD = await traceLayerWithPotrace(maskUrl);
+                const pathD = await traceLayerWithPotrace(maskUrl, params);
                 if (pathD) {
                     const hex = '#' + palette[ci].map(c => c.toString(16).padStart(2, '0')).join('');
                     layers.push({ color: hex, pathD });
@@ -2195,51 +2713,52 @@
             return svg;
         }
 
-        async function convertToSVG(img, originalWidth, originalHeight) {
+        async function convertToSVG(img, originalWidth, originalHeight, params) {
+            params = params || {};
+            const threshold = params.threshold !== undefined ? params.threshold : 128;
+            const turdsize = params.turdsize !== undefined ? params.turdsize : 25;
+            const alphamax = params.alphamax !== undefined ? params.alphamax : 0.8;
+            const opttolerance = params.opttolerance !== undefined ? params.opttolerance : 0.2;
             return new Promise((resolve, reject) => {
                 const canvas = document.createElement('canvas');
                 const ctx = canvas.getContext('2d');
-                
+
                 canvas.width = originalWidth;
                 canvas.height = originalHeight;
-                
+
                 ctx.drawImage(img, 0, 0);
-                
-                // Convert to black and white
+
+                // Pre-binarize at the user's threshold so Potrace receives a true B&W
+                // mask. (Potrace's internal threshold is a fallback; doing it here
+                // gives consistent results with the same number that's shown in the UI.)
                 const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
                 const data = imageData.data;
-                
+
                 for (let i = 0; i < data.length; i += 4) {
                     const r = data[i];
                     const g = data[i + 1];
                     const b = data[i + 2];
                     const gray = (r + g + b) / 3;
-                    const threshold = 128;
-                    
+
                     data[i] = data[i + 1] = data[i + 2] = gray < threshold ? 0 : 255;
                 }
-                
+
                 ctx.putImageData(imageData, 0, 0);
-                
-                // Get the image data as a data URL
+
                 const dataUrl = canvas.toDataURL('image/png');
-                
-                // Set Potrace parameters
+
                 Potrace.setParameter({
-                    turdsize: 25, // Minimum area of a path
-                    alphamax: 0.8, // Maximum angle for a corner
-                    optcurve: true, // Optimize curves
-                    opttolerance: 0.2, // Curve optimization tolerance
-                    threshold: 128 // Black/white threshold
+                    turdsize: turdsize,
+                    alphamax: alphamax,
+                    optcurve: true,
+                    opttolerance: opttolerance,
+                    threshold: 128
                 });
-                
-                // Load the image and process it
+
                 Potrace.loadImageFromUrl(dataUrl);
-                
-                // Process the image and get SVG
+
                 Potrace.process(function() {
-                    // Get SVG at original size
-                    const svg = Potrace.getSVG(1); // Use scale of 1 for original size
+                    const svg = Potrace.getSVG(1);
                     resolve(svg);
                 });
             });
@@ -2298,18 +2817,17 @@
             minSizeInput.addEventListener('input', () => {
                 minSizeValue.textContent = minSizeInput.value;
             });
-            
+
             minSizeGroup.appendChild(minSizeLabel);
             minSizeGroup.appendChild(minSizeInput);
             minSizeGroup.appendChild(minSizeValue);
-            
-            // Gap tolerance control
+
             const gapGroup = document.createElement('div');
             gapGroup.className = 'control-group';
-            
+
             const gapLabel = document.createElement('label');
             gapLabel.textContent = 'Gap Tolerance:';
-            
+
             const gapInput = document.createElement('input');
             gapInput.type = 'range';
             gapInput.className = 'range-input';
@@ -2317,50 +2835,47 @@
             gapInput.max = '40';
             gapInput.value = '20';
             gapInput.id = `gapTolerance-${productId}`;
-            
+
             const gapValue = document.createElement('span');
             gapValue.className = 'range-value';
             gapValue.textContent = gapInput.value;
-            
+
             gapInput.addEventListener('input', () => {
                 gapValue.textContent = gapInput.value;
             });
-            
+
             gapGroup.appendChild(gapLabel);
             gapGroup.appendChild(gapInput);
             gapGroup.appendChild(gapValue);
-            
+
             controlRow1.appendChild(minSizeGroup);
             controlRow1.appendChild(gapGroup);
-            
-            // Add controls to parameters container
+
             paramsContainer.appendChild(controlRow1);
-            
-            // Create buttons container
+
             const buttonsContainer = document.createElement('div');
             buttonsContainer.style.display = 'flex';
             buttonsContainer.style.gap = '0.5rem';
             buttonsContainer.style.marginTop = '0.5rem';
             buttonsContainer.style.flexWrap = 'wrap';
-            
-            // Refresh objects button (initially hidden)
+
+            // Always-available object detection rerun. Lets users re-detect after
+            // the SVG has been re-traced with new tracer params, or just to retry
+            // with the current detection knobs.
             const refreshButton = document.createElement('button');
             refreshButton.className = 'detect-button';
-            refreshButton.textContent = 'Refresh Objects';
-            refreshButton.style.display = 'none';
+            refreshButton.textContent = 'Re-detect Objects';
             refreshButton.id = `refreshButton-${productId}`;
             refreshButton.onclick = () => detectAndShowObjects(originalImage, svgContainer, originalWidth, originalHeight, productId);
-            
-            // Show/Hide borders toggle
+
             const toggleBordersButton = document.createElement('button');
             toggleBordersButton.className = 'detect-button';
             toggleBordersButton.textContent = 'Hide Borders';
             toggleBordersButton.style.backgroundColor = '#6b7280';
-            toggleBordersButton.style.display = 'none'; // Initially hidden until objects are detected
+            toggleBordersButton.style.display = 'none';
             toggleBordersButton.id = `toggleBorders-${productId}`;
             toggleBordersButton.onclick = () => toggleObjectBorders(svgContainer, toggleBordersButton);
-            
-            // Join selected objects button (initially hidden)
+
             const joinButton = document.createElement('button');
             joinButton.className = 'detect-button';
             joinButton.textContent = 'Join 2 Selected';
@@ -2374,40 +2889,6 @@
             buttonsContainer.appendChild(toggleBordersButton);
             buttonsContainer.appendChild(joinButton);
 
-            // Track parameter changes
-            let lastMinSize = minSizeInput.value;
-            let lastGapTolerance = gapInput.value;
-            
-            function checkParameterChanges() {
-                const currentMinSize = minSizeInput.value;
-                const currentGapTolerance = gapInput.value;
-                
-                if (currentMinSize !== lastMinSize || currentGapTolerance !== lastGapTolerance) {
-                    refreshButton.style.display = 'inline-block';
-                } else {
-                    refreshButton.style.display = 'none';
-                }
-            }
-            
-            function updateLastParameters() {
-                lastMinSize = minSizeInput.value;
-                lastGapTolerance = gapInput.value;
-                refreshButton.style.display = 'none';
-            }
-            
-            // Update parameter change listeners
-            minSizeInput.addEventListener('input', () => {
-                minSizeValue.textContent = minSizeInput.value;
-                checkParameterChanges();
-            });
-            
-            gapInput.addEventListener('input', () => {
-                gapValue.textContent = gapInput.value;
-                checkParameterChanges();
-            });
-            
-            // Store functions for external access
-            svgContainer.updateLastParameters = updateLastParameters;
             svgContainer.showToggleBorders = () => {
                 toggleBordersButton.style.display = 'inline-block';
             };
@@ -2574,12 +3055,6 @@
                         });
                     }
                     
-                    // Update parameter tracking to hide refresh button
-                    if (svgContainer.updateLastParameters) {
-                        svgContainer.updateLastParameters();
-                    }
-                    
-                    // Sync toggle borders button state - after refresh, borders are visible so button should say "Hide Borders"
                     if (toggleBordersButton && objects.length > 0) {
                         toggleBordersButton.textContent = 'Hide Borders';
                     }
@@ -2590,9 +3065,8 @@
                     infoDiv.style.color = '#dc2626';
                 })
                 .finally(() => {
-                    // Restore button state
                     if (refreshButton) {
-                        refreshButton.textContent = 'Refresh Objects';
+                        refreshButton.textContent = 'Re-detect Objects';
                         refreshButton.disabled = false;
                         refreshButton.style.backgroundColor = '#059669';
                         refreshButton.style.cursor = 'pointer';
@@ -3021,10 +3495,11 @@
                     const extractedImage = new Image();
                     extractedImage.onload = async () => {
                         try {
-                            const bw = await isBlackAndWhite(extractedImage);
-                            const svg = bw
-                                ? await convertToSVG(extractedImage, canvas.width, canvas.height)
-                                : await convertToColorSVG(extractedImage, canvas.width, canvas.height);
+                            // Mirror the parent plate's render-mode + tracer params so
+                            // extracts come out matching the plate the user is looking at.
+                            const mode = originalImage._renderMode || 'binary';
+                            const params = originalImage._traceParams || defaultTraceParams();
+                            const svg = await vectorizeImage(extractedImage, canvas.width, canvas.height, mode, params);
                             createExtractedObjectCard(svg, canvas.width, canvas.height, productId, objectNumber, originalWidth, originalHeight);
                             
                             // Restore info message
@@ -3057,7 +3532,7 @@
             }, 50);
         }
 
-        const CRICUT_DEFAULT_BORDER = 25;
+        const CRICUT_DEFAULT_BORDER = 10;
         const CRICUT_DEFAULT_FLOOD = 0;
         const CRICUT_BORDER_MAX = 120;
         const CRICUT_FLOOD_MAX = 300;
@@ -3296,7 +3771,7 @@
         function createObjectColorControls(svg, onColorChange) {
             const { colorControl, colorPalette } = createColorControls(
                 (color) => {
-                    tintSVG(svg, color);
+                    if (svg) svg.querySelectorAll('path').forEach(p => p.setAttribute('fill', color));
                     if (onColorChange) onColorChange();
                 }
             );
@@ -3791,9 +4266,14 @@
                     }
 
                     const options = getComposerCricutOptions(false);
+                    // Larger side-panel preview wants more pixels than the old
+                    // toolbar thumbnail. Scale so the longest edge lands ~720px,
+                    // clamped so huge sources stay snappy and tiny sources don't
+                    // get massively upscaled into pointless pixel soup.
+                    const previewScale = Math.max(0.5, Math.min(1.5, 720 / Math.max(exportData.width || 1, exportData.height || 1)));
                     const canvas = await buildCricutCanvas(exportData.svg, exportData.width, exportData.height, {
                         ...options,
-                        previewScale: getCricutPreviewScale(exportData.width, exportData.height, 260)
+                        previewScale
                     });
                     if (token !== composerCricutPreviewToken) return;
 
@@ -3940,12 +4420,16 @@
             cricutGroup.appendChild(cricutBorderField);
             cricutGroup.appendChild(cricutFloodField);
             cricutGroup.appendChild(cricutBtn);
-            cricutGroup.appendChild(composerCricutPreview);
             toolbar.appendChild(cricutGroup);
 
             composerSection.appendChild(toolbar);
 
-            // Canvas wrapper
+            // Workspace — canvas on the left, large Cricut preview on the right.
+            // The preview lives beside the canvas (instead of jammed into the
+            // toolbar) so users can iterate on border/flood without exporting.
+            const workspace = document.createElement('div');
+            workspace.className = 'composer-workspace';
+
             const canvasWrapper = document.createElement('div');
             canvasWrapper.className = 'composer-canvas-wrapper';
 
@@ -4001,7 +4485,17 @@
             zoomControls.appendChild(zoomFit);
             canvasWrapper.appendChild(zoomControls);
 
-            composerSection.appendChild(canvasWrapper);
+            const cricutPanel = document.createElement('div');
+            cricutPanel.className = 'composer-cricut-panel';
+            const cricutPanelHeader = document.createElement('div');
+            cricutPanelHeader.className = 'composer-cricut-panel-header';
+            cricutPanelHeader.textContent = 'Cricut PNG preview';
+            cricutPanel.appendChild(cricutPanelHeader);
+            cricutPanel.appendChild(composerCricutPreview);
+
+            workspace.appendChild(canvasWrapper);
+            workspace.appendChild(cricutPanel);
+            composerSection.appendChild(workspace);
 
             // Status bar
             composerStatus = document.createElement('div');
@@ -4625,7 +5119,13 @@
             const mergedSvgStr = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${mergedW} ${mergedH}" width="${mergedW}" height="${mergedH}">${content}</svg>`;
 
             const productId = composerProductId || 'composed';
-            createExtractedObjectCard(mergedSvgStr, Math.round(mergedW), Math.round(mergedH), productId, 'Merged');
+            // Thread refs sized so re-adding this merged card to the composer
+            // lands at fitScale = 1 — i.e. its native composer-units size —
+            // keeping it scale-consistent with the un-merged siblings it was
+            // built from. mergedW/mergedH are already in composer units, so
+            // passing the original plate's pixel dims would over-shrink it.
+            const mergedRef = COMPOSER_VB_W * 0.7;
+            createExtractedObjectCard(mergedSvgStr, Math.round(mergedW), Math.round(mergedH), productId, 'Merged', mergedRef, mergedRef);
 
             composerStatus.textContent = 'Merged! New object card created. You can add it back to the composer for further composition.';
         }
