@@ -15811,7 +15811,7 @@ window.CATALOG_DATA = {
       "updated_at": "2026-05-16T15:55:43Z",
       "ocr_text": "Ein Gl\u00fcck Buhl\nHappy Halloween\nHokuspokus",
       "objects_description": "Bat, ghost with smiling face, cat with fluffy tail and wide eyes, cat wearing witch hat, spider web, sparkles and stars, flying bats",
-      "language": "english"
+      "language": "german"
     },
     "168175": {
       "product_id": "168175",
