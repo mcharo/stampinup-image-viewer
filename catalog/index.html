@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Stampin' Up Stamp Catalog</title>
+  <title>Stampin' Up Product Catalog</title>
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%232563eb'/><path d='M8 10h16v2H8zm0 5h16v2H8zm0 5h10v2H8z' fill='white'/><circle cx='24' cy='22' r='4' fill='white'/><circle cx='24' cy='22' r='2.5' fill='%232563eb'/></svg>">
   <script src="catalog-data.js"></script>
   <style>
@@ -189,6 +189,18 @@
     .lang-badge {
       font-size: 0.9rem;
       line-height: 1;
+    }
+
+    .type-badge {
+      font-size: 0.68rem;
+      line-height: 1;
+      padding: 0.125rem 0.35rem;
+      border-radius: 999px;
+      background: #e0f2fe;
+      color: #075985;
+      font-weight: 700;
+      letter-spacing: 0;
+      text-transform: uppercase;
     }
 
     /* ── Empty state ── */
@@ -451,7 +463,7 @@
 
 <!-- Header -->
 <div class="header">
-  <span class="header-title">Stampin' Up Stamp Catalog</span>
+  <span class="header-title">Stampin' Up Product Catalog</span>
   <span class="header-subtitle" id="total-count"></span>
   <input
     class="search-input"
@@ -529,7 +541,7 @@
     allProducts = Object.values(data.products);
 
     document.getElementById('total-count').textContent =
-      allProducts.length.toLocaleString() + ' stamps';
+      allProducts.length.toLocaleString() + ' products';
 
     render();
   }
@@ -559,7 +571,8 @@
           p.stamp_set_name,
           p.ocr_text,
           p.objects_description,
-          p.product_id
+          p.product_id,
+          p.is_die_set ? 'die dies die set' : ''
         ].filter(Boolean).join(' ').toLowerCase();
 
         return phrases.every(ph => haystack.includes(ph)) &&
@@ -581,7 +594,7 @@
       : results.length.toLocaleString() + ' of ' + allProducts.length.toLocaleString();
 
     if (results.length === 0) {
-      grid.innerHTML = '<div class="empty-state"><div style="font-size:2rem">🔍</div><p>No stamps found. Try a different search.</p></div>';
+      grid.innerHTML = '<div class="empty-state"><div style="font-size:2rem">🔍</div><p>No products found. Try a different search.</p></div>';
       return;
     }
 
@@ -643,8 +656,14 @@
     langEl.textContent = flag;
     langEl.title = p.language || '';
 
+    const typeEl = document.createElement('span');
+    typeEl.className = 'type-badge';
+    typeEl.textContent = 'Dies';
+    typeEl.title = 'Die set';
+
     meta.appendChild(idEl);
     if (flag) meta.appendChild(langEl);
+    if (p.is_die_set) meta.appendChild(typeEl);
 
     body.appendChild(nameEl);
     body.appendChild(meta);
@@ -699,6 +718,7 @@
     metaEl.innerHTML = '';
     addTag(metaEl, '#' + p.product_id);
     if (flag) addTag(metaEl, flag + ' ' + (p.language || ''));
+    if (p.is_die_set) addTag(metaEl, 'Dies');
 
     // OCR
     const ocrSection = document.getElementById('modal-ocr-section');
