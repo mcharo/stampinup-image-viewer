@@ -15856,7 +15856,7 @@ window.CATALOG_DATA = {
       "updated_at": "2026-05-16T15:55:49Z",
       "ocr_text": "Eins Griffi Builf\nHappy Halloween\nHokuspokus",
       "objects_description": "Bat with wings, friendly ghost, cat with fluffy tail, cat wearing witch hat, flying bats, spider web, sparkles and stars",
-      "language": "english"
+      "language": "german"
     },
     "168179": {
       "product_id": "168179",
