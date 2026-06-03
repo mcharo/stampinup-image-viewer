@@ -1,0 +1,935 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Stampin' Up Image Archive</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%232563eb'/><path d='M8 10h16v2H8zm0 5h16v2H8zm0 5h10v2H8z' fill='white'/><circle cx='24' cy='22' r='4' fill='white'/><circle cx='24' cy='22' r='2.5' fill='%232563eb'/></svg>">
+  <script src="catalog-data.js"></script>
+  <style>
+    :root {
+      --primary-color: #2563eb;
+      --border-radius: 8px;
+      --shadow-sm: 0 1px 2px 0 rgba(0,0,0,0.05);
+      --shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #f8fafc;
+      color: #1e293b;
+      min-height: 100vh;
+    }
+
+    /* ── Header ── */
+    .header {
+      background: white;
+      border-bottom: 1px solid #e2e8f0;
+      padding: 1rem 1.5rem;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+
+    .header-title {
+      font-size: 1.25rem;
+      font-weight: 600;
+      color: #0f172a;
+      white-space: nowrap;
+    }
+
+    .header-subtitle {
+      font-size: 0.85rem;
+      color: #64748b;
+      white-space: nowrap;
+    }
+
+    .search-input {
+      flex: 1;
+      min-width: 200px;
+      max-width: 400px;
+      padding: 0.5rem 0.875rem;
+      border: 1px solid #e2e8f0;
+      border-radius: var(--border-radius);
+      font-size: 0.95rem;
+      font-family: inherit;
+      transition: border-color 0.15s;
+    }
+
+    .search-input:focus {
+      outline: none;
+      border-color: var(--primary-color);
+      box-shadow: 0 0 0 3px rgba(37,99,235,0.1);
+    }
+
+    /* ── Filter bar ── */
+    .filter-bar {
+      background: white;
+      border-bottom: 1px solid #e2e8f0;
+      padding: 0.625rem 1.5rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+    }
+
+    .chip {
+      padding: 0.3rem 0.75rem;
+      border: 1px solid #e2e8f0;
+      border-radius: 999px;
+      font-size: 0.82rem;
+      font-weight: 500;
+      font-family: inherit;
+      cursor: pointer;
+      background: white;
+      color: #475569;
+      transition: background 0.12s, border-color 0.12s, color 0.12s;
+      white-space: nowrap;
+    }
+
+    .chip:hover { background: #f1f5f9; }
+
+    .chip.active {
+      background: var(--primary-color);
+      border-color: var(--primary-color);
+      color: white;
+    }
+
+    .filter-spacer { flex: 1; }
+
+    .sort-select {
+      padding: 0.3rem 1.75rem 0.3rem 0.75rem;
+      border: 1px solid #e2e8f0;
+      border-radius: 999px;
+      font-size: 0.82rem;
+      font-weight: 500;
+      font-family: inherit;
+      color: #475569;
+      background-color: white;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='%2364748b' d='M4 6l4 4 4-4z'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 0.55rem center;
+      background-size: 0.85rem;
+      cursor: pointer;
+      -webkit-appearance: none;
+      appearance: none;
+      transition: border-color 0.12s;
+    }
+
+    .sort-select:hover { background-color: #f8fafc; }
+
+    .sort-select:focus {
+      outline: none;
+      border-color: var(--primary-color);
+      box-shadow: 0 0 0 3px rgba(37,99,235,0.1);
+    }
+
+    .result-count {
+      font-size: 0.82rem;
+      color: #64748b;
+      white-space: nowrap;
+    }
+
+    /* ── Grid ── */
+    .grid-container {
+      padding: 1.25rem 1.5rem;
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 1rem;
+    }
+
+    /* ── Card ── */
+    .card {
+      background: white;
+      border: none;
+      border-radius: var(--border-radius);
+      box-shadow: var(--shadow-sm);
+      overflow: hidden;
+      cursor: pointer;
+      text-align: left;
+      color: inherit;
+      font: inherit;
+      transition: box-shadow 0.15s, transform 0.15s;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .card:hover {
+      box-shadow: var(--shadow);
+      transform: translateY(-2px);
+    }
+
+    .card-img-wrap {
+      aspect-ratio: 1;
+      background: #f1f5f9;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .card-img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+
+    .card-img-placeholder {
+      font-size: 2rem;
+      color: #cbd5e1;
+    }
+
+    .card-body {
+      padding: 0.625rem 0.75rem 0.75rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.375rem;
+      flex: 1;
+    }
+
+    .card-name {
+      font-size: 0.875rem;
+      font-weight: 600;
+      color: #0f172a;
+      line-height: 1.3;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+
+    .card-name.muted { font-weight: 500; color: #94a3b8; font-style: italic; }
+
+    .card-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.25rem;
+    }
+
+    .card-tag {
+      font-size: 0.68rem;
+      line-height: 1;
+      padding: 0.2rem 0.45rem;
+      border-radius: 999px;
+      background: #e0f2fe;
+      color: #075985;
+      font-weight: 600;
+    }
+
+    .card-meta {
+      display: flex;
+      align-items: center;
+      gap: 0.375rem;
+      margin-top: auto;
+      padding-top: 0.25rem;
+    }
+
+    .card-id {
+      font-size: 0.75rem;
+      color: #94a3b8;
+      font-family: ui-monospace, monospace;
+    }
+
+    .lang-badge {
+      font-size: 0.9rem;
+      line-height: 1;
+    }
+
+    .img-count {
+      font-size: 0.68rem;
+      line-height: 1;
+      padding: 0.125rem 0.35rem;
+      border-radius: 999px;
+      background: #f1f5f9;
+      color: #475569;
+      font-weight: 700;
+      margin-left: auto;
+    }
+
+    /* ── Empty state ── */
+    .empty-state {
+      grid-column: 1 / -1;
+      padding: 4rem 2rem;
+      text-align: center;
+      color: #94a3b8;
+    }
+
+    .empty-state p { font-size: 1rem; margin-top: 0.5rem; }
+
+    /* ── Loading ── */
+    .loading {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 60vh;
+      font-size: 1rem;
+      color: #64748b;
+      gap: 0.75rem;
+    }
+
+    .spinner {
+      width: 24px;
+      height: 24px;
+      border: 3px solid #e2e8f0;
+      border-top-color: var(--primary-color);
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Modal ── */
+    .modal-backdrop {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(15,23,42,0.5);
+      z-index: 100;
+      align-items: center;
+      justify-content: center;
+      padding: 1rem;
+    }
+
+    .modal-backdrop.open { display: flex; }
+
+    .modal {
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.25);
+      max-width: 820px;
+      width: 100%;
+      max-height: 90vh;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .modal-header {
+      padding: 1.25rem 1.5rem 0;
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 1rem;
+    }
+
+    .modal-title {
+      font-size: 1.25rem;
+      font-weight: 700;
+      color: #0f172a;
+      line-height: 1.3;
+    }
+
+    .modal-close {
+      background: none;
+      border: none;
+      font-size: 1.5rem;
+      line-height: 1;
+      color: #94a3b8;
+      cursor: pointer;
+      padding: 0.125rem 0.25rem;
+      border-radius: 4px;
+      flex-shrink: 0;
+      transition: color 0.12s;
+    }
+
+    .modal-close:hover { color: #1e293b; }
+
+    .modal-body {
+      padding: 1rem 1.5rem 1.5rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+
+    .modal-imgs {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+      gap: 0.75rem;
+    }
+
+    .modal-img-wrap {
+      aspect-ratio: 1;
+      background: #f1f5f9;
+      border-radius: var(--border-radius);
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: zoom-in;
+    }
+
+    .modal-img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      display: block;
+    }
+
+    .modal-img-label {
+      font-size: 0.72rem;
+      color: #64748b;
+      text-align: center;
+      margin-top: 0.25rem;
+      font-family: ui-monospace, monospace;
+      word-break: break-word;
+    }
+
+    .modal-meta {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+    }
+
+    .meta-tag {
+      background: #f1f5f9;
+      border-radius: 4px;
+      padding: 0.2rem 0.5rem;
+      font-size: 0.8rem;
+      color: #475569;
+      font-family: ui-monospace, monospace;
+    }
+
+    .section-label {
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: #94a3b8;
+      margin-bottom: 0.4rem;
+    }
+
+    .tag-cloud {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.375rem;
+    }
+
+    .tag-pill {
+      font-size: 0.78rem;
+      padding: 0.2rem 0.55rem;
+      border-radius: 999px;
+      background: #e0f2fe;
+      color: #075985;
+      font-weight: 500;
+    }
+
+    .desc-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .desc-item {
+      font-size: 0.875rem;
+      color: #334155;
+      line-height: 1.55;
+    }
+
+    .desc-item .desc-id {
+      font-family: ui-monospace, monospace;
+      font-size: 0.75rem;
+      color: #94a3b8;
+      margin-right: 0.35rem;
+    }
+
+    .full-text {
+      font-family: ui-monospace, monospace;
+      font-size: 0.85rem;
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: var(--border-radius);
+      padding: 0.75rem;
+      white-space: pre-wrap;
+      color: #334155;
+      max-height: 160px;
+      overflow-y: auto;
+    }
+
+    .muted-note { font-size: 0.875rem; color: #94a3b8; }
+
+    @media (max-width: 500px) {
+      .grid-container { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+    }
+
+    /* ── Lightbox ── */
+    .lightbox {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.9);
+      z-index: 200;
+      align-items: center;
+      justify-content: center;
+      cursor: zoom-out;
+    }
+
+    .lightbox.open { display: flex; }
+
+    .lightbox img {
+      max-width: 92vw;
+      max-height: 92vh;
+      object-fit: contain;
+      border-radius: 4px;
+      box-shadow: 0 8px 40px rgba(0,0,0,0.6);
+    }
+
+    .lightbox-close {
+      position: absolute;
+      top: 1rem;
+      right: 1.25rem;
+      background: none;
+      border: none;
+      color: rgba(255,255,255,0.8);
+      font-size: 2rem;
+      line-height: 1;
+      cursor: pointer;
+      padding: 0.25rem 0.5rem;
+    }
+
+    .lightbox-close:hover { color: white; }
+  </style>
+</head>
+<body>
+
+<!-- Header -->
+<div class="header">
+  <span class="header-title">Stampin' Up Image Archive</span>
+  <span class="header-subtitle" id="total-count">Loading catalog…</span>
+  <input
+    class="search-input"
+    type="search"
+    id="search"
+    placeholder="Search text, tags, descriptions, IDs…"
+    autocomplete="off"
+    spellcheck="false"
+  >
+</div>
+
+<!-- Filter bar -->
+<div class="filter-bar">
+  <div id="filters" style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center"></div>
+  <div class="filter-spacer"></div>
+  <select class="sort-select" id="sort" aria-label="Sort products">
+    <option value="desc">ID: high → low</option>
+    <option value="asc">ID: low → high</option>
+  </select>
+  <span class="result-count" id="result-count"></span>
+</div>
+
+<!-- Grid -->
+<div class="grid-container" id="grid">
+  <div class="loading" style="grid-column:1/-1">
+    <div class="spinner"></div>
+    Loading catalog…
+  </div>
+</div>
+
+<!-- Modal -->
+<div class="modal-backdrop" id="modal-backdrop" role="dialog" aria-modal="true">
+  <div class="modal" id="modal">
+    <div class="modal-header">
+      <div class="modal-title" id="modal-title"></div>
+      <button class="modal-close" id="modal-close" aria-label="Close">&#x2715;</button>
+    </div>
+    <div class="modal-body">
+      <div class="modal-imgs" id="modal-imgs"></div>
+      <div class="modal-meta" id="modal-meta"></div>
+      <div id="modal-tags-section" style="display:none">
+        <div class="section-label">Tags</div>
+        <div class="tag-cloud" id="modal-tags"></div>
+      </div>
+      <div id="modal-desc-section" style="display:none">
+        <div class="section-label">Descriptions</div>
+        <div class="desc-list" id="modal-descriptions"></div>
+      </div>
+      <div id="modal-fulltext-section" style="display:none">
+        <div class="section-label">Detected Text</div>
+        <pre class="full-text" id="modal-full-text"></pre>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Lightbox -->
+<div class="lightbox" id="lightbox">
+  <button class="lightbox-close" id="lightbox-close" aria-label="Close">&#x2715;</button>
+  <img id="lightbox-img" src="" alt="">
+</div>
+
+<script>
+  const DATA = window.ARCHIVE_CATALOG_DATA || { products: {} };
+
+  const LANG_LABELS = {
+    all: 'All',
+    english: 'English',
+    french: 'French',
+    german: 'German',
+    dutch: 'Dutch',
+    spanish: 'Spanish',
+    unknown: 'Unknown'
+  };
+  const LANG_FLAGS = {
+    english: '🇬🇧',
+    french: '🇫🇷',
+    german: '🇩🇪',
+    dutch: '🇳🇱',
+    spanish: '🇪🇸'
+  };
+
+  let products = Object.values(DATA.products || {});
+  let activeLanguage = 'english';
+  let searchQuery = '';
+  let sortOrder = 'desc';
+  let debounceTimer = null;
+
+  const filtersEl = document.getElementById('filters');
+  const gridEl = document.getElementById('grid');
+  const searchEl = document.getElementById('search');
+  const sortEl = document.getElementById('sort');
+  const modalBackdrop = document.getElementById('modal-backdrop');
+
+  // ── Init ────────────────────────────────────────────────────────────────
+  function init() {
+    const total = products.length.toLocaleString();
+    const generated = DATA.updated_at ? ` · generated ${DATA.updated_at}` : '';
+    document.getElementById('total-count').textContent = `${total} products${generated}`;
+
+    // Default to English only if any English products exist, else show all.
+    if (!countForLanguage('english')) activeLanguage = 'all';
+
+    renderFilters();
+    render();
+  }
+
+  function countForLanguage(lang) {
+    return lang === 'all'
+      ? products.length
+      : products.filter(p => (p.language || 'english') === lang).length;
+  }
+
+  function renderFilters() {
+    const langs = ['all', ...Array.from(new Set(products.map(p => p.language || 'english'))).sort()];
+    filtersEl.innerHTML = '';
+    for (const lang of langs) {
+      const btn = document.createElement('button');
+      btn.className = 'chip' + (lang === activeLanguage ? ' active' : '');
+      const flag = LANG_FLAGS[lang] ? LANG_FLAGS[lang] + ' ' : '';
+      btn.textContent = `${flag}${LANG_LABELS[lang] || lang} (${countForLanguage(lang)})`;
+      btn.addEventListener('click', () => {
+        activeLanguage = lang;
+        renderFilters();
+        render();
+      });
+      filtersEl.appendChild(btn);
+    }
+  }
+
+  // ── Filtering & searching ─────────────────────────────────────────────────
+  function parseQuery(value) {
+    const terms = [];
+    const re = /"([^"]+)"|(\S+)/g;
+    let m;
+    while ((m = re.exec(value.toLowerCase())) !== null) {
+      terms.push(m[1] !== undefined ? m[1] : m[2]);
+    }
+    return terms;
+  }
+
+  function buildSearchText(product) {
+    return [
+      product.product_id,
+      product.language,
+      ...(product.tags || []),
+      ...(product.images || []).flatMap(img => [img.filename, img.description, img.full_text])
+    ].filter(Boolean).join(' ').toLowerCase();
+  }
+
+  function filteredProducts() {
+    const terms = parseQuery(searchQuery);
+    const results = products.filter(product => {
+      if (activeLanguage !== 'all' && (product.language || 'english') !== activeLanguage) return false;
+      if (!terms.length) return true;
+      const haystack = product.search_text || buildSearchText(product);
+      return terms.every(term => haystack.includes(term));
+    });
+
+    const direction = sortOrder === 'asc' ? 1 : -1;
+    results.sort((a, b) => (Number(a.product_id) - Number(b.product_id)) * direction);
+    return results;
+  }
+
+  // ── Render grid ─────────────────────────────────────────────────────────
+  function render() {
+    const results = filteredProducts();
+    const countEl = document.getElementById('result-count');
+    countEl.textContent = results.length === products.length
+      ? products.length.toLocaleString() + ' results'
+      : results.length.toLocaleString() + ' of ' + products.length.toLocaleString();
+
+    if (!results.length) {
+      gridEl.innerHTML = '<div class="empty-state"><div style="font-size:2rem">🔍</div><p>No products match this filter.</p></div>';
+      return;
+    }
+
+    const fragment = document.createDocumentFragment();
+    for (const product of results) fragment.appendChild(makeCard(product));
+    gridEl.innerHTML = '';
+    gridEl.appendChild(fragment);
+  }
+
+  function firstDescription(product) {
+    return (product.images || []).map(img => img.description).find(Boolean);
+  }
+
+  function makeCard(product) {
+    const lang = product.language || 'english';
+    const flag = LANG_FLAGS[lang] || '';
+    const description = firstDescription(product);
+
+    const card = document.createElement('button');
+    card.type = 'button';
+    card.className = 'card';
+    card.addEventListener('click', () => openModal(product));
+
+    const imgWrap = document.createElement('div');
+    imgWrap.className = 'card-img-wrap';
+    const image = product.primary_image;
+    if (image && image.b2_url) {
+      const img = document.createElement('img');
+      img.className = 'card-img';
+      img.loading = 'lazy';
+      img.alt = description || ('Product ' + product.product_id);
+      img.src = image.b2_url;
+      img.onerror = () => { imgWrap.innerHTML = '<div class="card-img-placeholder">🖼️</div>'; };
+      imgWrap.appendChild(img);
+    } else {
+      imgWrap.innerHTML = '<div class="card-img-placeholder">🖼️</div>';
+    }
+
+    const body = document.createElement('div');
+    body.className = 'card-body';
+
+    const nameEl = document.createElement('div');
+    nameEl.className = 'card-name' + (description ? '' : ' muted');
+    nameEl.textContent = description || 'No description yet';
+    body.appendChild(nameEl);
+
+    const tags = product.tags || [];
+    if (tags.length) {
+      const tagRow = document.createElement('div');
+      tagRow.className = 'card-tags';
+      for (const tag of tags.slice(0, 3)) {
+        const t = document.createElement('span');
+        t.className = 'card-tag';
+        t.textContent = tag;
+        tagRow.appendChild(t);
+      }
+      body.appendChild(tagRow);
+    }
+
+    const meta = document.createElement('div');
+    meta.className = 'card-meta';
+
+    const idEl = document.createElement('span');
+    idEl.className = 'card-id';
+    idEl.textContent = '#' + product.product_id;
+    meta.appendChild(idEl);
+
+    if (flag) {
+      const langEl = document.createElement('span');
+      langEl.className = 'lang-badge';
+      langEl.textContent = flag;
+      langEl.title = lang;
+      meta.appendChild(langEl);
+    }
+
+    const imgCount = (product.images || []).length;
+    if (imgCount > 1) {
+      const countBadge = document.createElement('span');
+      countBadge.className = 'img-count';
+      countBadge.textContent = imgCount + ' imgs';
+      meta.appendChild(countBadge);
+    }
+
+    body.appendChild(meta);
+
+    card.appendChild(imgWrap);
+    card.appendChild(body);
+    return card;
+  }
+
+  // ── Modal ─────────────────────────────────────────────────────────────────
+  function openModal(product) {
+    const lang = product.language || 'english';
+    const flag = LANG_FLAGS[lang] || '';
+
+    document.getElementById('modal-title').textContent = 'Product ' + product.product_id;
+
+    // Images
+    const imgsEl = document.getElementById('modal-imgs');
+    imgsEl.innerHTML = '';
+    for (const image of product.images || []) {
+      const wrap = document.createElement('div');
+
+      const figure = document.createElement('div');
+      figure.className = 'modal-img-wrap';
+      const img = document.createElement('img');
+      img.className = 'modal-img';
+      img.loading = 'lazy';
+      img.alt = image.filename || '';
+      img.src = image.b2_url;
+      img.onerror = () => {
+        figure.textContent = '—';
+        figure.style.color = '#cbd5e1';
+        figure.style.cursor = 'default';
+      };
+      figure.addEventListener('click', () => openLightbox(img.src, image.filename || ''));
+      figure.appendChild(img);
+
+      const label = document.createElement('div');
+      label.className = 'modal-img-label';
+      label.textContent = image.filename || image.image_id || '';
+
+      wrap.appendChild(figure);
+      wrap.appendChild(label);
+      imgsEl.appendChild(wrap);
+    }
+
+    // Meta tags row
+    const metaEl = document.getElementById('modal-meta');
+    metaEl.innerHTML = '';
+    addMetaTag(metaEl, '#' + product.product_id);
+    addMetaTag(metaEl, (flag ? flag + ' ' : '') + (LANG_LABELS[lang] || lang));
+    addMetaTag(metaEl, (product.images || []).length + ' image' + ((product.images || []).length === 1 ? '' : 's'));
+
+    // Tags
+    const tagsSection = document.getElementById('modal-tags-section');
+    const tagsEl = document.getElementById('modal-tags');
+    const tags = product.tags || [];
+    if (tags.length) {
+      tagsEl.innerHTML = '';
+      for (const tag of tags) {
+        const pill = document.createElement('span');
+        pill.className = 'tag-pill';
+        pill.textContent = tag;
+        tagsEl.appendChild(pill);
+      }
+      tagsSection.style.display = '';
+    } else {
+      tagsSection.style.display = 'none';
+    }
+
+    // Descriptions
+    const descSection = document.getElementById('modal-desc-section');
+    const descEl = document.getElementById('modal-descriptions');
+    const described = (product.images || []).filter(img => img.description);
+    if (described.length) {
+      descEl.innerHTML = '';
+      for (const image of described) {
+        const item = document.createElement('div');
+        item.className = 'desc-item';
+        const id = document.createElement('span');
+        id.className = 'desc-id';
+        id.textContent = image.image_id || image.filename || '';
+        item.appendChild(id);
+        item.appendChild(document.createTextNode(image.description));
+        descEl.appendChild(item);
+      }
+      descSection.style.display = '';
+    } else {
+      descSection.style.display = 'none';
+    }
+
+    // Detected full text
+    const ftSection = document.getElementById('modal-fulltext-section');
+    const fullText = (product.images || [])
+      .filter(img => img.full_text && img.full_text.trim())
+      .map(img => (img.image_id || img.filename || '') + '\n' + img.full_text.trim())
+      .join('\n\n');
+    if (fullText) {
+      document.getElementById('modal-full-text').textContent = fullText;
+      ftSection.style.display = '';
+    } else {
+      ftSection.style.display = 'none';
+    }
+
+    modalBackdrop.classList.add('open');
+    document.body.style.overflow = 'hidden';
+  }
+
+  function addMetaTag(parent, text) {
+    const el = document.createElement('span');
+    el.className = 'meta-tag';
+    el.textContent = text;
+    parent.appendChild(el);
+  }
+
+  function closeModal() {
+    modalBackdrop.classList.remove('open');
+    document.body.style.overflow = '';
+  }
+
+  // ── Lightbox ──────────────────────────────────────────────────────────────
+  function openLightbox(src, alt) {
+    const lb = document.getElementById('lightbox');
+    const lbImg = document.getElementById('lightbox-img');
+    lbImg.src = src;
+    lbImg.alt = alt;
+    lb.classList.add('open');
+  }
+
+  function closeLightbox() {
+    document.getElementById('lightbox').classList.remove('open');
+  }
+
+  // ── Event listeners ─────────────────────────────────────────────────────
+  document.getElementById('modal-close').addEventListener('click', closeModal);
+  modalBackdrop.addEventListener('click', e => {
+    if (e.target === modalBackdrop) closeModal();
+  });
+
+  document.getElementById('lightbox-close').addEventListener('click', closeLightbox);
+  document.getElementById('lightbox').addEventListener('click', e => {
+    if (e.target !== document.getElementById('lightbox-img')) closeLightbox();
+  });
+
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') {
+      if (document.getElementById('lightbox').classList.contains('open')) closeLightbox();
+      else closeModal();
+    }
+  });
+
+  searchEl.addEventListener('input', e => {
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(() => {
+      searchQuery = e.target.value.trim();
+      render();
+    }, 150);
+  });
+
+  sortEl.value = sortOrder;
+  sortEl.addEventListener('change', e => {
+    sortOrder = e.target.value;
+    render();
+  });
+
+  // ── Boot ────────────────────────────────────────────────────────────────
+  try {
+    init();
+  } catch (err) {
+    gridEl.innerHTML =
+      '<div class="empty-state"><div style="font-size:2rem">⚠️</div><p>Failed to load catalog: ' + err.message + '</p></div>';
+  }
+</script>
+</body>
+</html>

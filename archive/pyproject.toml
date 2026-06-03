@@ -1,0 +1,12 @@
+[project]
+name = "archive"
+version = "0.1.0"
+description = "Archive Stampin' Up CDN product images by product ID"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "anthropic>=0.83.0",
+    "pillow>=12.2.0",
+    "requests>=2.32.5",
+    "tenacity>=9.1.4",
+]
