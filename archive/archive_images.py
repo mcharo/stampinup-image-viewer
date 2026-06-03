@@ -30,7 +30,7 @@ from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponen
 BASE_URL = "https://res.cloudinary.com/stampin-up/image/upload/prod/images/default-source/product-image"
 DEFAULT_MODEL = "claude-haiku-4-5-20251001"
 DEFAULT_OUTPUT_ROOT = Path(__file__).parent / "output"
-DEFAULT_ARCHIVE_CATALOG_DATA = Path(__file__).parent / "catalog" / "catalog-data.js"
+DEFAULT_ARCHIVE_CATALOG_DATA = Path(__file__).parent / "catalog-data.js"
 DEFAULT_B2_BASE_URL = "https://stamps.charo.fun/archive/"
 VALID_EXTENSIONS = {"png", "jpg"}
 MAX_RANGE_PRODUCT_IDS = 1000

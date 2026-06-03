@@ -690,6 +690,12 @@ class ArchiveImagesTest(unittest.TestCase):
             self.assertTrue(text.startswith("window.ARCHIVE_CATALOG_DATA = "))
             self.assertIn('"products": {}', text)
 
+    def test_default_archive_catalog_data_lives_at_archive_root(self):
+        self.assertEqual(
+            archive_images.DEFAULT_ARCHIVE_CATALOG_DATA,
+            Path(archive_images.__file__).parent / "catalog-data.js",
+        )
+
     def test_main_build_catalog_data_does_not_archive_products(self):
         with tempfile.TemporaryDirectory() as tmp:
             output_root = Path(tmp) / "output"

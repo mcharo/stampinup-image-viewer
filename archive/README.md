@@ -118,8 +118,8 @@ entries that already have descriptions.
 
 ## Catalog View
 
-The archive catalog view lives at `archive/catalog/index.html`. It reads
-`archive/catalog/catalog-data.js`, filters by language with English as the
+The archive catalog view lives at `archive/index.html`. It reads
+`archive/catalog-data.js`, filters by language with English as the
 default, searches product IDs, tags, descriptions, and per-image `full_text`, and
 lazy-loads B2 image links only.
 
@@ -131,7 +131,7 @@ point:
 uv run --project archive python archive/archive_images.py \
   --build-catalog-data \
   --output archive/output \
-  --catalog-data archive/catalog/catalog-data.js \
+  --catalog-data archive/catalog-data.js \
   --b2-base-url https://stamps.charo.fun/archive/
 ```
 
