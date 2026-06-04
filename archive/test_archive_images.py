@@ -46,6 +46,17 @@ class SequenceDescriber:
         return self.results.pop(0)
 
 
+class FakeClock:
+    def __init__(self, current: float = 100.0):
+        self.current = current
+
+    def __call__(self) -> float:
+        return self.current
+
+    def sleep(self, delay: float) -> None:
+        self.current += delay
+
+
 class ArchiveImagesTest(unittest.TestCase):
     def test_build_image_url_defaults_to_png(self):
         self.assertEqual(
@@ -64,6 +75,52 @@ class ArchiveImagesTest(unittest.TestCase):
             list(archive_images.generate_image_ids("166635", 3)),
             ["166635", "166635o01", "166635o02", "166635o03"],
         )
+
+    def test_fetch_rate_limiter_does_not_sleep_before_first_request(self):
+        clock = FakeClock()
+        sleeps: list[float] = []
+        limiter = archive_images.FetchRateLimiter(
+            minimum_interval=1.0,
+            clock=clock,
+            sleeper=lambda delay: sleeps.append(delay),
+            jitter=lambda interval: 0,
+        )
+
+        limiter.before_request()
+
+        self.assertEqual(sleeps, [])
+
+    def test_fetch_rate_limiter_sleeps_only_remaining_interval(self):
+        clock = FakeClock()
+        sleeps: list[float] = []
+        limiter = archive_images.FetchRateLimiter(
+            minimum_interval=1.0,
+            clock=clock,
+            sleeper=lambda delay: (sleeps.append(delay), clock.sleep(delay)),
+            jitter=lambda interval: 0,
+        )
+
+        limiter.before_request()
+        clock.current += 0.25
+        limiter.before_request()
+
+        self.assertEqual(sleeps, [0.75])
+
+    def test_fetch_rate_limiter_skips_sleep_when_enough_time_elapsed(self):
+        clock = FakeClock()
+        sleeps: list[float] = []
+        limiter = archive_images.FetchRateLimiter(
+            minimum_interval=1.0,
+            clock=clock,
+            sleeper=lambda delay: sleeps.append(delay),
+            jitter=lambda interval: 0,
+        )
+
+        limiter.before_request()
+        clock.current += 1.25
+        limiter.before_request()
+
+        self.assertEqual(sleeps, [])
 
     def test_archive_product_stops_after_first_missing_suffix_by_default(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -85,6 +142,37 @@ class ArchiveImagesTest(unittest.TestCase):
                 [Path(url).name for url in fetcher.requested_urls],
                 ["166635.png", "166635o01.png", "166635o02.png", "166635o03.png"],
             )
+
+    def test_archive_product_uses_description_time_to_offset_next_cdn_delay(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            clock = FakeClock()
+            sleeps: list[float] = []
+            limiter = archive_images.FetchRateLimiter(
+                minimum_interval=1.0,
+                clock=clock,
+                sleeper=lambda delay: (sleeps.append(delay), clock.sleep(delay)),
+                jitter=lambda interval: 0,
+            )
+
+            def describe(image_path: Path, extension: str, model: str) -> str:
+                clock.current += 1.25
+                return f"description for {image_path.stem}"
+
+            result = archive_images.archive_product(
+                product_id="166635",
+                output_root=Path(tmp),
+                extension="png",
+                max_missing_suffixes=1,
+                delay=1,
+                describe=True,
+                fetcher=FakeFetcher({"166635", "166635o01"}),
+                describer=describe,
+                rate_limiter=limiter,
+                now=lambda: "2026-06-03T15:00:00Z",
+            )
+
+            self.assertEqual(result.downloaded, ["166635", "166635o01"])
+            self.assertEqual(sleeps, [])
 
     def test_archive_product_debug_logger_prefixes_current_product_id(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -454,20 +542,29 @@ class ArchiveImagesTest(unittest.TestCase):
             self.assertEqual(index["images"]["166635"]["description_model"], "new-model")
             self.assertEqual(len(describer.described_paths), 1)
 
-    def test_archive_product_sleeps_after_terminal_missing_suffix(self):
+    def test_archive_product_waits_before_terminal_missing_suffix_after_download(self):
         with tempfile.TemporaryDirectory() as tmp:
-            with patch.object(archive_images.time, "sleep") as sleep:
-                archive_images.archive_product(
-                    product_id="166635",
-                    output_root=Path(tmp),
-                    extension="png",
-                    max_missing_suffixes=1,
-                    delay=1.5,
-                    fetcher=FakeFetcher({"166635"}),
-                    now=lambda: "2026-06-03T15:00:00Z",
-                )
+            clock = FakeClock()
+            sleeps: list[float] = []
+            limiter = archive_images.FetchRateLimiter(
+                minimum_interval=1.5,
+                clock=clock,
+                sleeper=lambda delay: (sleeps.append(delay), clock.sleep(delay)),
+                jitter=lambda interval: 0,
+            )
 
-            self.assertEqual(sleep.call_count, 2)
+            archive_images.archive_product(
+                product_id="166635",
+                output_root=Path(tmp),
+                extension="png",
+                max_missing_suffixes=1,
+                delay=1.5,
+                fetcher=FakeFetcher({"166635"}),
+                rate_limiter=limiter,
+                now=lambda: "2026-06-03T15:00:00Z",
+            )
+
+            self.assertEqual(sleeps, [1.5])
 
     def test_archive_product_updates_downloaded_at_when_forced(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -614,6 +711,18 @@ class ArchiveImagesTest(unittest.TestCase):
 
             self.assertEqual(exit_code, 0)
             self.assertTrue(archive_products.call_args.kwargs["debug"])
+
+    def test_stderr_debug_logger_prefixes_timestamp_and_product_id(self):
+        stderr = io.StringIO()
+
+        with patch.object(archive_images, "now_iso", return_value="2026-06-03T21:41:00Z"):
+            with patch("sys.stderr", stderr):
+                archive_images._stderr_debug_logger("166635", "fetching 166635.png")
+
+        self.assertEqual(
+            stderr.getvalue(),
+            "2026-06-03T21:41:00Z [166635] fetching 166635.png\n",
+        )
 
     def test_main_describe_existing_uses_local_describe_path(self):
         with tempfile.TemporaryDirectory() as tmp:

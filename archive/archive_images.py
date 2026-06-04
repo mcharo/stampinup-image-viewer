@@ -13,6 +13,7 @@ import hashlib
 import io
 import json
 import os
+import random
 import shutil
 import sys
 import time
@@ -35,6 +36,8 @@ DEFAULT_B2_BASE_URL = "https://stamps.charo.fun/archive/"
 VALID_EXTENSIONS = {"png", "jpg"}
 MAX_RANGE_PRODUCT_IDS = 1000
 FETCH_DELAY = 1
+FETCH_DELAY_JITTER_RATIO = 0.1
+FETCH_DELAY_MAX_JITTER = 0.15
 SCAN_INDEX_FILENAME = "scan-index.json"
 MAX_DESCRIPTION_BASE64_BYTES = 10 * 1024 * 1024
 DESCRIPTION_JPEG_QUALITY = 85
@@ -87,6 +90,51 @@ FetchImage = Callable[[str, str], bytes | None]
 DescribeImage = Callable[[Path, str, str], str | DescriptionResult]
 DebugLogger = Callable[[str, str], None]
 Now = Callable[[], str]
+MonotonicClock = Callable[[], float]
+Sleeper = Callable[[float], None]
+DelayJitter = Callable[[float], float]
+
+
+def _default_fetch_delay_jitter(minimum_interval: float) -> float:
+    if minimum_interval <= 0:
+        return 0
+    return random.uniform(0, min(FETCH_DELAY_MAX_JITTER, minimum_interval * FETCH_DELAY_JITTER_RATIO))
+
+
+class FetchRateLimiter:
+    def __init__(
+        self,
+        minimum_interval: float,
+        clock: MonotonicClock = time.monotonic,
+        sleeper: Sleeper | None = None,
+        jitter: DelayJitter = _default_fetch_delay_jitter,
+    ):
+        self.minimum_interval = max(0, minimum_interval)
+        self.clock = clock
+        self.sleeper = sleeper or _sleep
+        self.jitter = jitter
+        self._last_request_started_at: float | None = None
+
+    def before_request(self, product_id: str | None = None, debug_logger: DebugLogger | None = None) -> float:
+        now = self.clock()
+        if self._last_request_started_at is None:
+            self._last_request_started_at = now
+            return 0
+
+        if self.minimum_interval <= 0:
+            self._last_request_started_at = now
+            return 0
+
+        target_time = self._last_request_started_at + self.minimum_interval + max(0, self.jitter(self.minimum_interval))
+        wait_time = max(0, target_time - now)
+        if wait_time > 0:
+            if product_id is not None and debug_logger is not None:
+                _debug(debug_logger, product_id, f"waiting {wait_time:.2f}s before next CDN request")
+            self.sleeper(wait_time)
+            now = self.clock()
+
+        self._last_request_started_at = now
+        return wait_time
 
 
 def now_iso() -> str:
@@ -374,6 +422,7 @@ def archive_product(
     fetcher: FetchImage | None = None,
     describer: DescribeImage | None = None,
     debug_logger: DebugLogger | None = None,
+    rate_limiter: FetchRateLimiter | None = None,
     now: Now = now_iso,
 ) -> ArchiveResult:
     if max_missing_suffixes < 1:
@@ -389,6 +438,7 @@ def archive_product(
     index = _load_index(index_path, product_id, clean_extension)
     result = ArchiveResult(product_id=product_id)
     fetch = fetcher or _make_fetcher(_default_session())
+    limiter = rate_limiter or FetchRateLimiter(delay)
     missing_suffixes = 0
     suffix = -1
     _debug(debug_logger, product_id, "start")
@@ -420,8 +470,8 @@ def archive_product(
                 continue
 
             _debug(debug_logger, product_id, f"fetching {image_path.name}")
+            limiter.before_request(product_id, debug_logger)
             image_bytes = fetch(image_id, clean_extension)
-            _sleep(delay)
             if image_bytes is None:
                 result.missing.append(image_id)
                 _debug(debug_logger, product_id, f"missing {image_path.name}")
@@ -1011,7 +1061,7 @@ def _make_fetcher(session: requests.Session) -> FetchImage:
 
 
 def _stderr_debug_logger(product_id: str, message: str) -> None:
-    print(f"[{product_id}] {message}", file=sys.stderr)
+    print(f"{now_iso()} [{product_id}] {message}", file=sys.stderr)
 
 
 def _debug(debug_logger: DebugLogger | None, product_id: str, message: str) -> None:

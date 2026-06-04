@@ -44,12 +44,15 @@ suffix images:
 
 Suffix enumeration stops after the first 404 by default. Change that with
 `--max-missing-suffixes` if a product appears to have gaps. The script uses one
-request at a time, waits `1.5` seconds between CDN requests by default, skips
-already downloaded files, and retries 429, 503, connection, and timeout errors
+CDN request at a time and treats `--delay` as the minimum spacing between CDN
+request starts. The default is `1` second with small jitter, but time spent
+downloading, saving, or describing an image counts toward that spacing. It skips
+already downloaded files and retries 429, 503, connection, and timeout errors
 with exponential backoff.
 
 Add `--debug` to print progress messages to stderr. Each debug line is prefixed
-with the current product ID, for example `[157928] fetching 157928.png`.
+with an ISO timestamp and the current product ID, for example
+`2026-06-03T21:41:00Z [157928] fetching 157928.png`.
 
 ## Output
 
