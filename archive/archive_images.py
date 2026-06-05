@@ -42,6 +42,7 @@ SCAN_INDEX_FILENAME = "scan-index.json"
 MAX_DESCRIPTION_BASE64_BYTES = 10 * 1024 * 1024
 DESCRIPTION_JPEG_QUALITY = 85
 MIN_DESCRIPTION_IMAGE_DIMENSION = 256
+MAX_TOKENS = 1500
 
 DESCRIPTION_PROMPT = """\
 Analyze this Stampin' Up product image for a searchable image archive.
@@ -84,6 +85,12 @@ class DescriptionResult:
     full_text: str = ""
     language: str = "english"
     tags: list[str] = field(default_factory=list)
+
+
+class DescriptionResponseError(ValueError):
+    def __init__(self, message: str, raw_response: str):
+        super().__init__(message)
+        self.raw_response = raw_response
 
 
 FetchImage = Callable[[str, str], bytes | None]
@@ -345,7 +352,7 @@ def load_official_metadata(path: Path) -> dict[str, dict]:
 
 def write_archive_catalog_data(catalog_data_path: Path, catalog: dict) -> None:
     catalog_data_path.parent.mkdir(parents=True, exist_ok=True)
-    payload = json.dumps(catalog, indent=2)
+    payload = json.dumps(catalog, separators=(",", ":"))
     catalog_data_path.write_text(f"window.ARCHIVE_CATALOG_DATA = {payload};\n", encoding="utf-8")
 
 
@@ -566,7 +573,7 @@ def describe_image(client: anthropic.Anthropic, image_path: Path, extension: str
     img_b64 = base64.standard_b64encode(payload.data).decode()
     response = client.messages.create(
         model=model,
-        max_tokens=300,
+        max_tokens=MAX_TOKENS,
         messages=[{
             "role": "user",
             "content": [
@@ -586,7 +593,13 @@ def describe_image(client: anthropic.Anthropic, image_path: Path, extension: str
 
 
 def parse_description_response(raw: str) -> DescriptionResult:
-    data = json.loads(_extract_json_object(raw))
+    try:
+        data = json.loads(_extract_json_object(raw))
+    except json.JSONDecodeError as exc:
+        raise DescriptionResponseError(
+            f"Description response JSON could not be parsed: {exc.msg}",
+            raw_response=raw,
+        ) from exc
     description = str(data.get("description") or "").strip()
     full_text = str(data.get("full_text") or "").strip()
     language = _normalize_language(str(data.get("language") or "english"))
@@ -946,11 +959,9 @@ def _catalog_product_from_index(
         "language": language,
         "tags": tags,
         "images": images,
-        "primary_image": images[0],
         "updated_at": product_index.get("updated_at"),
     }
     _merge_catalog_metadata(product, myss_metadata, official_metadata)
-    product["search_text"] = _catalog_search_text(product)
     return product
 
 
@@ -972,11 +983,6 @@ def _merge_catalog_metadata(product: dict, myss_metadata: dict | None, official_
         official_metadata,
         ("name", "item_number", "status", "category", "category_confidence", "detail_url", "description"),
     )
-
-    if myss:
-        product["myss"] = myss
-    if official:
-        product["official"] = official
 
     name = _clean_metadata_value(official.get("name")) or _clean_metadata_value(myss.get("name"))
     if name:
@@ -1022,15 +1028,6 @@ def _catalog_descriptions(product: dict, myss: dict, official: dict) -> list[dic
     myss_description = _clean_metadata_value(myss.get("description"))
     if myss_description:
         descriptions.append({"source": "myss", "text": myss_description})
-
-    for image in product.get("images") or []:
-        image_description = _clean_metadata_value(image.get("description"))
-        if image_description:
-            descriptions.append({
-                "source": "image",
-                "image_id": image.get("image_id"),
-                "text": image_description,
-            })
     return descriptions
 
 
@@ -1130,11 +1127,15 @@ def _maybe_describe(
         description = _normalize_description_result(describer(image_path, extension, model))
     except Exception as exc:  # noqa: BLE001 - archive runs should survive per-image model failures.
         entry["description"] = None
-        entry["description_error"] = {
+        description_error = {
             "type": exc.__class__.__name__,
             "message": str(exc),
             "model": model,
         }
+        raw_response = getattr(exc, "raw_response", None)
+        if raw_response is not None:
+            description_error["raw_response"] = str(raw_response)
+        entry["description_error"] = description_error
         entry["description_error_at"] = now()
         return
 
@@ -1185,7 +1186,7 @@ def _extract_json_object(raw: str) -> str:
     start = stripped.find("{")
     end = stripped.rfind("}")
     if start == -1 or end == -1 or end <= start:
-        raise ValueError("Description response did not contain a JSON object")
+        raise DescriptionResponseError("Description response did not contain a JSON object", raw_response=raw)
     return stripped[start:end + 1]
 
 

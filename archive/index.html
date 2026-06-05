@@ -819,7 +819,7 @@
 
     const imgWrap = document.createElement('div');
     imgWrap.className = 'card-img-wrap';
-    const image = product.primary_image;
+    const image = product.primary_image || (product.images || [])[0];
     if (image && image.b2_url) {
       const img = document.createElement('img');
       img.className = 'card-img';
