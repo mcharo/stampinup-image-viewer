@@ -207,6 +207,7 @@ def archive_products(
     force_descriptions: bool,
     model: str,
     debug: bool = False,
+    skip_scan_index: bool = False,
 ) -> list[ArchiveResult]:
     session = requests.Session()
     session.headers.update({"User-Agent": "stampinup-image-archive/1.0"})
@@ -231,7 +232,8 @@ def archive_products(
             debug_logger=debug_logger,
         )
         results.append(result)
-        update_scan_index(output_root, [result])
+        if not skip_scan_index:
+            update_scan_index(output_root, [result])
 
     return results
 
@@ -321,6 +323,7 @@ def describe_existing_products(
     model: str,
     describer: DescribeImage | None = None,
     debug: bool = False,
+    skip_scan_index: bool = False,
     now: Now = now_iso,
 ) -> list[ArchiveResult]:
     clean_extension = extension.lower().lstrip(".")
@@ -344,7 +347,8 @@ def describe_existing_products(
             now=now,
         )
         results.append(result)
-        update_scan_index(output_root, [result], now=now)
+        if not skip_scan_index:
+            update_scan_index(output_root, [result], now=now)
 
     return results
 
@@ -655,6 +659,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--describe", action="store_true", help="Generate generic image descriptions with Claude")
     parser.add_argument("--debug", action="store_true", help="Print per-product progress messages to stderr")
     parser.add_argument(
+        "--skip-scan-index",
+        action="store_true",
+        help="Do not update scan-index.json during archive or describe-existing runs",
+    )
+    parser.add_argument(
         "--force-descriptions",
         action="store_true",
         help="Refresh existing descriptions when --describe is used",
@@ -693,6 +702,7 @@ def main(argv: list[str] | None = None) -> int:
                 force_descriptions=args.force_descriptions,
                 model=args.model,
                 debug=args.debug,
+                skip_scan_index=args.skip_scan_index,
             )
             for result in results:
                 print(
@@ -716,6 +726,7 @@ def main(argv: list[str] | None = None) -> int:
             force_descriptions=args.force_descriptions,
             model=args.model,
             debug=args.debug,
+            skip_scan_index=args.skip_scan_index,
         )
     except ValueError as exc:
         print(f"error: {exc}", file=sys.stderr)

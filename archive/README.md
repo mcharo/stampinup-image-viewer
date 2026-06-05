@@ -78,6 +78,11 @@ IDs separately as `seen` and `missing`, plus compressed ranges for scanned,
 seen, and missing IDs. Normal archive runs update this file after each product
 ID.
 
+If you run multiple archive processes against the same output folder, use
+`--skip-scan-index` to avoid concurrent read/write races on `scan-index.json`.
+After those runs finish, rebuild the scan index over the combined range with
+`--backfill-scan-index`.
+
 To rebuild `scan-index.json` from existing local output without CDN requests:
 
 ```bash

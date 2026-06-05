@@ -438,6 +438,27 @@ class ArchiveImagesTest(unittest.TestCase):
             self.assertEqual(index["images"]["166635"]["description"], "Base image.")
             self.assertEqual(index["images"]["166635o01"]["full_text"], "Danke")
 
+    def test_describe_existing_products_can_skip_scan_index_update(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            output_root = Path(tmp)
+            product_dir = output_root / "166635"
+            product_dir.mkdir()
+            (product_dir / "166635.png").write_bytes(b"existing image")
+
+            archive_images.describe_existing_products(
+                output_root=output_root,
+                product_ids=["166635"],
+                extension="png",
+                force_descriptions=False,
+                model="test-model",
+                describer=FakeDescriber(),
+                debug=False,
+                skip_scan_index=True,
+                now=lambda: "2026-06-03T15:00:00Z",
+            )
+
+            self.assertFalse((output_root / "scan-index.json").exists())
+
     def test_archive_product_saves_index_when_description_fails(self):
         def failing_describer(image_path: Path, extension: str, model: str) -> str:
             raise RuntimeError("model unavailable")
@@ -601,6 +622,30 @@ class ArchiveImagesTest(unittest.TestCase):
             index = json.loads((product_dir / "index.json").read_text())
             self.assertEqual(index["images"]["166635"]["downloaded_at"], "2026-06-03T15:00:00Z")
 
+    def test_archive_products_can_skip_scan_index_update(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            output_root = Path(tmp)
+
+            with patch.object(
+                archive_images,
+                "archive_product",
+                return_value=archive_images.ArchiveResult(product_id="166635", downloaded=["166635"]),
+            ):
+                archive_images.archive_products(
+                    product_ids=["166635"],
+                    output_root=output_root,
+                    extension="png",
+                    max_missing_suffixes=1,
+                    delay=0,
+                    force=False,
+                    describe=False,
+                    force_descriptions=False,
+                    model=archive_images.DEFAULT_MODEL,
+                    skip_scan_index=True,
+                )
+
+            self.assertFalse((output_root / "scan-index.json").exists())
+
     def test_update_scan_index_tracks_seen_missing_and_ranges(self):
         with tempfile.TemporaryDirectory() as tmp:
             archive_images.update_scan_index(
@@ -712,6 +757,20 @@ class ArchiveImagesTest(unittest.TestCase):
             self.assertEqual(exit_code, 0)
             self.assertTrue(archive_products.call_args.kwargs["debug"])
 
+    def test_main_accepts_skip_scan_index_flag_and_forwards_it_to_archive_products(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch.object(archive_images, "archive_products") as archive_products:
+                exit_code = archive_images.main([
+                    "--product-id",
+                    "166635",
+                    "--output",
+                    tmp,
+                    "--skip-scan-index",
+                ])
+
+            self.assertEqual(exit_code, 0)
+            self.assertTrue(archive_products.call_args.kwargs["skip_scan_index"])
+
     def test_stderr_debug_logger_prefixes_timestamp_and_product_id(self):
         stderr = io.StringIO()
 
@@ -741,6 +800,23 @@ class ArchiveImagesTest(unittest.TestCase):
             self.assertEqual(exit_code, 0)
             archive_products.assert_not_called()
             describe_existing_products.assert_called_once()
+
+    def test_main_describe_existing_forwards_skip_scan_index(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test"}, clear=True):
+                with patch.object(archive_images, "describe_existing_products") as describe_existing_products:
+                    describe_existing_products.return_value = []
+                    exit_code = archive_images.main([
+                        "--describe-existing",
+                        "--product-id",
+                        "166635",
+                        "--output",
+                        tmp,
+                        "--skip-scan-index",
+                    ])
+
+            self.assertEqual(exit_code, 0)
+            self.assertTrue(describe_existing_products.call_args.kwargs["skip_scan_index"])
 
     def test_build_archive_catalog_data_uses_b2_urls_and_search_fields(self):
         with tempfile.TemporaryDirectory() as tmp:
