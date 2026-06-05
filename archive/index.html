@@ -101,6 +101,12 @@
       color: white;
     }
 
+    .status-toggle {
+      display: inline-flex;
+      gap: 0.35rem;
+      flex-wrap: wrap;
+    }
+
     .filter-spacer { flex: 1; }
 
     .sort-select {
@@ -146,6 +152,7 @@
 
     /* ── Card ── */
     .card {
+      position: relative;
       background: white;
       border: none;
       border-radius: var(--border-radius);
@@ -158,6 +165,22 @@
       transition: box-shadow 0.15s, transform 0.15s;
       display: flex;
       flex-direction: column;
+    }
+
+    .card-ribbon {
+      position: absolute;
+      top: 0.5rem;
+      left: 0.5rem;
+      z-index: 1;
+      background: rgba(180, 83, 9, 0.94);
+      color: #fff;
+      font-size: 0.62rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      padding: 0.15rem 0.45rem;
+      border-radius: 999px;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.25);
     }
 
     .card:hover {
@@ -207,6 +230,18 @@
     }
 
     .card-name.muted { font-weight: 500; color: #94a3b8; font-style: italic; }
+
+    .card-category {
+      align-self: flex-start;
+      max-width: 100%;
+      font-size: 0.68rem;
+      font-weight: 600;
+      line-height: 1.2;
+      padding: 0.2rem 0.5rem;
+      border-radius: 999px;
+      background: #eef2ff;
+      color: #4338ca;
+    }
 
     .card-tags {
       display: flex;
@@ -517,7 +552,9 @@
 <!-- Filter bar -->
 <div class="filter-bar">
   <div id="filters" style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center"></div>
+  <div class="status-toggle" id="status-toggle"></div>
   <div class="filter-spacer"></div>
+  <select class="sort-select" id="category-filter" aria-label="Filter by category"></select>
   <select class="sort-select" id="sort" aria-label="Sort products">
     <option value="desc">ID: high → low</option>
     <option value="asc">ID: low → high</option>
@@ -543,6 +580,10 @@
     <div class="modal-body">
       <div class="modal-imgs" id="modal-imgs"></div>
       <div class="modal-meta" id="modal-meta"></div>
+      <div id="modal-product-desc-section" style="display:none">
+        <div class="section-label">Product Details</div>
+        <div class="desc-list" id="modal-product-descriptions"></div>
+      </div>
       <div id="modal-tags-section" style="display:none">
         <div class="section-label">Tags</div>
         <div class="tag-cloud" id="modal-tags"></div>
@@ -587,11 +628,15 @@
 
   let products = Object.values(DATA.products || {});
   let activeLanguage = 'english';
+  let activeCategory = 'all';
+  let activeStatus = 'all';
   let searchQuery = '';
   let sortOrder = 'desc';
   let debounceTimer = null;
 
   const filtersEl = document.getElementById('filters');
+  const categoryFilterEl = document.getElementById('category-filter');
+  const statusToggleEl = document.getElementById('status-toggle');
   const gridEl = document.getElementById('grid');
   const searchEl = document.getElementById('search');
   const sortEl = document.getElementById('sort');
@@ -607,6 +652,8 @@
     if (!countForLanguage('english')) activeLanguage = 'all';
 
     renderFilters();
+    renderCategoryFilter();
+    renderStatusToggle();
     render();
   }
 
@@ -633,6 +680,65 @@
     }
   }
 
+  function countForCategory(cat) {
+    return cat === 'all'
+      ? products.length
+      : products.filter(p => (p.category || '') === cat).length;
+  }
+
+  function countForStatus(status) {
+    return status === 'all'
+      ? products.length
+      : products.filter(p => (p.status || '').toLowerCase() === status).length;
+  }
+
+  function renderCategoryFilter() {
+    const categories = Array.from(new Set(products.map(p => p.category).filter(Boolean))).sort();
+    if (!categories.length) {
+      categoryFilterEl.style.display = 'none';
+      return;
+    }
+    categoryFilterEl.innerHTML = '';
+    const allOpt = document.createElement('option');
+    allOpt.value = 'all';
+    allOpt.textContent = `All categories (${countForCategory('all').toLocaleString()})`;
+    categoryFilterEl.appendChild(allOpt);
+    for (const cat of categories) {
+      const opt = document.createElement('option');
+      opt.value = cat;
+      opt.textContent = `${cat} (${countForCategory(cat).toLocaleString()})`;
+      categoryFilterEl.appendChild(opt);
+    }
+    categoryFilterEl.value = activeCategory;
+  }
+
+  function renderStatusToggle() {
+    if (!products.some(p => p.status)) {
+      statusToggleEl.style.display = 'none';
+      return;
+    }
+    const options = [
+      { value: 'all', label: 'All' },
+      { value: 'current', label: 'Current' },
+      { value: 'retired', label: 'Retired' }
+    ];
+    statusToggleEl.innerHTML = '';
+    for (const opt of options) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'chip' + (opt.value === activeStatus ? ' active' : '');
+      btn.textContent = opt.value === 'all'
+        ? opt.label
+        : `${opt.label} (${countForStatus(opt.value).toLocaleString()})`;
+      btn.addEventListener('click', () => {
+        activeStatus = opt.value;
+        renderStatusToggle();
+        render();
+      });
+      statusToggleEl.appendChild(btn);
+    }
+  }
+
   // ── Filtering & searching ─────────────────────────────────────────────────
   function parseQuery(value) {
     const terms = [];
@@ -648,8 +754,12 @@
     return [
       product.product_id,
       product.language,
+      product.name,
+      product.category,
+      product.status,
       ...(product.tags || []),
-      ...(product.images || []).flatMap(img => [img.filename, img.description, img.full_text])
+      ...(product.images || []).flatMap(img => [img.filename, img.description, img.full_text]),
+      ...(product.descriptions || []).map(desc => desc.text)
     ].filter(Boolean).join(' ').toLowerCase();
   }
 
@@ -657,6 +767,8 @@
     const terms = parseQuery(searchQuery);
     const results = products.filter(product => {
       if (activeLanguage !== 'all' && (product.language || 'english') !== activeLanguage) return false;
+      if (activeCategory !== 'all' && (product.category || '') !== activeCategory) return false;
+      if (activeStatus !== 'all' && (product.status || '').toLowerCase() !== activeStatus) return false;
       if (!terms.length) return true;
       const haystack = product.search_text || buildSearchText(product);
       return terms.every(term => haystack.includes(term));
@@ -690,10 +802,15 @@
     return (product.images || []).map(img => img.description).find(Boolean);
   }
 
+  function productDisplayName(product) {
+    return product.name || firstDescription(product) || 'No description yet';
+  }
+
   function makeCard(product) {
     const lang = product.language || 'english';
     const flag = LANG_FLAGS[lang] || '';
     const description = firstDescription(product);
+    const displayName = productDisplayName(product);
 
     const card = document.createElement('button');
     card.type = 'button';
@@ -707,7 +824,7 @@
       const img = document.createElement('img');
       img.className = 'card-img';
       img.loading = 'lazy';
-      img.alt = description || ('Product ' + product.product_id);
+      img.alt = displayName || ('Product ' + product.product_id);
       img.src = image.b2_url;
       img.onerror = () => { imgWrap.innerHTML = '<div class="card-img-placeholder">🖼️</div>'; };
       imgWrap.appendChild(img);
@@ -719,9 +836,16 @@
     body.className = 'card-body';
 
     const nameEl = document.createElement('div');
-    nameEl.className = 'card-name' + (description ? '' : ' muted');
-    nameEl.textContent = description || 'No description yet';
+    nameEl.className = 'card-name' + (displayName ? '' : ' muted');
+    nameEl.textContent = displayName;
     body.appendChild(nameEl);
+
+    if (product.category) {
+      const catEl = document.createElement('span');
+      catEl.className = 'card-category';
+      catEl.textContent = product.category;
+      body.appendChild(catEl);
+    }
 
     const tags = product.tags || [];
     if (tags.length) {
@@ -764,6 +888,14 @@
 
     card.appendChild(imgWrap);
     card.appendChild(body);
+
+    if ((product.status || '').toLowerCase() === 'retired') {
+      const ribbon = document.createElement('span');
+      ribbon.className = 'card-ribbon';
+      ribbon.textContent = 'Retired';
+      card.appendChild(ribbon);
+    }
+
     return card;
   }
 
@@ -772,7 +904,9 @@
     const lang = product.language || 'english';
     const flag = LANG_FLAGS[lang] || '';
 
-    document.getElementById('modal-title').textContent = 'Product ' + product.product_id;
+    document.getElementById('modal-title').textContent = product.name
+      ? product.name + ' #' + product.product_id
+      : 'Product ' + product.product_id;
 
     // Images
     const imgsEl = document.getElementById('modal-imgs');
@@ -810,6 +944,30 @@
     addMetaTag(metaEl, '#' + product.product_id);
     addMetaTag(metaEl, (flag ? flag + ' ' : '') + (LANG_LABELS[lang] || lang));
     addMetaTag(metaEl, (product.images || []).length + ' image' + ((product.images || []).length === 1 ? '' : 's'));
+    if (product.category) addMetaTag(metaEl, product.category);
+    if (product.status) addMetaTag(metaEl, product.status);
+
+    // Product-level descriptions from MYSS / official pages
+    const productDescSection = document.getElementById('modal-product-desc-section');
+    const productDescEl = document.getElementById('modal-product-descriptions');
+    const productDescriptions = (product.descriptions || [])
+      .filter(desc => desc.source !== 'image' && desc.text && desc.text.trim());
+    if (productDescriptions.length) {
+      productDescEl.innerHTML = '';
+      for (const desc of productDescriptions) {
+        const item = document.createElement('div');
+        item.className = 'desc-item';
+        const source = document.createElement('span');
+        source.className = 'desc-id';
+        source.textContent = desc.source || '';
+        item.appendChild(source);
+        item.appendChild(document.createTextNode(desc.text));
+        productDescEl.appendChild(item);
+      }
+      productDescSection.style.display = '';
+    } else {
+      productDescSection.style.display = 'none';
+    }
 
     // Tags
     const tagsSection = document.getElementById('modal-tags-section');
@@ -915,6 +1073,11 @@
       searchQuery = e.target.value.trim();
       render();
     }, 150);
+  });
+
+  categoryFilterEl.addEventListener('change', e => {
+    activeCategory = e.target.value;
+    render();
   });
 
   sortEl.value = sortOrder;

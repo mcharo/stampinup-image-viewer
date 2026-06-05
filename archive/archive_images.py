@@ -282,8 +282,12 @@ def backfill_scan_index(output_root: Path, start_id: str, end_id: str, now: Now 
 def build_archive_catalog_data(
     output_root: Path,
     b2_base_url: str = DEFAULT_B2_BASE_URL,
+    myss_metadata_path: Path | None = None,
+    official_metadata_path: Path | None = None,
     now: Now = now_iso,
 ) -> dict:
+    myss_metadata = load_myss_metadata(myss_metadata_path) if myss_metadata_path is not None else {}
+    official_metadata = load_official_metadata(official_metadata_path) if official_metadata_path is not None else {}
     products = {}
     for product_dir in sorted(
         (path for path in output_root.iterdir() if path.is_dir() and path.name.isdigit()),
@@ -298,7 +302,13 @@ def build_archive_catalog_data(
         except json.JSONDecodeError:
             continue
 
-        product = _catalog_product_from_index(product_index, b2_base_url)
+        product_id = str(product_index.get("product_id") or "").strip()
+        product = _catalog_product_from_index(
+            product_index,
+            b2_base_url,
+            myss_metadata.get(product_id),
+            official_metadata.get(product_id),
+        )
         if product is not None:
             products[product["product_id"]] = product
 
@@ -307,6 +317,30 @@ def build_archive_catalog_data(
         "b2_base_url": _ensure_trailing_slash(b2_base_url),
         "products": products,
     }
+
+
+def load_jsonl_metadata(path: Path) -> list[dict]:
+    records = []
+    for line_number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+        clean_line = line.strip()
+        if not clean_line:
+            continue
+        try:
+            record = json.loads(clean_line)
+        except json.JSONDecodeError as exc:
+            raise ValueError(f"{path}:{line_number}: invalid JSON") from exc
+        if not isinstance(record, dict):
+            raise ValueError(f"{path}:{line_number}: expected JSON object")
+        records.append(record)
+    return records
+
+
+def load_myss_metadata(path: Path) -> dict[str, dict]:
+    return _index_metadata_by_item_number(load_jsonl_metadata(path))
+
+
+def load_official_metadata(path: Path) -> dict[str, dict]:
+    return _index_metadata_by_item_number(load_jsonl_metadata(path))
 
 
 def write_archive_catalog_data(catalog_data_path: Path, catalog: dict) -> None:
@@ -647,6 +681,16 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=DEFAULT_B2_BASE_URL,
         help="Public B2 base URL for archive image links",
     )
+    parser.add_argument(
+        "--myss-metadata",
+        type=Path,
+        help="Optional MYSS JSONL metadata to merge into --build-catalog-data",
+    )
+    parser.add_argument(
+        "--official-metadata",
+        type=Path,
+        help="Optional official Stampin' Up JSONL metadata to merge into --build-catalog-data",
+    )
     parser.add_argument("--extension", choices=sorted(VALID_EXTENSIONS), default="png", help="CDN image extension")
     parser.add_argument(
         "--max-missing-suffixes",
@@ -685,7 +729,12 @@ def main(argv: list[str] | None = None) -> int:
             return 0
 
         if args.build_catalog_data:
-            catalog = build_archive_catalog_data(args.output, args.b2_base_url)
+            catalog = build_archive_catalog_data(
+                args.output,
+                args.b2_base_url,
+                myss_metadata_path=args.myss_metadata,
+                official_metadata_path=args.official_metadata,
+            )
             write_archive_catalog_data(args.catalog_data, catalog)
             print(f"catalog-data: products={len(catalog['products'])} path={args.catalog_data}")
             return 0
@@ -858,7 +907,12 @@ def _existing_product_ids(output_root: Path) -> list[str]:
     return _sorted_product_ids(path.name for path in output_root.iterdir() if path.is_dir() and path.name.isdigit())
 
 
-def _catalog_product_from_index(product_index: dict, b2_base_url: str) -> dict | None:
+def _catalog_product_from_index(
+    product_index: dict,
+    b2_base_url: str,
+    myss_metadata: dict | None = None,
+    official_metadata: dict | None = None,
+) -> dict | None:
     product_id = str(product_index.get("product_id") or "").strip()
     if not product_id:
         return None
@@ -887,28 +941,121 @@ def _catalog_product_from_index(product_index: dict, b2_base_url: str) -> dict |
     if not images:
         return None
 
-    search_text = " ".join(
-        part
-        for part in [
-            product_id,
-            language,
-            " ".join(tags),
-            " ".join(image["filename"] for image in images),
-            " ".join(image["description"] for image in images),
-            " ".join(image["full_text"] for image in images),
-        ]
-        if part
-    ).lower()
-
-    return {
+    product = {
         "product_id": product_id,
         "language": language,
         "tags": tags,
         "images": images,
         "primary_image": images[0],
-        "search_text": search_text,
         "updated_at": product_index.get("updated_at"),
     }
+    _merge_catalog_metadata(product, myss_metadata, official_metadata)
+    product["search_text"] = _catalog_search_text(product)
+    return product
+
+
+def _index_metadata_by_item_number(records: Iterable[dict]) -> dict[str, dict]:
+    indexed = {}
+    for record in records:
+        item_number = str(record.get("item_number") or "").strip()
+        if item_number:
+            indexed[item_number] = record
+    return indexed
+
+
+def _merge_catalog_metadata(product: dict, myss_metadata: dict | None, official_metadata: dict | None) -> None:
+    myss = _catalog_source_metadata(
+        myss_metadata,
+        ("site_item_id", "name", "item_number", "price", "status", "category", "detail_url", "image_url", "description"),
+    )
+    official = _catalog_source_metadata(
+        official_metadata,
+        ("name", "item_number", "status", "category", "category_confidence", "detail_url", "description"),
+    )
+
+    if myss:
+        product["myss"] = myss
+    if official:
+        product["official"] = official
+
+    name = _clean_metadata_value(official.get("name")) or _clean_metadata_value(myss.get("name"))
+    if name:
+        product["name"] = name
+
+    official_category = _clean_metadata_value(official.get("category"))
+    myss_category = _clean_metadata_value(myss.get("category"))
+    if official_category and official.get("category_confidence") == "inferred":
+        product["category"] = official_category
+    elif myss_category:
+        product["category"] = myss_category
+
+    status = _clean_metadata_value(official.get("status")) or _clean_metadata_value(myss.get("status"))
+    if status:
+        product["status"] = status
+
+    price = _clean_metadata_value(myss.get("price"))
+    if price:
+        product["price"] = price
+
+    descriptions = _catalog_descriptions(product, myss, official)
+    if descriptions:
+        product["descriptions"] = descriptions
+
+
+def _catalog_source_metadata(record: dict | None, keys: tuple[str, ...]) -> dict:
+    if not record:
+        return {}
+    metadata = {}
+    for key in keys:
+        value = record.get(key)
+        if value is not None and value != "":
+            metadata[key] = value
+    return metadata
+
+
+def _catalog_descriptions(product: dict, myss: dict, official: dict) -> list[dict]:
+    descriptions = []
+    official_description = _clean_metadata_value(official.get("description"))
+    if official_description:
+        descriptions.append({"source": "official", "text": official_description})
+
+    myss_description = _clean_metadata_value(myss.get("description"))
+    if myss_description:
+        descriptions.append({"source": "myss", "text": myss_description})
+
+    for image in product.get("images") or []:
+        image_description = _clean_metadata_value(image.get("description"))
+        if image_description:
+            descriptions.append({
+                "source": "image",
+                "image_id": image.get("image_id"),
+                "text": image_description,
+            })
+    return descriptions
+
+
+def _catalog_search_text(product: dict) -> str:
+    description_text = " ".join(description.get("text") or "" for description in product.get("descriptions") or [])
+    return " ".join(
+        part
+        for part in [
+            product.get("product_id"),
+            product.get("language"),
+            product.get("name"),
+            product.get("category"),
+            product.get("status"),
+            " ".join(product.get("tags") or []),
+            " ".join(image["filename"] for image in product.get("images") or []),
+            " ".join(image["description"] for image in product.get("images") or []),
+            " ".join(image["full_text"] for image in product.get("images") or []),
+            description_text,
+        ]
+        if part
+    ).lower()
+
+
+def _clean_metadata_value(value) -> str:
+    return str(value or "").strip()
 
 
 def _image_sort_key(image_id: str) -> tuple[int, int, str]:
