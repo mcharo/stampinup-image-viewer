@@ -57,6 +57,27 @@ class FakeClock:
         self.current += delay
 
 
+class FakeResponse:
+    def __init__(self, status_code: int, content: bytes = b"", headers: dict | None = None):
+        self.status_code = status_code
+        self.content = content
+        self.headers = headers or {}
+
+    def raise_for_status(self) -> None:
+        if self.status_code >= 400:
+            raise RuntimeError(f"{self.status_code} error")
+
+
+class FakeSession:
+    def __init__(self, response: FakeResponse):
+        self.response = response
+        self.requested_urls: list[str] = []
+
+    def get(self, url: str, timeout: int):
+        self.requested_urls.append(url)
+        return self.response
+
+
 class ArchiveImagesTest(unittest.TestCase):
     def test_build_image_url_defaults_to_png(self):
         self.assertEqual(
@@ -75,6 +96,14 @@ class ArchiveImagesTest(unittest.TestCase):
             list(archive_images.generate_image_ids("166635", 3)),
             ["166635", "166635o01", "166635o02", "166635o03"],
         )
+
+    def test_fetch_image_treats_bad_request_as_skippable_image(self):
+        session = FakeSession(FakeResponse(400, b"bad request"))
+
+        with self.assertRaises(archive_images.SkippedImageError) as cm:
+            archive_images.fetch_image("https://example.test/image.png", session)
+
+        self.assertEqual(cm.exception.status_code, 400)
 
     def test_fetch_rate_limiter_does_not_sleep_before_first_request(self):
         clock = FakeClock()
@@ -142,6 +171,34 @@ class ArchiveImagesTest(unittest.TestCase):
                 [Path(url).name for url in fetcher.requested_urls],
                 ["166635.png", "166635o01.png", "166635o02.png", "166635o03.png"],
             )
+
+    def test_archive_product_continues_after_bad_request_suffix(self):
+        def fetcher(image_id: str, extension: str) -> bytes | None:
+            requested.append(image_id)
+            if image_id == "166635o03":
+                raise archive_images.SkippedImageError("CDN returned 400 Bad Request", status_code=400)
+            if image_id in {"166635", "166635o01", "166635o02", "166635o04"}:
+                return f"image bytes for {image_id}".encode()
+            return None
+
+        with tempfile.TemporaryDirectory() as tmp:
+            requested: list[str] = []
+
+            result = archive_images.archive_product(
+                product_id="166635",
+                output_root=Path(tmp),
+                extension="png",
+                max_missing_suffixes=1,
+                delay=0,
+                fetcher=fetcher,
+                now=lambda: "2026-06-03T15:00:00Z",
+            )
+
+            self.assertEqual(result.downloaded, ["166635", "166635o01", "166635o02", "166635o04"])
+            self.assertEqual(result.missing, ["166635o05"])
+            self.assertEqual(requested, ["166635", "166635o01", "166635o02", "166635o03", "166635o04", "166635o05"])
+            self.assertFalse((Path(tmp) / "166635" / "166635o03.png").exists())
+            self.assertTrue((Path(tmp) / "166635" / "166635o04.png").exists())
 
     def test_archive_product_uses_description_time_to_offset_next_cdn_delay(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -305,6 +362,16 @@ class ArchiveImagesTest(unittest.TestCase):
 
             self.assertEqual(product_ids, ["166635", "166636", "166637", "166638", "166639"])
 
+    def test_parse_product_ids_accepts_descending_range(self):
+        product_ids = archive_images.parse_product_ids(
+            product_ids=[],
+            ids_file=None,
+            start_id="166639",
+            end_id="166637",
+        )
+
+        self.assertEqual(product_ids, ["166639", "166638", "166637"])
+
     def test_parse_product_ids_requires_at_least_one_source(self):
         with self.assertRaisesRegex(ValueError, "At least one product ID source"):
             archive_images.parse_product_ids(product_ids=[], ids_file=None, start_id=None, end_id=None)
@@ -398,6 +465,15 @@ class ArchiveImagesTest(unittest.TestCase):
         self.assertEqual(result.language, "english")
         self.assertEqual(result.tags, ["coloring", "markers", "stampin blends"])
 
+    def test_parse_description_response_error_preserves_raw_response(self):
+        raw_response = "I can describe the image, but I cannot return JSON."
+
+        with self.assertRaises(archive_images.DescriptionResponseError) as cm:
+            archive_images.parse_description_response(raw_response)
+
+        self.assertEqual(str(cm.exception), "Description response did not contain a JSON object")
+        self.assertEqual(cm.exception.raw_response, raw_response)
+
     def test_describe_existing_products_updates_local_files_without_cdn_fetch(self):
         with tempfile.TemporaryDirectory() as tmp:
             output_root = Path(tmp)
@@ -486,6 +562,35 @@ class ArchiveImagesTest(unittest.TestCase):
             self.assertEqual(index["images"]["166635"]["description_error_at"], "2026-06-03T15:00:00Z")
             self.assertEqual(result.described, [])
 
+    def test_archive_product_records_raw_response_when_description_parse_fails(self):
+        raw_response = "I can describe the image, but I cannot return JSON."
+
+        def failing_describer(image_path: Path, extension: str, model: str) -> archive_images.DescriptionResult:
+            raise archive_images.DescriptionResponseError(
+                "Description response did not contain a JSON object",
+                raw_response=raw_response,
+            )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            archive_images.archive_product(
+                product_id="166635",
+                output_root=Path(tmp),
+                extension="png",
+                max_missing_suffixes=1,
+                delay=0,
+                describe=True,
+                model="test-model",
+                fetcher=FakeFetcher({"166635"}),
+                describer=failing_describer,
+                now=lambda: "2026-06-03T15:00:00Z",
+            )
+
+            index = json.loads((Path(tmp) / "166635" / "index.json").read_text())
+            self.assertEqual(
+                index["images"]["166635"]["description_error"]["raw_response"],
+                raw_response,
+            )
+
     def test_prepare_description_image_downsamples_payload_without_changing_original(self):
         with tempfile.TemporaryDirectory() as tmp:
             image_path = Path(tmp) / "large.png"
@@ -502,6 +607,24 @@ class ArchiveImagesTest(unittest.TestCase):
             self.assertEqual(payload.media_type, "image/jpeg")
             self.assertLess(len(base64.standard_b64encode(payload.data)), 1000)
             self.assertLess(len(payload.data), len(original_bytes))
+
+    def test_prepare_description_image_downsamples_oversized_dimensions(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            image_path = Path(tmp) / "wide.png"
+            Image.new("RGB", (2101, 80), color=(255, 255, 255)).save(image_path, format="PNG")
+            original_bytes = image_path.read_bytes()
+
+            payload = archive_images.prepare_description_image(
+                image_path,
+                "png",
+                max_base64_bytes=archive_images.MAX_DESCRIPTION_BASE64_BYTES,
+            )
+
+            self.assertEqual(image_path.read_bytes(), original_bytes)
+            self.assertTrue(payload.downsampled)
+            self.assertEqual(payload.media_type, "image/jpeg")
+            with Image.open(io.BytesIO(payload.data)) as img:
+                self.assertLessEqual(max(img.size), archive_images.MAX_DESCRIPTION_IMAGE_DIMENSION)
 
     def test_archive_product_preserves_description_unless_forced(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -709,6 +832,25 @@ class ArchiveImagesTest(unittest.TestCase):
             self.assertEqual(scan_index["scanned"]["missing"], ["156901", "156903"])
             self.assertEqual(scan_index["ranges"]["scanned"], [{"start": "156900", "end": "156903"}])
 
+    def test_backfill_scan_index_accepts_descending_range(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            output_root = Path(tmp)
+            seen = output_root / "156902"
+            seen.mkdir()
+            (seen / "index.json").write_text("{}")
+
+            archive_images.backfill_scan_index(
+                output_root=output_root,
+                start_id="156903",
+                end_id="156900",
+                now=lambda: "2026-06-03T15:00:00Z",
+            )
+
+            scan_index = json.loads((output_root / "scan-index.json").read_text())
+            self.assertEqual(scan_index["scanned"]["seen"], ["156902"])
+            self.assertEqual(scan_index["scanned"]["missing"], ["156900", "156901", "156903"])
+            self.assertEqual(scan_index["ranges"]["scanned"], [{"start": "156900", "end": "156903"}])
+
     def test_main_backfills_scan_index_without_archiving_products(self):
         with tempfile.TemporaryDirectory() as tmp:
             with patch.object(archive_images, "archive_products") as archive_products:
@@ -855,12 +997,164 @@ class ArchiveImagesTest(unittest.TestCase):
             self.assertEqual(catalog["updated_at"], "2026-06-03T20:00:00Z")
             self.assertEqual(product["language"], "german")
             self.assertEqual(product["tags"], ["german text", "tea therapy"])
-            self.assertIn("kleine therapie", product["search_text"])
             self.assertEqual(
                 product["images"][0]["b2_url"],
                 "https://stamps.charo.fun/archive/158669/158669.png",
             )
-            self.assertEqual(product["primary_image"]["image_id"], "158669")
+            self.assertNotIn("primary_image", product)
+            self.assertNotIn("search_text", product)
+
+    def test_metadata_loaders_index_jsonl_by_item_number(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            myss_path = Path(tmp) / "myss.jsonl"
+            official_path = Path(tmp) / "official.jsonl"
+            myss_path.write_text(
+                "\n".join([
+                    json.dumps({
+                        "item_number": "166881",
+                        "name": "Woolly Friends Stamp Set",
+                        "category": "Stamps",
+                        "status": "Current",
+                    }),
+                    "",
+                ]),
+                encoding="utf-8",
+            )
+            official_path.write_text(
+                json.dumps({
+                    "item_number": "166881",
+                    "name": "WOOLLY FRIENDS PHOTOPOLYMER STAMP SET (ENGLISH)",
+                    "category": "Stamps",
+                    "category_confidence": "inferred",
+                }) + "\n",
+                encoding="utf-8",
+            )
+
+            self.assertEqual(
+                archive_images.load_myss_metadata(myss_path)["166881"]["name"],
+                "Woolly Friends Stamp Set",
+            )
+            self.assertEqual(
+                archive_images.load_official_metadata(official_path)["166881"]["name"],
+                "WOOLLY FRIENDS PHOTOPOLYMER STAMP SET (ENGLISH)",
+            )
+
+    def test_metadata_loader_rejects_non_object_jsonl_records(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            metadata_path = Path(tmp) / "metadata.jsonl"
+            metadata_path.write_text("[1, 2, 3]\n", encoding="utf-8")
+
+            with self.assertRaises(ValueError):
+                archive_images.load_jsonl_metadata(metadata_path)
+
+    def test_build_archive_catalog_data_merges_myss_and_official_metadata(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            output_root = Path(tmp) / "output"
+            product_dir = output_root / "166881"
+            product_dir.mkdir(parents=True)
+            (product_dir / "166881.png").write_bytes(b"image")
+            (product_dir / "index.json").write_text(json.dumps({
+                "product_id": "166881",
+                "updated_at": "2026-06-04T20:00:00Z",
+                "extension": "png",
+                "language": "english",
+                "tags": ["sheep", "cards"],
+                "images": {
+                    "166881": {
+                        "filename": "166881.png",
+                        "description": "AI image description.",
+                        "full_text": "Hooray",
+                    },
+                },
+            }), encoding="utf-8")
+            myss_path = Path(tmp) / "myss.jsonl"
+            official_path = Path(tmp) / "official.jsonl"
+            myss_path.write_text(json.dumps({
+                "site_item_id": "6500",
+                "name": "Woolly Friends Stamp Set",
+                "item_number": "166881",
+                "price": "$19.00",
+                "status": "Current",
+                "category": "Stamps",
+                "detail_url": "https://www.mystampinstuff.com/item.cfm?enc_item_id=test",
+                "image_url": "https://www.mystampinstuff.com/images/items/6500.jpg",
+                "description": "MYSS product description.",
+            }) + "\n", encoding="utf-8")
+            official_path.write_text(json.dumps({
+                "site_item_id": None,
+                "name": "WOOLLY FRIENDS PHOTOPOLYMER STAMP SET (ENGLISH)",
+                "item_number": "166881",
+                "price": None,
+                "status": "Current",
+                "category": "Stamps",
+                "category_confidence": "inferred",
+                "detail_url": "https://www.stampinup.com/products/166881",
+                "image_url": None,
+                "description": "Official product detail description.",
+            }) + "\n", encoding="utf-8")
+
+            catalog = archive_images.build_archive_catalog_data(
+                output_root=output_root,
+                b2_base_url="https://stamps.charo.fun/archive/",
+                myss_metadata_path=myss_path,
+                official_metadata_path=official_path,
+                now=lambda: "2026-06-04T21:00:00Z",
+            )
+
+            product = catalog["products"]["166881"]
+            self.assertEqual(product["name"], "WOOLLY FRIENDS PHOTOPOLYMER STAMP SET (ENGLISH)")
+            self.assertEqual(product["category"], "Stamps")
+            self.assertEqual(product["status"], "Current")
+            self.assertEqual(product["price"], "$19.00")
+            self.assertNotIn("myss", product)
+            self.assertNotIn("official", product)
+            self.assertEqual(product["descriptions"][0]["source"], "official")
+            self.assertEqual(product["descriptions"][1]["source"], "myss")
+            self.assertEqual(len(product["descriptions"]), 2)
+            self.assertNotIn("primary_image", product)
+            self.assertNotIn("search_text", product)
+
+    def test_build_archive_catalog_data_uses_myss_category_when_official_category_unknown(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            output_root = Path(tmp) / "output"
+            product_dir = output_root / "166882"
+            product_dir.mkdir(parents=True)
+            (product_dir / "166882.png").write_bytes(b"image")
+            (product_dir / "index.json").write_text(json.dumps({
+                "product_id": "166882",
+                "updated_at": "2026-06-04T20:00:00Z",
+                "extension": "png",
+                "images": {
+                    "166882": {"filename": "166882.png", "description": "", "full_text": ""},
+                },
+            }), encoding="utf-8")
+            myss_path = Path(tmp) / "myss.jsonl"
+            official_path = Path(tmp) / "official.jsonl"
+            myss_path.write_text(json.dumps({
+                "item_number": "166882",
+                "name": "MYSS Name",
+                "category": "Paper",
+                "status": "Retired",
+            }) + "\n", encoding="utf-8")
+            official_path.write_text(json.dumps({
+                "item_number": "166882",
+                "name": "Official Name",
+                "category": None,
+                "category_confidence": "unknown",
+                "status": "Current",
+            }) + "\n", encoding="utf-8")
+
+            catalog = archive_images.build_archive_catalog_data(
+                output_root=output_root,
+                myss_metadata_path=myss_path,
+                official_metadata_path=official_path,
+                now=lambda: "now",
+            )
+
+            product = catalog["products"]["166882"]
+            self.assertEqual(product["name"], "Official Name")
+            self.assertEqual(product["category"], "Paper")
+            self.assertEqual(product["status"], "Current")
 
     def test_write_archive_catalog_data_js_wraps_catalog_for_file_protocol(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -873,7 +1167,8 @@ class ArchiveImagesTest(unittest.TestCase):
 
             text = catalog_path.read_text()
             self.assertTrue(text.startswith("window.ARCHIVE_CATALOG_DATA = "))
-            self.assertIn('"products": {}', text)
+            self.assertIn('"products":{}', text)
+            self.assertNotIn("\n  ", text)
 
     def test_default_archive_catalog_data_lives_at_archive_root(self):
         self.assertEqual(
@@ -902,6 +1197,35 @@ class ArchiveImagesTest(unittest.TestCase):
             self.assertEqual(exit_code, 0)
             archive_products.assert_not_called()
             self.assertTrue(catalog_path.exists())
+
+    def test_main_build_catalog_data_passes_metadata_paths(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            output_root = Path(tmp) / "output"
+            output_root.mkdir()
+            catalog_path = Path(tmp) / "catalog-data.js"
+            myss_path = Path(tmp) / "myss.jsonl"
+            official_path = Path(tmp) / "official.jsonl"
+            myss_path.write_text("", encoding="utf-8")
+            official_path.write_text("", encoding="utf-8")
+
+            with patch.object(archive_images, "build_archive_catalog_data", return_value={"products": {}}) as build_catalog:
+                with patch.object(archive_images, "write_archive_catalog_data"):
+                    with patch("sys.stdout", new_callable=io.StringIO):
+                        exit_code = archive_images.main([
+                            "--build-catalog-data",
+                            "--output",
+                            str(output_root),
+                            "--catalog-data",
+                            str(catalog_path),
+                            "--myss-metadata",
+                            str(myss_path),
+                            "--official-metadata",
+                            str(official_path),
+                        ])
+
+            self.assertEqual(exit_code, 0)
+            self.assertEqual(build_catalog.call_args.kwargs["myss_metadata_path"], myss_path)
+            self.assertEqual(build_catalog.call_args.kwargs["official_metadata_path"], official_path)
 
 
 if __name__ == "__main__":

@@ -40,6 +40,7 @@ FETCH_DELAY_JITTER_RATIO = 0.1
 FETCH_DELAY_MAX_JITTER = 0.15
 SCAN_INDEX_FILENAME = "scan-index.json"
 MAX_DESCRIPTION_BASE64_BYTES = 10 * 1024 * 1024
+MAX_DESCRIPTION_IMAGE_DIMENSION = 2000
 DESCRIPTION_JPEG_QUALITY = 85
 MIN_DESCRIPTION_IMAGE_DIMENSION = 256
 MAX_TOKENS = 1500
@@ -91,6 +92,12 @@ class DescriptionResponseError(ValueError):
     def __init__(self, message: str, raw_response: str):
         super().__init__(message)
         self.raw_response = raw_response
+
+
+class SkippedImageError(Exception):
+    def __init__(self, message: str, status_code: int):
+        super().__init__(message)
+        self.status_code = status_code
 
 
 FetchImage = Callable[[str, str], bytes | None]
@@ -184,11 +191,9 @@ def parse_product_ids(
             raise ValueError("--start-id and --end-id must be provided together")
         start = _parse_numeric_product_id(start_id)
         end = _parse_numeric_product_id(end_id)
-        if end < start:
-            raise ValueError("--end-id must be greater than or equal to --start-id")
-        if (end - start + 1) > MAX_RANGE_PRODUCT_IDS:
+        if _product_id_range_size(start, end) > MAX_RANGE_PRODUCT_IDS:
             raise ValueError(f"Product ID range is too large; maximum is {MAX_RANGE_PRODUCT_IDS}")
-        for product_id in range(start, end + 1):
+        for product_id in _inclusive_product_id_range(start, end):
             _add_product_id(collected, str(product_id))
 
     if not collected:
@@ -272,11 +277,9 @@ def update_scan_index(output_root: Path, results: Iterable[ArchiveResult], now: 
 def backfill_scan_index(output_root: Path, start_id: str, end_id: str, now: Now = now_iso) -> dict:
     start = _parse_numeric_product_id(start_id)
     end = _parse_numeric_product_id(end_id)
-    if end < start:
-        raise ValueError("--end-id must be greater than or equal to --start-id")
 
     results = []
-    for product_id_number in range(start, end + 1):
+    for product_id_number in _inclusive_product_id_range(start, end):
         product_id = str(product_id_number)
         if _product_output_seen(output_root / product_id):
             results.append(ArchiveResult(product_id=product_id, skipped=[product_id]))
@@ -516,7 +519,11 @@ def archive_product(
 
             _debug(debug_logger, product_id, f"fetching {image_path.name}")
             limiter.before_request(product_id, debug_logger)
-            image_bytes = fetch(image_id, clean_extension)
+            try:
+                image_bytes = fetch(image_id, clean_extension)
+            except SkippedImageError as exc:
+                _debug(debug_logger, product_id, f"skipping {image_path.name}: HTTP {exc.status_code}")
+                continue
             if image_bytes is None:
                 result.missing.append(image_id)
                 _debug(debug_logger, product_id, f"missing {image_path.name}")
@@ -619,17 +626,23 @@ def prepare_description_image(
 ) -> DescriptionImagePayload:
     original_data = image_path.read_bytes()
     original_media_type = "image/png" if extension == "png" else "image/jpeg"
-    if _base64_size(original_data) <= max_base64_bytes:
+
+    with Image.open(io.BytesIO(original_data)) as img:
+        normalized = ImageOps.exif_transpose(img).convert("RGB")
+
+    width, height = normalized.size
+    if _base64_size(original_data) <= max_base64_bytes and max(width, height) <= MAX_DESCRIPTION_IMAGE_DIMENSION:
         return DescriptionImagePayload(
             media_type=original_media_type,
             data=original_data,
             downsampled=False,
         )
 
-    with Image.open(io.BytesIO(original_data)) as img:
-        normalized = ImageOps.exif_transpose(img).convert("RGB")
+    if max(width, height) > MAX_DESCRIPTION_IMAGE_DIMENSION:
+        scale = MAX_DESCRIPTION_IMAGE_DIMENSION / max(width, height)
+        width = max(1, int(width * scale))
+        height = max(1, int(height * scale))
 
-    width, height = normalized.size
     quality = DESCRIPTION_JPEG_QUALITY
 
     while True:
@@ -818,6 +831,15 @@ def _parse_numeric_product_id(product_id: str) -> int:
     if not product_id.isdigit():
         raise ValueError(f"Product ID must be numeric: {product_id}")
     return int(product_id)
+
+
+def _product_id_range_size(start: int, end: int) -> int:
+    return abs(end - start) + 1
+
+
+def _inclusive_product_id_range(start: int, end: int) -> range:
+    step = 1 if end >= start else -1
+    return range(start, end + step, step)
 
 
 def _load_index(index_path: Path, product_id: str, extension: str) -> dict:
@@ -1242,6 +1264,8 @@ def _is_retryable(exc: BaseException) -> bool:
 )
 def fetch_image(url: str, session: requests.Session) -> bytes | None:
     response = session.get(url, timeout=30)
+    if response.status_code == 400:
+        raise SkippedImageError("CDN returned 400 Bad Request", status_code=400)
     if response.status_code == 404:
         return None
     if response.status_code in (429, 503):
