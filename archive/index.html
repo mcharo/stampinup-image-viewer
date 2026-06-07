@@ -967,7 +967,7 @@
         item.className = 'desc-item';
         const source = document.createElement('span');
         source.className = 'desc-id';
-        source.textContent = desc.source || '';
+        source.textContent = productDescriptionSourceLabel(desc.source);
         item.appendChild(source);
         item.appendChild(document.createTextNode(desc.text));
         productDescEl.appendChild(item);
@@ -1037,6 +1037,13 @@
     el.className = 'meta-tag';
     el.textContent = text;
     parent.appendChild(el);
+  }
+
+  function productDescriptionSourceLabel(source) {
+    const cleanSource = (source || '').toLowerCase();
+    if (cleanSource === 'myss' || cleanSource === 'metadata') return 'details';
+    if (cleanSource === 'official') return 'official';
+    return source || 'details';
   }
 
   function closeModal() {

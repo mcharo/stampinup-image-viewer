@@ -294,10 +294,12 @@ def build_archive_catalog_data(
     b2_base_url: str = DEFAULT_B2_BASE_URL,
     myss_metadata_path: Path | None = None,
     official_metadata_path: Path | None = None,
+    additional_metadata_paths: list[Path] | None = None,
     now: Now = now_iso,
 ) -> dict:
     myss_metadata = load_myss_metadata(myss_metadata_path) if myss_metadata_path is not None else {}
     official_metadata = load_official_metadata(official_metadata_path) if official_metadata_path is not None else {}
+    additional_metadata = load_additional_metadata(additional_metadata_paths or [])
     products = {}
     for product_dir in sorted(
         (path for path in output_root.iterdir() if path.is_dir() and path.name.isdigit()),
@@ -318,6 +320,7 @@ def build_archive_catalog_data(
             b2_base_url,
             myss_metadata.get(product_id),
             official_metadata.get(product_id),
+            additional_metadata.get(product_id),
         )
         if product is not None:
             products[product["product_id"]] = product
@@ -351,6 +354,14 @@ def load_myss_metadata(path: Path) -> dict[str, dict]:
 
 def load_official_metadata(path: Path) -> dict[str, dict]:
     return _index_metadata_by_item_number(load_jsonl_metadata(path))
+
+
+def load_additional_metadata(paths: Iterable[Path]) -> dict[str, dict]:
+    metadata = {}
+    for path in paths:
+        for item_number, record in _index_metadata_by_item_number(load_jsonl_metadata(path)).items():
+            metadata.setdefault(item_number, record)
+    return metadata
 
 
 def write_archive_catalog_data(catalog_data_path: Path, catalog: dict) -> None:
@@ -717,6 +728,13 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         type=Path,
         help="Optional official Stampin' Up JSONL metadata to merge into --build-catalog-data",
     )
+    parser.add_argument(
+        "--add-metadata",
+        type=Path,
+        action="append",
+        default=[],
+        help="Additional JSONL metadata to merge into --build-catalog-data. May be repeated; first matching record wins.",
+    )
     parser.add_argument("--extension", choices=sorted(VALID_EXTENSIONS), default="png", help="CDN image extension")
     parser.add_argument(
         "--max-missing-suffixes",
@@ -760,6 +778,7 @@ def main(argv: list[str] | None = None) -> int:
                 args.b2_base_url,
                 myss_metadata_path=args.myss_metadata,
                 official_metadata_path=args.official_metadata,
+                additional_metadata_paths=args.add_metadata,
             )
             write_archive_catalog_data(args.catalog_data, catalog)
             print(f"catalog-data: products={len(catalog['products'])} path={args.catalog_data}")
@@ -947,6 +966,7 @@ def _catalog_product_from_index(
     b2_base_url: str,
     myss_metadata: dict | None = None,
     official_metadata: dict | None = None,
+    additional_metadata: dict | None = None,
 ) -> dict | None:
     product_id = str(product_index.get("product_id") or "").strip()
     if not product_id:
@@ -986,7 +1006,7 @@ def _catalog_product_from_index(
         "images": images,
         "updated_at": product_index.get("updated_at"),
     }
-    _merge_catalog_metadata(product, myss_metadata, official_metadata)
+    _merge_catalog_metadata(product, myss_metadata, official_metadata, additional_metadata)
     return product
 
 
@@ -999,7 +1019,12 @@ def _index_metadata_by_item_number(records: Iterable[dict]) -> dict[str, dict]:
     return indexed
 
 
-def _merge_catalog_metadata(product: dict, myss_metadata: dict | None, official_metadata: dict | None) -> None:
+def _merge_catalog_metadata(
+    product: dict,
+    myss_metadata: dict | None,
+    official_metadata: dict | None,
+    additional_metadata: dict | None = None,
+) -> None:
     myss = _catalog_source_metadata(
         myss_metadata,
         ("site_item_id", "name", "item_number", "price", "status", "category", "detail_url", "image_url", "description"),
@@ -1008,29 +1033,36 @@ def _merge_catalog_metadata(product: dict, myss_metadata: dict | None, official_
         official_metadata,
         ("name", "item_number", "status", "category", "category_confidence", "detail_url", "description"),
     )
+    additional = _catalog_source_metadata(
+        additional_metadata,
+        ("site_item_id", "name", "item_number", "price", "status", "category", "detail_url", "image_url", "description"),
+    )
 
-    name = _clean_metadata_value(official.get("name")) or _clean_metadata_value(myss.get("name"))
+    name = _clean_metadata_value(official.get("name")) or _clean_metadata_value(myss.get("name")) or _clean_metadata_value(additional.get("name"))
     if name:
         product["name"] = name
 
     official_category = _clean_metadata_value(official.get("category"))
     myss_category = _clean_metadata_value(myss.get("category"))
+    additional_category = _clean_metadata_value(additional.get("category"))
     if official_category and official.get("category_confidence") == "inferred":
         product["category"] = official_category
     elif myss_category:
         product["category"] = myss_category
+    elif additional_category:
+        product["category"] = additional_category
 
-    status = _clean_metadata_value(official.get("status")) or _clean_metadata_value(myss.get("status"))
+    status = _clean_metadata_value(official.get("status")) or _clean_metadata_value(myss.get("status")) or _clean_metadata_value(additional.get("status"))
     if status:
         product["status"] = status
     elif not name:
         product["status"] = "unknown"
 
-    price = _clean_metadata_value(myss.get("price"))
+    price = _clean_metadata_value(myss.get("price")) or _clean_metadata_value(additional.get("price"))
     if price:
         product["price"] = price
 
-    descriptions = _catalog_descriptions(product, myss, official)
+    descriptions = _catalog_descriptions(product, myss, official, additional)
     if descriptions:
         product["descriptions"] = descriptions
 
@@ -1046,7 +1078,7 @@ def _catalog_source_metadata(record: dict | None, keys: tuple[str, ...]) -> dict
     return metadata
 
 
-def _catalog_descriptions(product: dict, myss: dict, official: dict) -> list[dict]:
+def _catalog_descriptions(product: dict, myss: dict, official: dict, additional: dict | None = None) -> list[dict]:
     descriptions = []
     official_description = _clean_metadata_value(official.get("description"))
     if official_description:
@@ -1055,6 +1087,10 @@ def _catalog_descriptions(product: dict, myss: dict, official: dict) -> list[dic
     myss_description = _clean_metadata_value(myss.get("description"))
     if myss_description:
         descriptions.append({"source": "myss", "text": myss_description})
+
+    additional_description = _clean_metadata_value((additional or {}).get("description"))
+    if additional_description:
+        descriptions.append({"source": "metadata", "text": additional_description})
     return descriptions
 
 
