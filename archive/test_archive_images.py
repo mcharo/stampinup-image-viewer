@@ -1156,6 +1156,63 @@ class ArchiveImagesTest(unittest.TestCase):
             self.assertEqual(product["category"], "Paper")
             self.assertEqual(product["status"], "Current")
 
+    def test_build_archive_catalog_data_marks_unmatched_products_unknown(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            output_root = Path(tmp) / "output"
+            product_dir = output_root / "166883"
+            product_dir.mkdir(parents=True)
+            (product_dir / "166883.png").write_bytes(b"image")
+            (product_dir / "index.json").write_text(json.dumps({
+                "product_id": "166883",
+                "updated_at": "2026-06-04T20:00:00Z",
+                "extension": "png",
+                "images": {
+                    "166883": {"filename": "166883.png", "description": "", "full_text": ""},
+                },
+            }), encoding="utf-8")
+            myss_path = Path(tmp) / "myss.jsonl"
+            official_path = Path(tmp) / "official.jsonl"
+            myss_path.write_text("", encoding="utf-8")
+            official_path.write_text("", encoding="utf-8")
+
+            catalog = archive_images.build_archive_catalog_data(
+                output_root=output_root,
+                myss_metadata_path=myss_path,
+                official_metadata_path=official_path,
+                now=lambda: "now",
+            )
+
+            product = catalog["products"]["166883"]
+            self.assertNotIn("name", product)
+            self.assertEqual(product["status"], "unknown")
+
+    def test_build_archive_catalog_data_excludes_duplicate_marked_products(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            output_root = Path(tmp) / "output"
+            product_dir = output_root / "166884"
+            product_dir.mkdir(parents=True)
+            (product_dir / "166884.png").write_bytes(b"image")
+            (product_dir / "index.json").write_text(json.dumps({
+                "product_id": "166884",
+                "updated_at": "2026-06-04T20:00:00Z",
+                "extension": "png",
+                "catalog_exclusion": {
+                    "reason": "duplicate",
+                    "duplicate_of": "166000",
+                    "matched_sha256": ["knownhash"],
+                },
+                "images": {
+                    "166884": {"filename": "166884.png", "description": "", "full_text": ""},
+                },
+            }), encoding="utf-8")
+
+            catalog = archive_images.build_archive_catalog_data(
+                output_root=output_root,
+                now=lambda: "now",
+            )
+
+            self.assertNotIn("166884", catalog["products"])
+
     def test_write_archive_catalog_data_js_wraps_catalog_for_file_protocol(self):
         with tempfile.TemporaryDirectory() as tmp:
             catalog_path = Path(tmp) / "catalog-data.js"

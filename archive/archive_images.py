@@ -34,7 +34,7 @@ DEFAULT_OUTPUT_ROOT = Path(__file__).parent / "output"
 DEFAULT_ARCHIVE_CATALOG_DATA = Path(__file__).parent / "catalog-data.js"
 DEFAULT_B2_BASE_URL = "https://stamps.charo.fun/archive/"
 VALID_EXTENSIONS = {"png", "jpg"}
-MAX_RANGE_PRODUCT_IDS = 1000
+MAX_RANGE_PRODUCT_IDS = 10000
 FETCH_DELAY = 1
 FETCH_DELAY_JITTER_RATIO = 0.1
 FETCH_DELAY_MAX_JITTER = 0.15
@@ -951,6 +951,9 @@ def _catalog_product_from_index(
     product_id = str(product_index.get("product_id") or "").strip()
     if not product_id:
         return None
+    catalog_exclusion = product_index.get("catalog_exclusion") or {}
+    if catalog_exclusion.get("reason") == "duplicate":
+        return None
 
     base_url = _ensure_trailing_slash(b2_base_url)
     language = _normalize_language(str(product_index.get("language") or "english"))
@@ -1020,6 +1023,8 @@ def _merge_catalog_metadata(product: dict, myss_metadata: dict | None, official_
     status = _clean_metadata_value(official.get("status")) or _clean_metadata_value(myss.get("status"))
     if status:
         product["status"] = status
+    elif not name:
+        product["status"] = "unknown"
 
     price = _clean_metadata_value(myss.get("price"))
     if price:

@@ -183,6 +183,10 @@
       box-shadow: 0 1px 2px rgba(0,0,0,0.25);
     }
 
+    .card-ribbon--unknown {
+      background: rgba(100, 116, 139, 0.94);
+    }
+
     .card:hover {
       box-shadow: var(--shadow);
       transform: translateY(-2px);
@@ -722,6 +726,9 @@
       { value: 'current', label: 'Current' },
       { value: 'retired', label: 'Retired' }
     ];
+    if (products.some(p => (p.status || '').toLowerCase() === 'unknown')) {
+      options.push({ value: 'unknown', label: 'Unknown' });
+    }
     statusToggleEl.innerHTML = '';
     for (const opt of options) {
       const btn = document.createElement('button');
@@ -889,10 +896,11 @@
     card.appendChild(imgWrap);
     card.appendChild(body);
 
-    if ((product.status || '').toLowerCase() === 'retired') {
+    const ribbonStatus = (product.status || '').toLowerCase();
+    if (ribbonStatus === 'retired' || ribbonStatus === 'unknown') {
       const ribbon = document.createElement('span');
-      ribbon.className = 'card-ribbon';
-      ribbon.textContent = 'Retired';
+      ribbon.className = 'card-ribbon' + (ribbonStatus === 'unknown' ? ' card-ribbon--unknown' : '');
+      ribbon.textContent = ribbonStatus === 'unknown' ? 'Unknown' : 'Retired';
       card.appendChild(ribbon);
     }
 
