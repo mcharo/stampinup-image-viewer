@@ -965,6 +965,66 @@
             background: white;
         }
 
+        .composer-pattern-panel {
+            display: none;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 0.6rem;
+            padding: 0.5rem 0.75rem;
+            margin-top: 0.4rem;
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            font-size: 0.75rem;
+        }
+
+        .composer-pattern-panel.open {
+            display: flex;
+        }
+
+        .composer-pattern-panel .pattern-title {
+            font-weight: 600;
+            color: #334155;
+        }
+
+        .composer-pattern-panel label {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.3rem;
+            color: #475569;
+        }
+
+        .composer-pattern-panel input[type="number"] {
+            width: 54px;
+            padding: 0.3rem 0.25rem;
+            font-size: 0.72rem;
+            text-align: center;
+            border: 1px solid #d1d5db;
+            border-radius: 5px;
+            background: white;
+        }
+
+        .composer-pattern-panel button {
+            padding: 0.35rem 0.7rem;
+            font-size: 0.72rem;
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
+            background: white;
+            color: #374151;
+            cursor: pointer;
+        }
+
+        .composer-pattern-panel button.pattern-apply {
+            background: var(--primary-color);
+            border-color: var(--primary-color);
+            color: white;
+        }
+
+        .composer-canvas .composer-pattern-preview {
+            pointer-events: none;
+            opacity: 0.4;
+        }
+
         .composer-workspace {
             display: flex;
             gap: 1rem;
@@ -1022,7 +1082,11 @@
             display: block;
             width: 100%;
             height: auto;
-            cursor: default;
+            cursor: grab;
+        }
+
+        .composer-canvas-wrapper svg.composer-canvas.is-panning {
+            cursor: grabbing;
         }
 
         .composer-canvas .composer-object {
@@ -1043,6 +1107,7 @@
             stroke-width: 1.5;
             stroke-dasharray: 6 3;
             pointer-events: none;
+            vector-effect: non-scaling-stroke;
         }
 
         .composer-canvas .resize-handle {
@@ -1050,12 +1115,33 @@
             stroke: var(--primary-color);
             stroke-width: 1.5;
             cursor: nwse-resize;
+            vector-effect: non-scaling-stroke;
         }
 
         .composer-canvas .resize-handle.handle-tl { cursor: nwse-resize; }
         .composer-canvas .resize-handle.handle-tr { cursor: nesw-resize; }
         .composer-canvas .resize-handle.handle-bl { cursor: nesw-resize; }
         .composer-canvas .resize-handle.handle-br { cursor: nwse-resize; }
+
+        .composer-canvas .rotate-handle {
+            fill: white;
+            stroke: var(--primary-color);
+            stroke-width: 1.5;
+            cursor: grab;
+            vector-effect: non-scaling-stroke;
+        }
+
+        .composer-canvas .rotate-handle:active {
+            cursor: grabbing;
+        }
+
+        .composer-canvas .rotate-handle-stem {
+            stroke: var(--primary-color);
+            stroke-width: 1;
+            stroke-dasharray: 3 2;
+            pointer-events: none;
+            vector-effect: non-scaling-stroke;
+        }
 
         .composer-canvas .hover-outline {
             fill: none;
@@ -1065,6 +1151,7 @@
             pointer-events: none;
             opacity: 0;
             transition: opacity 0.12s ease;
+            vector-effect: non-scaling-stroke;
         }
 
         .composer-zoom-controls {
@@ -4227,7 +4314,11 @@
         let composerSelected = [];   // array of <g> elements
         let composerDrag = null;     // {active, startSvgX, startSvgY, origPositions}
         let composerResizeDrag = null; // {g, corner, startSvgX, startSvgY, origScale, origTx, origTy, srcW, srcH}
+        let composerRotateDrag = null; // {g, centerX, centerY, startAngle, origRotation}
         let composerZoom = 1;
+        let composerPanX = 0; // viewBox offset from centered zoom (SVG units)
+        let composerPanY = 0;
+        let composerPanDrag = null; // {active, startClientX, startClientY, origPanX, origPanY, moved}
         let composerCricutPreviewImg = null;
         let composerCricutPreviewStatus = null;
         let composerCricutPreviewTimer = null;
@@ -4356,6 +4447,28 @@
             toolbar.appendChild(resizeGroup);
             toolbar.appendChild(mkDivider());
 
+            // Rotate group
+            const rotateGroup = document.createElement('div');
+            rotateGroup.className = 'composer-toolbar-group';
+            rotateGroup.appendChild(mkBtn('↺ 15°', '', () => composerRotateSelected(-15)));
+            rotateGroup.appendChild(mkBtn('↻ 15°', '', () => composerRotateSelected(15)));
+            const rotationLabel = document.createElement('span');
+            rotationLabel.id = 'composerRotationLabel';
+            rotationLabel.style.cssText = 'font-size:0.72rem; color:#6b7280; min-width:36px; text-align:center; font-variant-numeric:tabular-nums;';
+            rotationLabel.textContent = '0°';
+            rotateGroup.appendChild(rotationLabel);
+            rotateGroup.appendChild(mkBtn('Reset', '', composerResetRotation));
+            toolbar.appendChild(rotateGroup);
+            toolbar.appendChild(mkDivider());
+
+            // Pattern group
+            const patternGroup = document.createElement('div');
+            patternGroup.className = 'composer-toolbar-group';
+            patternGroup.appendChild(mkBtn('◯ Circular', '', () => composerTogglePatternPanel('circular')));
+            patternGroup.appendChild(mkBtn('▦ Grid', '', () => composerTogglePatternPanel('grid')));
+            toolbar.appendChild(patternGroup);
+            toolbar.appendChild(mkDivider());
+
             // Align group
             const alignGroup = document.createElement('div');
             alignGroup.className = 'composer-toolbar-group';
@@ -4423,6 +4536,7 @@
             toolbar.appendChild(cricutGroup);
 
             composerSection.appendChild(toolbar);
+            composerSection.appendChild(composerBuildPatternPanel());
 
             // Workspace — canvas on the left, large Cricut preview on the right.
             // The preview lives beside the canvas (instead of jammed into the
@@ -4438,12 +4552,32 @@
             composerSvg.setAttribute('class', 'composer-canvas');
             composerSvg.style.aspectRatio = '1';
 
-            // Background click deselects
+            // Empty-canvas drag pans the viewport. A click (no drag) still
+            // deselects / cancels pattern preview.
             composerSvg.addEventListener('mousedown', (e) => {
                 if (e.target === composerSvg) {
-                    composerDeselectAll();
+                    composerPanDrag = {
+                        active: true,
+                        startClientX: e.clientX,
+                        startClientY: e.clientY,
+                        origPanX: composerPanX,
+                        origPanY: composerPanY,
+                        moved: false,
+                    };
                 }
             });
+            composerSvg.addEventListener('touchstart', (e) => {
+                if (e.target === composerSvg && e.touches.length === 1) {
+                    composerPanDrag = {
+                        active: true,
+                        startClientX: e.touches[0].clientX,
+                        startClientY: e.touches[0].clientY,
+                        origPanX: composerPanX,
+                        origPanY: composerPanY,
+                        moved: false,
+                    };
+                }
+            }, { passive: true });
 
             // Mouse/touch handlers for drag
             composerSvg.addEventListener('mousedown', composerOnPointerDown);
@@ -4474,7 +4608,7 @@
             zoomIn.onclick = () => composerSetZoom(composerZoom * 1.2);
             const zoomFit = document.createElement('button');
             zoomFit.textContent = 'Fit';
-            zoomFit.onclick = () => composerSetZoom(1);
+            zoomFit.onclick = () => composerSetZoom(1, { resetPan: true });
             const zoomLabel = document.createElement('span');
             zoomLabel.className = 'zoom-label';
             zoomLabel.id = 'composerZoomLabel';
@@ -4537,7 +4671,8 @@
             const offsetY = (COMPOSER_VB_H - srcH * fitScale) / 2;
             g.dataset.tx = offsetX;
             g.dataset.ty = offsetY;
-            g.setAttribute('transform', `translate(${offsetX}, ${offsetY}) scale(${fitScale})`);
+            g.dataset.rotation = 0;
+            composerApplyTransform(g);
 
             // Clone all child elements (preserves nested <g> transforms from merged objects)
             Array.from(sourceSvg.children).forEach(child => {
@@ -4566,8 +4701,8 @@
         function composerSizeHoverRect(g) {
             const hoverRect = g.querySelector('.hover-outline');
             if (!hoverRect) return;
-            const uiEls = g.querySelectorAll('.hover-outline, .selection-rect, .resize-handle');
-            uiEls.forEach(el => { el.setAttribute('width', 0); el.setAttribute('height', 0); });
+            const uiEls = g.querySelectorAll('.hover-outline, .selection-rect, .resize-handle, .rotate-handle, .rotate-handle-stem');
+            uiEls.forEach(el => { el.style.display = 'none'; el.setAttribute('width', 0); el.setAttribute('height', 0); });
             try {
                 const box = g.getBBox();
                 hoverRect.setAttribute('x', box.x - 2);
@@ -4575,11 +4710,31 @@
                 hoverRect.setAttribute('width', box.width + 4);
                 hoverRect.setAttribute('height', box.height + 4);
             } catch (e) { /* ignore if not in DOM */ }
+            uiEls.forEach(el => { el.style.display = ''; });
         }
 
         // ── Selection ──
 
         function composerSelectObject(g, addToSelection) {
+            if (composerIsPatternPreviewActive()) {
+                const src = composerPatternSession.source;
+                // Selecting anything else (or multi-select) dismisses preview.
+                if (g !== src || addToSelection) {
+                    composerCancelPatternPreview({ deselect: false });
+                } else {
+                    // Keep preview; just ensure the source stays sole selection.
+                    composerSelected.forEach(el => {
+                        if (el !== g) {
+                            el.querySelectorAll('.selection-rect, .resize-handle, .rotate-handle, .rotate-handle-stem').forEach(n => n.remove());
+                        }
+                    });
+                    composerSelected = [g];
+                    composerUpdateSelectionVisuals();
+                    composerUpdateScaleLabel();
+                    composerUpdateRotationLabel();
+                    return;
+                }
+            }
             if (!addToSelection) {
                 composerDeselectAll();
             }
@@ -4587,20 +4742,31 @@
             composerSelected.push(g);
             composerUpdateSelectionVisuals();
             composerUpdateScaleLabel();
+            composerUpdateRotationLabel();
         }
 
         function composerDeselectObject(g) {
+            if (composerIsPatternPreviewActive() && g === composerPatternSession.source) {
+                composerCancelPatternPreview({ deselect: true });
+                return;
+            }
             composerSelected = composerSelected.filter(o => o !== g);
-            g.querySelectorAll('.selection-rect, .resize-handle').forEach(el => el.remove());
+            g.querySelectorAll('.selection-rect, .resize-handle, .rotate-handle, .rotate-handle-stem').forEach(el => el.remove());
             composerUpdateScaleLabel();
+            composerUpdateRotationLabel();
         }
 
         function composerDeselectAll() {
+            if (composerIsPatternPreviewActive()) {
+                composerCancelPatternPreview({ deselect: true });
+                return;
+            }
             composerSelected.forEach(g => {
-                g.querySelectorAll('.selection-rect, .resize-handle').forEach(el => el.remove());
+                g.querySelectorAll('.selection-rect, .resize-handle, .rotate-handle, .rotate-handle-stem').forEach(el => el.remove());
             });
             composerSelected = [];
             composerUpdateScaleLabel();
+            composerUpdateRotationLabel();
         }
 
         function composerSelectAll() {
@@ -4610,12 +4776,20 @@
             });
             composerUpdateSelectionVisuals();
             composerUpdateScaleLabel();
+            composerUpdateRotationLabel();
         }
 
         function composerUpdateSelectionVisuals() {
-            const HANDLE_SIZE = 8 / composerZoom;
-            const PAD = 4;
+            // Selection chrome is drawn inside each object's scaled group, so
+            // local sizes must cancel both viewBox zoom and the object's
+            // objScale to keep handles a constant screen size.
             composerSelected.forEach(g => {
+                const objScale = Math.max(parseFloat(g.dataset.objScale || 1), 1e-6);
+                const screenUnit = composerZoom * objScale;
+                const HANDLE_SIZE = 8 / screenUnit;
+                const PAD = 4 / screenUnit;
+                const dash = `${6 / screenUnit} ${3 / screenUnit}`;
+
                 let sel = g.querySelector('.selection-rect');
                 if (!sel) {
                     sel = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
@@ -4624,7 +4798,7 @@
                 }
 
                 // Remove old handles
-                g.querySelectorAll('.resize-handle').forEach(h => h.remove());
+                g.querySelectorAll('.resize-handle, .rotate-handle, .rotate-handle-stem').forEach(h => h.remove());
 
                 // Size to content bbox
                 sel.setAttribute('width', 0);
@@ -4639,6 +4813,7 @@
                     sel.setAttribute('y', by);
                     sel.setAttribute('width', bw);
                     sel.setAttribute('height', bh);
+                    sel.setAttribute('stroke-dasharray', dash);
 
                     // Corner handles (only for single selection to keep it simple)
                     if (composerSelected.length === 1) {
@@ -4656,10 +4831,31 @@
                             h.setAttribute('y', cy - hs / 2);
                             h.setAttribute('width', hs);
                             h.setAttribute('height', hs);
-                            h.setAttribute('rx', 1.5);
+                            h.setAttribute('rx', hs * 0.2);
                             h.dataset.corner = cls.replace('handle-', '');
                             g.appendChild(h);
                         });
+
+                        // Rotate handle: a circle floating above the top edge,
+                        // connected to the selection rect by a dashed stem.
+                        // Drawn as a child of the group so it rotates with the
+                        // object, keeping it visually attached to the top edge.
+                        const stemLen = hs * 2;
+                        const stem = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                        stem.setAttribute('class', 'rotate-handle-stem');
+                        stem.setAttribute('x1', bx + bw / 2);
+                        stem.setAttribute('y1', by);
+                        stem.setAttribute('x2', bx + bw / 2);
+                        stem.setAttribute('y2', by - stemLen);
+                        stem.setAttribute('stroke-dasharray', `${3 / screenUnit} ${2 / screenUnit}`);
+                        g.appendChild(stem);
+
+                        const rotHandle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                        rotHandle.setAttribute('class', 'rotate-handle');
+                        rotHandle.setAttribute('cx', bx + bw / 2);
+                        rotHandle.setAttribute('cy', by - stemLen);
+                        rotHandle.setAttribute('r', hs * 0.6);
+                        g.appendChild(rotHandle);
                     }
                 } catch (e) {}
             });
@@ -4670,7 +4866,7 @@
             const count = composerSvg.querySelectorAll('.composer-object').length;
             composerStatus.textContent = count === 0
                 ? 'Add objects using the "+ Composer" button on any extracted object card.'
-                : `${count} object${count !== 1 ? 's' : ''} in workspace. Click to select, drag to move. Shift-click for multi-select.`;
+                : `${count} object${count !== 1 ? 's' : ''} in workspace. Click to select, drag to move, use the ↺/↻ buttons or the round handle to rotate (Shift snaps to 15°). Shift-click for multi-select.`;
             composerScheduleCricutPreview();
         }
 
@@ -4690,17 +4886,64 @@
             };
         }
 
+        function composerGetRotation(g) {
+            return parseFloat(g.dataset.rotation || 0);
+        }
+
+        // Builds the object transform string. Rotation happens around the
+        // object's visual center (in the post-translate, pre-scale space the
+        // center sits at (srcW*s/2, srcH*s/2)), so rotating never shifts the
+        // object's center point — which also keeps center-based scaling and
+        // scale-reset behavior working unchanged for rotated objects.
+        function composerBuildTransform(tx, ty, s, rot, srcW, srcH) {
+            let t = `translate(${tx}, ${ty})`;
+            if (rot) {
+                t += ` rotate(${rot}, ${srcW * s / 2}, ${srcH * s / 2})`;
+            }
+            t += ` scale(${s})`;
+            return t;
+        }
+
         function composerApplyTransform(g) {
             const tx = parseFloat(g.dataset.tx || 0);
             const ty = parseFloat(g.dataset.ty || 0);
             const s = parseFloat(g.dataset.objScale || 1);
-            g.setAttribute('transform', `translate(${tx}, ${ty}) scale(${s})`);
+            const rot = composerGetRotation(g);
+            const srcW = parseFloat(g.dataset.srcW || 0);
+            const srcH = parseFloat(g.dataset.srcH || 0);
+            g.setAttribute('transform', composerBuildTransform(tx, ty, s, rot, srcW, srcH));
         }
 
         function composerOnPointerDown(e) {
             const clientX = e.touches ? e.touches[0].clientX : e.clientX;
             const clientY = e.touches ? e.touches[0].clientY : e.clientY;
             const svgPt = composerSvgPoint(clientX, clientY);
+
+            // Check if the rotate handle was clicked
+            const rotHandle = e.target.closest('.rotate-handle');
+            if (rotHandle) {
+                e.preventDefault();
+                e.stopPropagation();
+                const gEl = rotHandle.closest('.composer-object');
+                if (!gEl) return;
+                const tx = parseFloat(gEl.dataset.tx || 0);
+                const ty = parseFloat(gEl.dataset.ty || 0);
+                const s = parseFloat(gEl.dataset.objScale || 1);
+                const srcW = parseFloat(gEl.dataset.srcW || 0);
+                const srcH = parseFloat(gEl.dataset.srcH || 0);
+                // Rotation pivot = object center (invariant under rotation)
+                const centerX = tx + (srcW * s) / 2;
+                const centerY = ty + (srcH * s) / 2;
+                composerRotateDrag = {
+                    active: true,
+                    g: gEl,
+                    centerX,
+                    centerY,
+                    startAngle: Math.atan2(svgPt.y - centerY, svgPt.x - centerX),
+                    origRotation: composerGetRotation(gEl),
+                };
+                return;
+            }
 
             // Check if a resize handle was clicked
             const handle = e.target.closest('.resize-handle');
@@ -4742,6 +4985,9 @@
                 }
             }
 
+            // Position is locked while a pattern preview is active.
+            if (composerIsPatternPreviewActive()) return;
+
             // Start drag for all selected objects
             composerDrag = {
                 active: true,
@@ -4759,11 +5005,90 @@
             const clientX = e.touches ? e.touches[0].clientX : e.clientX;
             const clientY = e.touches ? e.touches[0].clientY : e.clientY;
 
+            // Handle canvas pan (empty-background drag)
+            if (composerPanDrag && composerPanDrag.active) {
+                e.preventDefault();
+                const dx = clientX - composerPanDrag.startClientX;
+                const dy = clientY - composerPanDrag.startClientY;
+                if (!composerPanDrag.moved && (Math.abs(dx) > 3 || Math.abs(dy) > 3)) {
+                    composerPanDrag.moved = true;
+                    if (composerSvg) composerSvg.classList.add('is-panning');
+                }
+                if (composerPanDrag.moved) {
+                    const rect = composerSvg.getBoundingClientRect();
+                    const vw = COMPOSER_VB_W / composerZoom;
+                    const scale = rect.width > 0 ? vw / rect.width : 1;
+                    // Dragging the canvas right reveals content to the left.
+                    composerPanX = composerPanDrag.origPanX - dx * scale;
+                    composerPanY = composerPanDrag.origPanY - dy * scale;
+                    composerApplyViewBox();
+                }
+                return;
+            }
+
+            // Handle rotate drag
+            if (composerRotateDrag && composerRotateDrag.active) {
+                e.preventDefault();
+                const svgPt = composerSvgPoint(clientX, clientY);
+                const { g, centerX, centerY, startAngle, origRotation } = composerRotateDrag;
+                const angle = Math.atan2(svgPt.y - centerY, svgPt.x - centerX);
+                let newRot = origRotation + (angle - startAngle) * 180 / Math.PI;
+                // Hold Shift to snap to 15° increments
+                if (e.shiftKey) {
+                    newRot = Math.round(newRot / 15) * 15;
+                }
+                // Normalize to (-180, 180] for a friendly label
+                newRot = ((newRot % 360) + 540) % 360 - 180;
+                g.dataset.rotation = newRot;
+                composerApplyTransform(g);
+                composerUpdateRotationLabel();
+                if (composerIsPatternPreviewActive()) composerRefreshPatternPreview();
+                return;
+            }
+
             // Handle resize drag
             if (composerResizeDrag && composerResizeDrag.active) {
                 e.preventDefault();
                 const svgPt = composerSvgPoint(clientX, clientY);
                 const { g, corner, startSvgX, startSvgY, origScale, origTx, origTy, srcW, srcH } = composerResizeDrag;
+
+                // During pattern preview, always scale about the pinned center.
+                if (composerIsPatternPreviewActive()) {
+                    const cx = composerPatternSession.snapshot.cx;
+                    const cy = composerPatternSession.snapshot.cy;
+                    const origDistC = Math.hypot(startSvgX - cx, startSvgY - cy);
+                    const curDistC = Math.hypot(svgPt.x - cx, svgPt.y - cy);
+                    if (origDistC < 1) return;
+                    const newScaleC = origScale * (curDistC / origDistC);
+                    g.dataset.objScale = newScaleC;
+                    g.dataset.tx = cx - (srcW * newScaleC) / 2;
+                    g.dataset.ty = cy - (srcH * newScaleC) / 2;
+                    composerApplyTransform(g);
+                    composerSizeHoverRect(g);
+                    composerRefreshPatternPreview();
+                    return;
+                }
+
+                // For rotated objects the unrotated corner positions no longer
+                // match what's on screen, so anchor the scale to the object's
+                // center (which is invariant under rotation) instead of the
+                // opposite corner.
+                if (composerGetRotation(g) !== 0) {
+                    const cx = origTx + (srcW * origScale) / 2;
+                    const cy = origTy + (srcH * origScale) / 2;
+                    const origDistC = Math.hypot(startSvgX - cx, startSvgY - cy);
+                    const curDistC = Math.hypot(svgPt.x - cx, svgPt.y - cy);
+                    if (origDistC < 1) return;
+                    const newScaleC = origScale * (curDistC / origDistC);
+                    g.dataset.objScale = newScaleC;
+                    g.dataset.tx = cx - (srcW * newScaleC) / 2;
+                    g.dataset.ty = cy - (srcH * newScaleC) / 2;
+                    composerApplyTransform(g);
+                    composerSizeHoverRect(g);
+                    composerUpdateSelectionVisuals();
+                    composerUpdateScaleLabel();
+                    return;
+                }
 
                 // The anchor is the opposite corner from the one being dragged
                 const origW = srcW * origScale;
@@ -4819,7 +5144,28 @@
         }
 
         function composerOnPointerUp(e) {
-            const changed = (composerResizeDrag && composerResizeDrag.active) || (composerDrag && composerDrag.active);
+            if (composerPanDrag && composerPanDrag.active) {
+                const wasClick = !composerPanDrag.moved;
+                composerPanDrag = null;
+                if (composerSvg) composerSvg.classList.remove('is-panning');
+                // Click on empty canvas (no pan movement): deselect / cancel preview.
+                if (wasClick) {
+                    if (composerIsPatternPreviewActive()) {
+                        composerCancelPatternPreview({ deselect: true });
+                    } else {
+                        composerDeselectAll();
+                    }
+                }
+                return;
+            }
+
+            const changed = (composerResizeDrag && composerResizeDrag.active)
+                || (composerDrag && composerDrag.active)
+                || (composerRotateDrag && composerRotateDrag.active);
+            if (composerRotateDrag) {
+                composerRotateDrag.active = false;
+                composerRotateDrag = null;
+            }
             if (composerResizeDrag) {
                 composerResizeDrag.active = false;
                 composerResizeDrag = null;
@@ -4858,18 +5204,29 @@
             if (changed) composerScheduleCricutPreview();
         }
 
-        // ── Zoom ──
+        // ── Zoom / Pan ──
 
-        function composerSetZoom(level) {
-            composerZoom = Math.max(0.25, Math.min(5, level));
+        function composerApplyViewBox() {
             if (!composerSvg) return;
             const vw = COMPOSER_VB_W / composerZoom;
             const vh = COMPOSER_VB_H / composerZoom;
-            const ox = (COMPOSER_VB_W - vw) / 2;
-            const oy = (COMPOSER_VB_H - vh) / 2;
+            const ox = (COMPOSER_VB_W - vw) / 2 + composerPanX;
+            const oy = (COMPOSER_VB_H - vh) / 2 + composerPanY;
             composerSvg.setAttribute('viewBox', `${ox} ${oy} ${vw} ${vh}`);
+        }
+
+        function composerSetZoom(level, opts = {}) {
+            composerZoom = Math.max(0.25, Math.min(5, level));
+            if (opts.resetPan) {
+                composerPanX = 0;
+                composerPanY = 0;
+            }
+            if (!composerSvg) return;
+            composerApplyViewBox();
             const label = document.getElementById('composerZoomLabel');
             if (label) label.textContent = Math.round(composerZoom * 100) + '%';
+            // Rebuild selection chrome so handle geometry tracks the new zoom.
+            if (composerSelected.length) composerUpdateSelectionVisuals();
         }
 
         // ── Resize ──
@@ -4900,6 +5257,10 @@
                 composerSizeHoverRect(g);
             });
 
+            if (composerIsPatternPreviewActive()) {
+                composerRefreshPatternPreview();
+                return;
+            }
             composerUpdateSelectionVisuals();
             composerUpdateScaleLabel();
             composerScheduleCricutPreview();
@@ -4926,6 +5287,10 @@
                 composerSizeHoverRect(g);
             });
 
+            if (composerIsPatternPreviewActive()) {
+                composerRefreshPatternPreview();
+                return;
+            }
             composerUpdateSelectionVisuals();
             composerUpdateScaleLabel();
             composerScheduleCricutPreview();
@@ -4945,8 +5310,518 @@
             }
         }
 
-        // ── Alignment ──
+        // ── Rotation ──
 
+        function composerRotateSelected(deltaDeg) {
+            if (composerSelected.length === 0) return;
+
+            composerSelected.forEach(g => {
+                let rot = composerGetRotation(g) + deltaDeg;
+                // Normalize to (-180, 180] for a friendly label
+                rot = ((rot % 360) + 540) % 360 - 180;
+                g.dataset.rotation = rot;
+                composerApplyTransform(g);
+            });
+
+            if (composerIsPatternPreviewActive()) {
+                composerRefreshPatternPreview();
+                return;
+            }
+            composerUpdateSelectionVisuals();
+            composerUpdateRotationLabel();
+            composerScheduleCricutPreview();
+        }
+
+        function composerResetRotation() {
+            if (composerSelected.length === 0) return;
+
+            composerSelected.forEach(g => {
+                g.dataset.rotation = 0;
+                composerApplyTransform(g);
+            });
+
+            if (composerIsPatternPreviewActive()) {
+                composerRefreshPatternPreview();
+                return;
+            }
+            composerUpdateSelectionVisuals();
+            composerUpdateRotationLabel();
+            composerScheduleCricutPreview();
+        }
+
+        function composerUpdateRotationLabel() {
+            const label = document.getElementById('composerRotationLabel');
+            if (!label) return;
+            if (composerSelected.length === 1) {
+                label.textContent = Math.round(composerGetRotation(composerSelected[0])) + '°';
+            } else if (composerSelected.length > 1) {
+                label.textContent = '—';
+            } else {
+                label.textContent = '0°';
+            }
+        }
+
+        // ── Patterns ──
+        //
+        // Circular: arranges N total instances of a single selected object
+        // around a ring. The ring is positioned so the original object becomes
+        // the "12 o'clock" instance and doesn't move — removing the new copies
+        // returns the canvas to its prior state.
+        // Grid: fills a rows × cols grid, with the original as the top-left
+        // cell.
+
+        let composerPatternPanel = null;
+        let composerPatternMode = null;
+        let composerPatternInputs = {};
+        // Active preview session: ghosts on an overlay until Apply or Cancel.
+        // { source, mode, snapshot: { tx, ty, objScale, rotation, cx, cy } }
+        let composerPatternSession = null;
+
+        const COMPOSER_PATTERN_UI_SKIP = [
+            'selection-rect', 'hover-outline', 'resize-handle', 'rotate-handle', 'rotate-handle-stem'
+        ];
+
+        function composerBuildPatternPanel() {
+            const panel = document.createElement('div');
+            panel.className = 'composer-pattern-panel';
+
+            const title = document.createElement('span');
+            title.className = 'pattern-title';
+            panel.appendChild(title);
+
+            const mkNum = (labelText, value, min, max, titleText) => {
+                const label = document.createElement('label');
+                const span = document.createElement('span');
+                span.textContent = labelText;
+                const input = document.createElement('input');
+                input.type = 'number';
+                input.min = String(min);
+                input.max = String(max);
+                input.step = '1';
+                input.value = String(value);
+                input.title = titleText;
+                input.setAttribute('aria-label', titleText);
+                label.appendChild(span);
+                label.appendChild(input);
+                label.input = input;
+                return label;
+            };
+
+            // Circular fields
+            const countField = mkNum('Copies', 5, 2, 60, 'Total number of instances in the ring (including the original)');
+            const radiusField = mkNum('Radius', 100, 1, 2000, 'Ring radius in canvas units (pattern center to each copy\'s center)');
+            const rotateField = document.createElement('label');
+            const rotateCheck = document.createElement('input');
+            rotateCheck.type = 'checkbox';
+            rotateCheck.checked = true;
+            rotateCheck.title = 'Rotate each copy to follow the ring';
+            const rotateSpan = document.createElement('span');
+            rotateSpan.textContent = 'Rotate copies';
+            rotateField.appendChild(rotateCheck);
+            rotateField.appendChild(rotateSpan);
+            rotateField.input = rotateCheck;
+
+            // Grid fields
+            const rowsField = mkNum('Rows', 2, 1, 30, 'Number of grid rows');
+            const colsField = mkNum('Cols', 3, 1, 30, 'Number of grid columns');
+            const gapXField = mkNum('Gap X', 0, -500, 1000, 'Extra horizontal space between visible content edges (0 = touching, negative = overlap)');
+            const gapYField = mkNum('Gap Y', 0, -500, 1000, 'Extra vertical space between visible content edges (0 = touching, negative = overlap)');
+
+            const applyBtn = document.createElement('button');
+            applyBtn.className = 'pattern-apply';
+            applyBtn.textContent = 'Apply';
+            applyBtn.onclick = composerApplyPattern;
+            const cancelBtn = document.createElement('button');
+            cancelBtn.textContent = 'Cancel';
+            cancelBtn.onclick = () => composerCancelPatternPreview();
+
+            [countField, radiusField, rotateField, rowsField, colsField, gapXField, gapYField, applyBtn, cancelBtn]
+                .forEach(el => panel.appendChild(el));
+
+            // Auto-suggest a radius that spaces the copies out whenever the
+            // count changes (only until the user edits the radius themselves).
+            let radiusTouched = false;
+            const onPatternInput = () => composerRefreshPatternPreview();
+            radiusField.input.addEventListener('input', () => { radiusTouched = true; onPatternInput(); });
+            countField.input.addEventListener('input', () => {
+                const src = composerPatternSession?.source || (composerSelected.length === 1 ? composerSelected[0] : null);
+                if (!radiusTouched && src) {
+                    radiusField.input.value = String(composerSuggestRadius(src, parseInt(countField.input.value, 10) || 5));
+                }
+                onPatternInput();
+            });
+            rotateCheck.addEventListener('change', onPatternInput);
+            [rowsField, colsField, gapXField, gapYField].forEach(f => {
+                f.input.addEventListener('input', onPatternInput);
+            });
+
+            composerPatternPanel = panel;
+            composerPatternInputs = {
+                title, countField, radiusField, rotateField,
+                rowsField, colsField, gapXField, gapYField,
+                resetRadiusTouched: () => { radiusTouched = false; }
+            };
+            return panel;
+        }
+
+        function composerGetObjCenter(g) {
+            const tx = parseFloat(g.dataset.tx || 0);
+            const ty = parseFloat(g.dataset.ty || 0);
+            const s = parseFloat(g.dataset.objScale || 1);
+            const srcW = parseFloat(g.dataset.srcW || 0);
+            const srcH = parseFloat(g.dataset.srcH || 0);
+            return { cx: tx + (srcW * s) / 2, cy: ty + (srcH * s) / 2, w: srcW * s, h: srcH * s };
+        }
+
+        function composerSuggestRadius(g, count) {
+            // Radius where adjacent copies roughly touch (circumference fits
+            // `count` copies of the object's larger dimension), padded a bit.
+            const { w, h } = composerGetObjCenter(g);
+            const maxDim = Math.max(w, h, 1);
+            return Math.max(Math.round(maxDim), Math.round((count * maxDim) / (2 * Math.PI) * 1.15));
+        }
+
+        function composerIsPatternPreviewActive() {
+            return !!composerPatternSession;
+        }
+
+        function composerSnapshotPatternSource(g) {
+            const tx = parseFloat(g.dataset.tx || 0);
+            const ty = parseFloat(g.dataset.ty || 0);
+            const objScale = parseFloat(g.dataset.objScale || 1);
+            const rotation = composerGetRotation(g);
+            const srcW = parseFloat(g.dataset.srcW || 0);
+            const srcH = parseFloat(g.dataset.srcH || 0);
+            return {
+                tx, ty, objScale, rotation,
+                cx: tx + (srcW * objScale) / 2,
+                cy: ty + (srcH * objScale) / 2,
+            };
+        }
+
+        function composerRestorePatternSnapshot(g, snapshot) {
+            g.dataset.tx = snapshot.tx;
+            g.dataset.ty = snapshot.ty;
+            g.dataset.objScale = snapshot.objScale;
+            g.dataset.rotation = snapshot.rotation;
+            composerApplyTransform(g);
+            composerSizeHoverRect(g);
+        }
+
+        // Keep the source object's center pinned while scaling during preview.
+        function composerPinPatternSourceCenter() {
+            if (!composerPatternSession) return;
+            const g = composerPatternSession.source;
+            if (!g.isConnected) return;
+            const s = parseFloat(g.dataset.objScale || 1);
+            const srcW = parseFloat(g.dataset.srcW || 0);
+            const srcH = parseFloat(g.dataset.srcH || 0);
+            g.dataset.tx = composerPatternSession.snapshot.cx - (srcW * s) / 2;
+            g.dataset.ty = composerPatternSession.snapshot.cy - (srcH * s) / 2;
+            composerApplyTransform(g);
+        }
+
+        function composerGetPatternOverlay() {
+            if (!composerSvg) return null;
+            let overlay = composerSvg.querySelector('.composer-pattern-preview');
+            if (!overlay) {
+                overlay = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+                overlay.setAttribute('class', 'composer-pattern-preview');
+                composerSvg.appendChild(overlay);
+            }
+            // Keep ghosts above real objects
+            composerSvg.appendChild(overlay);
+            return overlay;
+        }
+
+        function composerClearPatternOverlay() {
+            const overlay = composerSvg && composerSvg.querySelector('.composer-pattern-preview');
+            if (overlay) overlay.replaceChildren();
+        }
+
+        function composerClosePatternPanelUI() {
+            if (!composerPatternPanel) return;
+            composerPatternPanel.classList.remove('open');
+            composerPatternMode = null;
+        }
+
+        function composerShowPatternPanelFields(mode) {
+            const p = composerPatternInputs;
+            const circular = mode === 'circular';
+            p.title.textContent = circular ? '◯ Circular pattern' : '▦ Grid pattern';
+            [p.countField, p.radiusField, p.rotateField].forEach(el => el.style.display = circular ? '' : 'none');
+            [p.rowsField, p.colsField, p.gapXField, p.gapYField].forEach(el => el.style.display = circular ? 'none' : '');
+        }
+
+        // Returns { ok, error?, copies: [{tx,ty,rotation}], message? } for the
+        // NEW instances only (original is not included).
+        function composerComputePatternCopies(g, mode) {
+            const p = composerPatternInputs;
+            if (mode === 'circular') {
+                const count = Math.min(60, Math.max(2, parseInt(p.countField.input.value, 10) || 5));
+                const radius = Math.max(1, parseFloat(p.radiusField.input.value) || composerSuggestRadius(g, count));
+                const rotateCopies = p.rotateField.input.checked;
+                const { cx, cy, w, h } = composerGetObjCenter(g);
+                const origRot = composerGetRotation(g);
+                const pcx = cx;
+                const pcy = cy + radius;
+                const step = 360 / count;
+                const copies = [];
+                for (let i = 1; i < count; i++) {
+                    const angDeg = -90 + i * step;
+                    const rad = angDeg * Math.PI / 180;
+                    copies.push({
+                        tx: pcx + radius * Math.cos(rad) - w / 2,
+                        ty: pcy + radius * Math.sin(rad) - h / 2,
+                        rotation: rotateCopies ? composerNormalizeAngle(origRot + i * step) : origRot,
+                    });
+                }
+                return { ok: true, copies, message: `Circular preview: ${count} instances, radius ${radius}.` };
+            }
+
+            if (mode === 'grid') {
+                const rows = Math.min(30, Math.max(1, parseInt(p.rowsField.input.value, 10) || 1));
+                const cols = Math.min(30, Math.max(1, parseInt(p.colsField.input.value, 10) || 1));
+                if (rows * cols < 2) {
+                    return { ok: false, error: 'Grid pattern needs at least 2 cells.', copies: [] };
+                }
+                if (rows * cols > 200) {
+                    return { ok: false, error: 'Grid pattern is limited to 200 cells.', copies: [] };
+                }
+                // Step by the visible content AABB (not the full source frame),
+                // so Gap 0 means ink edges touch even when the SVG has padding.
+                const gapX = parseFloat(p.gapXField.input.value);
+                const gapY = parseFloat(p.gapYField.input.value);
+                const content = composerGetGroupBounds(g);
+                const contentW = Math.max(0, content.x2 - content.x1);
+                const contentH = Math.max(0, content.y2 - content.y1);
+                const tx = parseFloat(g.dataset.tx || 0);
+                const ty = parseFloat(g.dataset.ty || 0);
+                const rot = composerGetRotation(g);
+                const stepX = contentW + (Number.isFinite(gapX) ? gapX : 0);
+                const stepY = contentH + (Number.isFinite(gapY) ? gapY : 0);
+                const copies = [];
+                for (let r = 0; r < rows; r++) {
+                    for (let c = 0; c < cols; c++) {
+                        if (r === 0 && c === 0) continue;
+                        copies.push({
+                            tx: tx + c * stepX,
+                            ty: ty + r * stepY,
+                            rotation: rot,
+                        });
+                    }
+                }
+                return { ok: true, copies, message: `Grid preview: ${rows} × ${cols} instances.` };
+            }
+
+            return { ok: false, error: 'No pattern selected.', copies: [] };
+        }
+
+        function composerCloneContentNodes(g, into) {
+            Array.from(g.children).forEach(child => {
+                if (child.classList && COMPOSER_PATTERN_UI_SKIP.some(c => child.classList.contains(c))) return;
+                into.appendChild(child.cloneNode(true));
+            });
+        }
+
+        // Clones a composer object's content (skipping selection UI) into a
+        // fresh group that shares the source's scale metadata.
+        function composerCloneObject(g) {
+            const clone = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+            clone.setAttribute('class', 'composer-object');
+            clone.dataset.composerId = composerNextId++;
+            ['srcW', 'srcH', 'objScale', 'baseScale'].forEach(k => {
+                if (g.dataset[k] !== undefined) clone.dataset[k] = g.dataset[k];
+            });
+            composerCloneContentNodes(g, clone);
+
+            const hoverRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+            hoverRect.setAttribute('class', 'hover-outline');
+            clone.appendChild(hoverRect);
+            return clone;
+        }
+
+        function composerNormalizeAngle(deg) {
+            return ((deg % 360) + 540) % 360 - 180;
+        }
+
+        function composerRefreshPatternPreview() {
+            if (!composerPatternSession || !composerSvg) return;
+            const g = composerPatternSession.source;
+            if (!g.isConnected) {
+                composerCancelPatternPreview({ deselect: true });
+                return;
+            }
+            composerPinPatternSourceCenter();
+            const overlay = composerGetPatternOverlay();
+            overlay.replaceChildren();
+
+            const layout = composerComputePatternCopies(g, composerPatternSession.mode);
+            if (!layout.ok) {
+                if (composerStatus) composerStatus.textContent = layout.error;
+                return;
+            }
+
+            const srcW = parseFloat(g.dataset.srcW || 0);
+            const srcH = parseFloat(g.dataset.srcH || 0);
+            const s = parseFloat(g.dataset.objScale || 1);
+
+            layout.copies.forEach(({ tx, ty, rotation }) => {
+                const ghost = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+                composerCloneContentNodes(g, ghost);
+                ghost.setAttribute('transform', composerBuildTransform(tx, ty, s, rotation, srcW, srcH));
+                overlay.appendChild(ghost);
+            });
+
+            if (composerStatus && layout.message) {
+                composerStatus.textContent = layout.message + ' Adjust size/rotation or params, then Apply.';
+            }
+            composerUpdateSelectionVisuals();
+            composerUpdateScaleLabel();
+            composerUpdateRotationLabel();
+        }
+
+        function composerCancelPatternPreview(opts = {}) {
+            const { deselect = false } = opts;
+            if (!composerPatternSession) {
+                composerClosePatternPanelUI();
+                if (deselect) composerDeselectAll();
+                return;
+            }
+            const { source, snapshot } = composerPatternSession;
+            composerPatternSession = null;
+            composerClearPatternOverlay();
+            composerClosePatternPanelUI();
+            if (source && source.isConnected) {
+                composerRestorePatternSnapshot(source, snapshot);
+            }
+            if (deselect) {
+                composerSelected.forEach(g => {
+                    g.querySelectorAll('.selection-rect, .resize-handle, .rotate-handle, .rotate-handle-stem').forEach(el => el.remove());
+                });
+                composerSelected = [];
+            } else if (source && source.isConnected) {
+                if (!composerSelected.includes(source)) {
+                    composerSelected = [source];
+                }
+                composerUpdateSelectionVisuals();
+            }
+            composerUpdateScaleLabel();
+            composerUpdateRotationLabel();
+            composerUpdateStatus();
+        }
+
+        function composerTogglePatternPanel(mode) {
+            if (!composerPatternPanel) return;
+
+            // Toggle off current mode → cancel preview
+            if (composerPatternMode === mode && composerPatternPanel.classList.contains('open')) {
+                composerCancelPatternPreview();
+                return;
+            }
+
+            // Switch circular ↔ grid within an active session
+            if (composerPatternSession && composerPatternPanel.classList.contains('open')) {
+                composerPatternMode = mode;
+                composerPatternSession.mode = mode;
+                composerShowPatternPanelFields(mode);
+                if (mode === 'circular') {
+                    composerPatternInputs.resetRadiusTouched();
+                    composerPatternInputs.radiusField.input.value = String(
+                        composerSuggestRadius(composerPatternSession.source, parseInt(composerPatternInputs.countField.input.value, 10) || 5)
+                    );
+                }
+                composerRefreshPatternPreview();
+                return;
+            }
+
+            if (composerSelected.length !== 1) {
+                composerStatus.textContent = 'Select a single object first, then choose a pattern.';
+                return;
+            }
+
+            const g = composerSelected[0];
+            composerPatternMode = mode;
+            composerPatternSession = {
+                source: g,
+                mode,
+                snapshot: composerSnapshotPatternSource(g),
+            };
+            composerShowPatternPanelFields(mode);
+            if (mode === 'circular') {
+                composerPatternInputs.resetRadiusTouched();
+                composerPatternInputs.radiusField.input.value = String(
+                    composerSuggestRadius(g, parseInt(composerPatternInputs.countField.input.value, 10) || 5)
+                );
+            }
+            composerPatternPanel.classList.add('open');
+            composerRefreshPatternPreview();
+        }
+
+        function composerClosePatternPanel() {
+            composerCancelPatternPreview();
+        }
+
+        function composerApplyPattern() {
+            if (!composerPatternSession) {
+                composerStatus.textContent = 'Select a single object first, then choose a pattern.';
+                return;
+            }
+            const g = composerPatternSession.source;
+            if (!g.isConnected) {
+                composerCancelPatternPreview({ deselect: true });
+                return;
+            }
+
+            composerPinPatternSourceCenter();
+            const layout = composerComputePatternCopies(g, composerPatternSession.mode);
+            if (!layout.ok) {
+                composerStatus.textContent = layout.error;
+                return;
+            }
+
+            const created = [];
+            layout.copies.forEach(({ tx, ty, rotation }) => {
+                const copy = composerCloneObject(g);
+                copy.dataset.tx = tx;
+                copy.dataset.ty = ty;
+                copy.dataset.rotation = rotation;
+                composerApplyTransform(copy);
+                composerSvg.appendChild(copy);
+                created.push(copy);
+            });
+
+            // Commit: drop overlay/session without reverting source transforms.
+            composerPatternSession = null;
+            composerClearPatternOverlay();
+            composerClosePatternPanelUI();
+
+            requestAnimationFrame(() => created.forEach(composerSizeHoverRect));
+
+            // Select the whole pattern (original + copies).
+            composerSelected.forEach(el => {
+                el.querySelectorAll('.selection-rect, .resize-handle, .rotate-handle, .rotate-handle-stem').forEach(n => n.remove());
+            });
+            composerSelected = [];
+            composerSelectObject(g, false);
+            created.forEach(copy => composerSelectObject(copy, true));
+
+            const appliedMsg = layout.message
+                ? layout.message
+                    .replace('Circular preview:', 'Circular pattern created:')
+                    .replace('Grid preview:', 'Grid pattern created:')
+                : `Pattern created: ${created.length + 1} instances.`;
+            composerUpdateStatus();
+            composerStatus.textContent = appliedMsg;
+            composerScheduleCricutPreview();
+        }
+
+        // ── Alignment ──        // Returns the axis-aligned bounding box of the (possibly rotated)
+        // object frame in canvas coordinates.  x/y/w/h describe the AABB;
+        // offX/offY are the offsets from the translate origin (tx, ty) to the
+        // AABB origin, so callers can position the AABB by setting
+        // tx = targetX - offX (for unrotated objects offX/offY are 0 and this
+        // degenerates to the old tx-based behavior).
         function composerGetObjBounds(g) {
             const tx = parseFloat(g.dataset.tx || 0);
             const ty = parseFloat(g.dataset.ty || 0);
@@ -4955,69 +5830,79 @@
             const srcH = parseFloat(g.dataset.srcH || 0);
             const w = srcW * s;
             const h = srcH * s;
-            return { tx, ty, w, h };
+            const rot = composerGetRotation(g);
+
+            if (!rot) {
+                return { x: tx, y: ty, w, h, offX: 0, offY: 0 };
+            }
+
+            // Rotate the frame's corners around the object center and take the
+            // min/max to get the AABB.
+            const rad = rot * Math.PI / 180;
+            const cos = Math.cos(rad), sin = Math.sin(rad);
+            const cx = tx + w / 2, cy = ty + h / 2;
+            const corners = [[tx, ty], [tx + w, ty], [tx, ty + h], [tx + w, ty + h]];
+            let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+            corners.forEach(([px, py]) => {
+                const rx = cx + (px - cx) * cos - (py - cy) * sin;
+                const ry = cy + (px - cx) * sin + (py - cy) * cos;
+                minX = Math.min(minX, rx); maxX = Math.max(maxX, rx);
+                minY = Math.min(minY, ry); maxY = Math.max(maxY, ry);
+            });
+            return { x: minX, y: minY, w: maxX - minX, h: maxY - minY, offX: minX - tx, offY: minY - ty };
         }
 
         function composerAlign(mode) {
             if (composerSelected.length === 0) return;
+            if (composerIsPatternPreviewActive()) {
+                composerStatus.textContent = 'Finish or cancel the pattern preview before aligning.';
+                return;
+            }
 
             const bounds = composerSelected.map(g => composerGetObjBounds(g));
+
+            // Helpers that position an object's visual AABB (rotation-aware):
+            // setting the AABB origin means adjusting translate by the offset
+            // between the translate origin and the AABB origin.
+            const setBoundsX = (g, b, x) => { g.dataset.tx = x - b.offX; composerApplyTransform(g); };
+            const setBoundsY = (g, b, y) => { g.dataset.ty = y - b.offY; composerApplyTransform(g); };
 
             if (mode === 'canvas-center') {
                 composerSelected.forEach((g, i) => {
                     const b = bounds[i];
-                    g.dataset.tx = (COMPOSER_VB_W - b.w) / 2;
-                    g.dataset.ty = (COMPOSER_VB_H - b.h) / 2;
-                    composerApplyTransform(g);
+                    setBoundsX(g, b, (COMPOSER_VB_W - b.w) / 2);
+                    setBoundsY(g, b, (COMPOSER_VB_H - b.h) / 2);
                 });
             } else if (composerSelected.length >= 2) {
                 switch (mode) {
                     case 'left': {
-                        const minX = Math.min(...bounds.map(b => b.tx));
-                        composerSelected.forEach((g, i) => {
-                            g.dataset.tx = minX;
-                            composerApplyTransform(g);
-                        });
+                        const minX = Math.min(...bounds.map(b => b.x));
+                        composerSelected.forEach((g, i) => setBoundsX(g, bounds[i], minX));
                         break;
                     }
                     case 'right': {
-                        const maxRight = Math.max(...bounds.map(b => b.tx + b.w));
-                        composerSelected.forEach((g, i) => {
-                            g.dataset.tx = maxRight - bounds[i].w;
-                            composerApplyTransform(g);
-                        });
+                        const maxRight = Math.max(...bounds.map(b => b.x + b.w));
+                        composerSelected.forEach((g, i) => setBoundsX(g, bounds[i], maxRight - bounds[i].w));
                         break;
                     }
                     case 'center-h': {
-                        const avgCx = bounds.reduce((s, b) => s + b.tx + b.w / 2, 0) / bounds.length;
-                        composerSelected.forEach((g, i) => {
-                            g.dataset.tx = avgCx - bounds[i].w / 2;
-                            composerApplyTransform(g);
-                        });
+                        const avgCx = bounds.reduce((s, b) => s + b.x + b.w / 2, 0) / bounds.length;
+                        composerSelected.forEach((g, i) => setBoundsX(g, bounds[i], avgCx - bounds[i].w / 2));
                         break;
                     }
                     case 'top': {
-                        const minY = Math.min(...bounds.map(b => b.ty));
-                        composerSelected.forEach((g) => {
-                            g.dataset.ty = minY;
-                            composerApplyTransform(g);
-                        });
+                        const minY = Math.min(...bounds.map(b => b.y));
+                        composerSelected.forEach((g, i) => setBoundsY(g, bounds[i], minY));
                         break;
                     }
                     case 'bottom': {
-                        const maxBot = Math.max(...bounds.map(b => b.ty + b.h));
-                        composerSelected.forEach((g, i) => {
-                            g.dataset.ty = maxBot - bounds[i].h;
-                            composerApplyTransform(g);
-                        });
+                        const maxBot = Math.max(...bounds.map(b => b.y + b.h));
+                        composerSelected.forEach((g, i) => setBoundsY(g, bounds[i], maxBot - bounds[i].h));
                         break;
                     }
                     case 'center-v': {
-                        const avgCy = bounds.reduce((s, b) => s + b.ty + b.h / 2, 0) / bounds.length;
-                        composerSelected.forEach((g, i) => {
-                            g.dataset.ty = avgCy - bounds[i].h / 2;
-                            composerApplyTransform(g);
-                        });
+                        const avgCy = bounds.reduce((s, b) => s + b.y + b.h / 2, 0) / bounds.length;
+                        composerSelected.forEach((g, i) => setBoundsY(g, bounds[i], avgCy - bounds[i].h / 2));
                         break;
                     }
                 }
@@ -5026,14 +5911,13 @@
                 const b = bounds[0];
                 const g = composerSelected[0];
                 switch (mode) {
-                    case 'left':     g.dataset.tx = 0; break;
-                    case 'right':    g.dataset.tx = COMPOSER_VB_W - b.w; break;
-                    case 'center-h': g.dataset.tx = (COMPOSER_VB_W - b.w) / 2; break;
-                    case 'top':      g.dataset.ty = 0; break;
-                    case 'bottom':   g.dataset.ty = COMPOSER_VB_H - b.h; break;
-                    case 'center-v': g.dataset.ty = (COMPOSER_VB_H - b.h) / 2; break;
+                    case 'left':     setBoundsX(g, b, 0); break;
+                    case 'right':    setBoundsX(g, b, COMPOSER_VB_W - b.w); break;
+                    case 'center-h': setBoundsX(g, b, (COMPOSER_VB_W - b.w) / 2); break;
+                    case 'top':      setBoundsY(g, b, 0); break;
+                    case 'bottom':   setBoundsY(g, b, COMPOSER_VB_H - b.h); break;
+                    case 'center-v': setBoundsY(g, b, (COMPOSER_VB_H - b.h) / 2); break;
                 }
-                composerApplyTransform(g);
             }
 
             composerUpdateSelectionVisuals();
@@ -5043,12 +5927,22 @@
         // ── Remove / Clear ──
 
         function composerRemoveSelected() {
+            if (composerIsPatternPreviewActive()) {
+                composerClearPatternOverlay();
+                composerPatternSession = null;
+                composerClosePatternPanelUI();
+            }
             composerSelected.forEach(g => g.remove());
             composerSelected = [];
             composerUpdateStatus();
         }
 
         function composerClear() {
+            if (composerIsPatternPreviewActive()) {
+                composerClearPatternOverlay();
+                composerPatternSession = null;
+                composerClosePatternPanelUI();
+            }
             composerSvg.querySelectorAll('.composer-object').forEach(g => g.remove());
             composerSelected = [];
             composerNextId = 1;
@@ -5063,7 +5957,7 @@
             const s = parseFloat(g.dataset.objScale || 1);
 
             // Temporarily hide non-content rects for accurate bbox
-            const uiEls = g.querySelectorAll('.selection-rect, .hover-outline, .resize-handle');
+            const uiEls = g.querySelectorAll('.selection-rect, .hover-outline, .resize-handle, .rotate-handle, .rotate-handle-stem');
             uiEls.forEach(el => el.style.display = 'none');
 
             let box;
@@ -5071,17 +5965,43 @@
 
             uiEls.forEach(el => el.style.display = '');
 
-            return {
-                x1: tx + box.x * s,
-                y1: ty + box.y * s,
-                x2: tx + (box.x + box.width) * s,
-                y2: ty + (box.y + box.height) * s
-            };
+            const rot = composerGetRotation(g);
+            if (!rot) {
+                return {
+                    x1: tx + box.x * s,
+                    y1: ty + box.y * s,
+                    x2: tx + (box.x + box.width) * s,
+                    y2: ty + (box.y + box.height) * s
+                };
+            }
+
+            // Rotate the content bbox corners around the object's rotation
+            // pivot (its frame center) and take the extremes.
+            const srcW = parseFloat(g.dataset.srcW || 0);
+            const srcH = parseFloat(g.dataset.srcH || 0);
+            const cx = tx + (srcW * s) / 2;
+            const cy = ty + (srcH * s) / 2;
+            const rad = rot * Math.PI / 180;
+            const cos = Math.cos(rad), sin = Math.sin(rad);
+            const corners = [
+                [tx + box.x * s, ty + box.y * s],
+                [tx + (box.x + box.width) * s, ty + box.y * s],
+                [tx + box.x * s, ty + (box.y + box.height) * s],
+                [tx + (box.x + box.width) * s, ty + (box.y + box.height) * s],
+            ];
+            let x1 = Infinity, y1 = Infinity, x2 = -Infinity, y2 = -Infinity;
+            corners.forEach(([px, py]) => {
+                const rx = cx + (px - cx) * cos - (py - cy) * sin;
+                const ry = cy + (px - cx) * sin + (py - cy) * cos;
+                x1 = Math.min(x1, rx); x2 = Math.max(x2, rx);
+                y1 = Math.min(y1, ry); y2 = Math.max(y2, ry);
+            });
+            return { x1, y1, x2, y2 };
         }
 
         function composerSerializeGroupContent(g) {
             const serializer = new XMLSerializer();
-            const skip = ['selection-rect', 'hover-outline', 'resize-handle'];
+            const skip = ['selection-rect', 'hover-outline', 'resize-handle', 'rotate-handle', 'rotate-handle-stem'];
             let inner = '';
             Array.from(g.children).forEach(child => {
                 if (child.classList && skip.some(c => child.classList.contains(c))) return;
@@ -5091,6 +6011,9 @@
         }
 
         function composerMerge() {
+            if (composerIsPatternPreviewActive()) {
+                composerCancelPatternPreview();
+            }
             const objects = composerSvg.querySelectorAll('.composer-object');
             if (objects.length === 0) return;
 
@@ -5112,8 +6035,11 @@
                 const tx = parseFloat(g.dataset.tx || 0);
                 const ty = parseFloat(g.dataset.ty || 0);
                 const s = parseFloat(g.dataset.objScale || 1);
+                const rot = composerGetRotation(g);
+                const srcW = parseFloat(g.dataset.srcW || 0);
+                const srcH = parseFloat(g.dataset.srcH || 0);
                 const inner = composerSerializeGroupContent(g);
-                content += `<g transform="translate(${tx - minX}, ${ty - minY}) scale(${s})">${inner}</g>`;
+                content += `<g transform="${composerBuildTransform(tx - minX, ty - minY, s, rot, srcW, srcH)}">${inner}</g>`;
             });
 
             const mergedSvgStr = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${mergedW} ${mergedH}" width="${mergedW}" height="${mergedH}">${content}</svg>`;
@@ -5177,9 +6103,12 @@
                 const tx = parseFloat(g.dataset.tx || 0);
                 const ty = parseFloat(g.dataset.ty || 0);
                 const s = parseFloat(g.dataset.objScale || 1);
+                const rot = composerGetRotation(g);
+                const gSrcW = parseFloat(g.dataset.srcW || 0);
+                const gSrcH = parseFloat(g.dataset.srcH || 0);
                 const gWrap = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-                gWrap.setAttribute('transform', `translate(${(tx - minX) * upscale}, ${(ty - minY) * upscale}) scale(${s * upscale})`);
-                const skipCls = ['selection-rect', 'hover-outline', 'resize-handle'];
+                gWrap.setAttribute('transform', composerBuildTransform((tx - minX) * upscale, (ty - minY) * upscale, s * upscale, rot, gSrcW, gSrcH));
+                const skipCls = ['selection-rect', 'hover-outline', 'resize-handle', 'rotate-handle', 'rotate-handle-stem'];
                 Array.from(g.children).forEach(child => {
                     if (child.classList && skipCls.some(c => child.classList.contains(c))) return;
                     gWrap.appendChild(child.cloneNode(true));
