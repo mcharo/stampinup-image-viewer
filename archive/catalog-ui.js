@@ -161,6 +161,10 @@
     return `${url}${separator}v=${encodeURIComponent(version)}`;
   }
 
+  function viewerUrl(productId) {
+    return `../index.html?id=${encodeURIComponent(productId)}`;
+  }
+
   return {
     PAGE_SIZE,
     buildFacetCounts,
@@ -172,5 +176,6 @@
     nextBatchEnd,
     parseQuery,
     versionedUrl,
+    viewerUrl,
   };
 }));

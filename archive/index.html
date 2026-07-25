@@ -463,6 +463,30 @@
       flex-wrap: wrap;
     }
 
+    .modal-actions {
+      display: flex;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.375rem;
+      padding: 0.5rem 1rem;
+      border: 1px solid #e2e8f0;
+      border-radius: var(--border-radius);
+      background: #f1f5f9;
+      color: #334155;
+      font-size: 0.875rem;
+      font-weight: 500;
+      text-decoration: none;
+      cursor: pointer;
+      transition: background 0.12s;
+    }
+
+    .btn:hover { background: #e2e8f0; }
+
     .modal-state {
       display: flex;
       align-items: center;
@@ -677,6 +701,7 @@
         <div class="section-label">Detected Text</div>
         <pre class="full-text" id="modal-full-text"></pre>
       </div>
+      <div class="modal-actions" id="modal-actions"></div>
     </div>
   </div>
 </div>
@@ -696,7 +721,8 @@
     createShardLoader,
     filterAndSort,
     nextBatchEnd,
-    versionedUrl
+    versionedUrl,
+    viewerUrl
   } = window.ArchiveCatalog;
   const MANIFEST_URL = 'catalog-manifest.json';
 
@@ -1258,6 +1284,16 @@
       ftSection.style.display = 'none';
     }
 
+    // Actions
+    const actionsEl = document.getElementById('modal-actions');
+    actionsEl.innerHTML = '';
+    const viewerLink = document.createElement('a');
+    viewerLink.className = 'btn';
+    viewerLink.href = viewerUrl(product.product_id);
+    viewerLink.textContent = '🔍 Open in viewer';
+    viewerLink.target = '_blank';
+    viewerLink.rel = 'noopener';
+    actionsEl.appendChild(viewerLink);
   }
 
   function showModalLoading() {

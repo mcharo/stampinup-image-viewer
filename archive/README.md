@@ -166,6 +166,9 @@ directly to the original image. Published thumbnail URLs retain the stable
 `<product-id>.thumb.webp` object name and append the full stored thumbnail hash
 as `?v=<sha256>` so immutable browser caches refresh when the object changes.
 
+Each product modal ends with an "Open in viewer" link that opens the SVG viewer
+at `index.html?id=<product-id>` in a new tab, matching the catalog view.
+
 GitHub Pages serves these files as ordinary static assets under the repository's
 `archive/` path. The manifest version is appended to summary, search, and detail
 requests for cache busting. Generate and publish the data assets before the

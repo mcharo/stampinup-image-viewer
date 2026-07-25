@@ -13,6 +13,7 @@ const {
   filterAndSort,
   nextBatchEnd,
   versionedUrl,
+  viewerUrl,
 } = require('./catalog-ui.js');
 
 const ARCHIVE_DIR = __dirname;
@@ -216,6 +217,11 @@ test('versionedUrl appends an encoded manifest version', () => {
   assert.equal(versionedUrl('catalog.json?kind=search', 'v 1'), 'catalog.json?kind=search&v=v%201');
 });
 
+test('viewerUrl points at the parent viewer with an encoded product id', () => {
+  assert.equal(viewerUrl('167002'), '../index.html?id=167002');
+  assert.equal(viewerUrl('150691 o02'), '../index.html?id=150691%20o02');
+});
+
 class FakeClassList {
   constructor(element) {
     this.element = element;
@@ -256,6 +262,9 @@ class FakeElement {
     this.type = '';
     this.src = '';
     this.alt = '';
+    this.href = '';
+    this.target = '';
+    this.rel = '';
     this.loading = '';
     this.decoding = '';
     this._textContent = '';
@@ -350,6 +359,7 @@ const PAGE_ELEMENT_IDS = [
   'modal-title',
   'modal-close',
   'modal-imgs',
+  'modal-actions',
   'modal-meta',
   'modal-state',
   'modal-product-desc-section',
@@ -630,6 +640,35 @@ test('card prefers thumbnail, retries original once, and keeps modal and lightbo
   assert.equal(modalImage.src, originalUrl);
   modalFigure.click();
   assert.equal(elements['lightbox-img'].src, originalUrl);
+});
+
+test('modal offers a single viewer link that survives the detail render', async () => {
+  const product = makeSummary('167001');
+  const detailRequest = deferred();
+  const { fetch } = createCatalogFetch([product], {
+    details: () => detailRequest.promise,
+  });
+  const { elements } = bootPage(fetch);
+  await waitFor(() => cardNodes(elements).length === 1, 'page did not render viewer link fixture');
+
+  cardNodes(elements)[0].click();
+  const summaryLink = elements['modal-actions'].children[0];
+  assert.equal(elements['modal-actions'].children.length, 1);
+  assert.equal(summaryLink.tagName, 'A');
+  assert.equal(summaryLink.href, '../index.html?id=167001');
+  assert.equal(summaryLink.target, '_blank');
+  assert.equal(summaryLink.rel, 'noopener');
+
+  detailRequest.resolve(jsonResponse({
+    '167001': makeDetail(product, 'Detailed 167001'),
+  }));
+  await waitFor(
+    () => elements['modal-title'].textContent.includes('Detailed 167001'),
+    'modal detail did not render',
+  );
+
+  assert.equal(elements['modal-actions'].children.length, 1);
+  assert.equal(elements['modal-actions'].children[0].href, '../index.html?id=167001');
 });
 
 test('actual page loads deep search once and only applies the current query', async () => {
