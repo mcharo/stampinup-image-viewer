@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Stampin' Up Image Archive</title>
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%232563eb'/><path d='M8 10h16v2H8zm0 5h16v2H8zm0 5h10v2H8z' fill='white'/><circle cx='24' cy='22' r='4' fill='white'/><circle cx='24' cy='22' r='2.5' fill='%232563eb'/></svg>">
-  <script src="catalog-data.js"></script>
+  <script src="catalog-ui.js"></script>
   <style>
     :root {
       --primary-color: #2563eb;
@@ -142,12 +142,47 @@
       white-space: nowrap;
     }
 
+    .search-status {
+      flex-basis: 100%;
+      font-size: 0.82rem;
+      color: #64748b;
+    }
+
+    .search-status:empty { display: none; }
+
     /* ── Grid ── */
     .grid-container {
       padding: 1.25rem 1.5rem;
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
       gap: 1rem;
+    }
+
+    .grid-footer {
+      padding: 0 1.5rem 2rem;
+      text-align: center;
+    }
+
+    .grid-footer[hidden] { display: none; }
+
+    .load-more {
+      padding: 0.6rem 1.25rem;
+      border: 1px solid #cbd5e1;
+      border-radius: var(--border-radius);
+      background: white;
+      color: #334155;
+      font: inherit;
+      font-weight: 600;
+      cursor: pointer;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .load-more:hover { background: #f1f5f9; }
+
+    .load-more:focus-visible {
+      outline: none;
+      border-color: var(--primary-color);
+      box-shadow: 0 0 0 3px rgba(37,99,235,0.1);
     }
 
     /* ── Card ── */
@@ -428,6 +463,43 @@
       flex-wrap: wrap;
     }
 
+    .modal-state {
+      display: flex;
+      align-items: center;
+      gap: 0.625rem;
+      padding: 0.75rem;
+      border-radius: var(--border-radius);
+      background: #f8fafc;
+      color: #64748b;
+      font-size: 0.875rem;
+    }
+
+    .modal-state[hidden] { display: none; }
+
+    .modal-state--error {
+      color: #991b1b;
+      background: #fef2f2;
+    }
+
+    .modal-state .spinner {
+      width: 18px;
+      height: 18px;
+      border-width: 2px;
+      flex-shrink: 0;
+    }
+
+    .retry-button {
+      margin-left: auto;
+      padding: 0.35rem 0.7rem;
+      border: 1px solid currentColor;
+      border-radius: 6px;
+      background: white;
+      color: inherit;
+      font: inherit;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
     .meta-tag {
       background: #f1f5f9;
       border-radius: 4px;
@@ -551,6 +623,7 @@
     autocomplete="off"
     spellcheck="false"
   >
+  <span class="search-status" id="search-status" role="status" aria-live="polite"></span>
 </div>
 
 <!-- Filter bar -->
@@ -563,7 +636,7 @@
     <option value="desc">ID: high → low</option>
     <option value="asc">ID: low → high</option>
   </select>
-  <span class="result-count" id="result-count"></span>
+  <span class="result-count" id="result-count" aria-live="polite"></span>
 </div>
 
 <!-- Grid -->
@@ -573,9 +646,12 @@
     Loading catalog…
   </div>
 </div>
+<div class="grid-footer" id="grid-footer" hidden>
+  <button class="load-more" id="load-more" type="button" aria-controls="grid">Load more</button>
+</div>
 
 <!-- Modal -->
-<div class="modal-backdrop" id="modal-backdrop" role="dialog" aria-modal="true">
+<div class="modal-backdrop" id="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="modal-title">
   <div class="modal" id="modal">
     <div class="modal-header">
       <div class="modal-title" id="modal-title"></div>
@@ -584,6 +660,7 @@
     <div class="modal-body">
       <div class="modal-imgs" id="modal-imgs"></div>
       <div class="modal-meta" id="modal-meta"></div>
+      <div class="modal-state" id="modal-state" role="status" aria-live="polite" hidden></div>
       <div id="modal-product-desc-section" style="display:none">
         <div class="section-label">Product Details</div>
         <div class="desc-list" id="modal-product-descriptions"></div>
@@ -607,11 +684,21 @@
 <!-- Lightbox -->
 <div class="lightbox" id="lightbox">
   <button class="lightbox-close" id="lightbox-close" aria-label="Close">&#x2715;</button>
-  <img id="lightbox-img" src="" alt="">
+  <img id="lightbox-img" src="" alt="" decoding="async">
 </div>
 
 <script>
-  const DATA = window.ARCHIVE_CATALOG_DATA || { products: {} };
+  const {
+    PAGE_SIZE,
+    buildFacetCounts,
+    createCachedLoader,
+    createLatestRequestGate,
+    createShardLoader,
+    filterAndSort,
+    nextBatchEnd,
+    versionedUrl
+  } = window.ArchiveCatalog;
+  const MANIFEST_URL = 'catalog-manifest.json';
 
   const LANG_LABELS = {
     all: 'All',
@@ -630,179 +717,290 @@
     spanish: '🇪🇸'
   };
 
-  let products = Object.values(DATA.products || {});
+  let manifest = null;
+  let products = [];
+  let facetCounts = { languages: { all: 0 }, categories: { all: 0 }, statuses: { all: 0 } };
+  let filteredResults = [];
+  let visibleCount = 0;
   let activeLanguage = 'english';
   let activeCategory = 'all';
   let activeStatus = 'all';
   let searchQuery = '';
   let sortOrder = 'desc';
+  let deepSearchIndex = null;
+  let searchLoader = null;
+  let detailLoader = null;
   let debounceTimer = null;
+  let catalogLoadToken = 0;
+  let currentModalSummary = null;
+  const searchRequestGate = createLatestRequestGate();
+  const detailRequestGate = createLatestRequestGate();
 
   const filtersEl = document.getElementById('filters');
   const categoryFilterEl = document.getElementById('category-filter');
   const statusToggleEl = document.getElementById('status-toggle');
   const gridEl = document.getElementById('grid');
+  const gridFooterEl = document.getElementById('grid-footer');
+  const loadMoreEl = document.getElementById('load-more');
+  const resultCountEl = document.getElementById('result-count');
   const searchEl = document.getElementById('search');
+  const searchStatusEl = document.getElementById('search-status');
   const sortEl = document.getElementById('sort');
   const modalBackdrop = document.getElementById('modal-backdrop');
+  const modalStateEl = document.getElementById('modal-state');
 
-  // ── Init ────────────────────────────────────────────────────────────────
-  function init() {
+  // ── Catalog loading ─────────────────────────────────────────────────────
+  async function fetchJson(url, options) {
+    const response = await fetch(url, options);
+    if (!response.ok) throw new Error(`Request failed (${response.status})`);
+    return response.json();
+  }
+
+  function validateManifest(value) {
+    const required = ['version', 'updated_at', 'summary_url', 'search_url', 'details_url'];
+    if (!value || value.schema_version !== 1 || required.some(key => !value[key])) {
+      throw new Error('The catalog manifest is missing required fields.');
+    }
+    return value;
+  }
+
+  function showCatalogLoading() {
+    searchEl.disabled = true;
+    searchStatusEl.textContent = '';
+    document.getElementById('total-count').textContent = 'Loading catalog…';
+    resultCountEl.textContent = '';
+    filtersEl.innerHTML = '';
+    categoryFilterEl.style.display = 'none';
+    statusToggleEl.style.display = 'none';
+    gridFooterEl.hidden = true;
+    gridEl.innerHTML = '<div class="loading" style="grid-column:1/-1"><div class="spinner"></div>Loading catalog…</div>';
+  }
+
+  function showCatalogError(error) {
+    searchEl.disabled = true;
+    document.getElementById('total-count').textContent = 'Catalog unavailable';
+    resultCountEl.textContent = '';
+    gridFooterEl.hidden = true;
+    gridEl.innerHTML = '';
+
+    const state = document.createElement('div');
+    state.className = 'empty-state';
+    const icon = document.createElement('div');
+    icon.style.fontSize = '2rem';
+    icon.textContent = '⚠️';
+    const message = document.createElement('p');
+    message.textContent = `Failed to load the archive catalog. ${error.message}`;
+    const retry = document.createElement('button');
+    retry.type = 'button';
+    retry.className = 'load-more';
+    retry.style.marginTop = '1rem';
+    retry.textContent = 'Retry';
+    retry.addEventListener('click', loadCatalog);
+    state.append(icon, message, retry);
+    gridEl.appendChild(state);
+  }
+
+  async function loadCatalog() {
+    const loadToken = ++catalogLoadToken;
+    showCatalogLoading();
+    try {
+      const loadedManifest = validateManifest(
+        await fetchJson(MANIFEST_URL, { cache: 'no-cache' })
+      );
+      const summary = await fetchJson(
+        versionedUrl(loadedManifest.summary_url, loadedManifest.version)
+      );
+      if (!Array.isArray(summary)) throw new Error('The catalog summary is invalid.');
+      if (loadToken !== catalogLoadToken) return;
+
+      manifest = loadedManifest;
+      products = summary;
+      facetCounts = buildFacetCounts(products);
+      deepSearchIndex = null;
+      searchRequestGate.invalidate();
+      detailRequestGate.invalidate();
+      searchLoader = createCachedLoader(() => fetchJson(
+        versionedUrl(manifest.search_url, manifest.version)
+      ));
+      detailLoader = createShardLoader(shard => {
+        const baseUrl = manifest.details_url.endsWith('/')
+          ? manifest.details_url
+          : manifest.details_url + '/';
+        return fetchJson(versionedUrl(
+          `${baseUrl}${encodeURIComponent(shard)}.json`,
+          manifest.version
+        ));
+      });
+
+      initializeCatalogView();
+    } catch (error) {
+      if (loadToken === catalogLoadToken) showCatalogError(error);
+    }
+  }
+
+  function initializeCatalogView() {
     const total = products.length.toLocaleString();
-    const generated = DATA.updated_at ? ` · generated ${DATA.updated_at}` : '';
+    const generated = manifest.updated_at ? ` · generated ${manifest.updated_at}` : '';
     document.getElementById('total-count').textContent = `${total} products${generated}`;
+    searchEl.disabled = false;
 
     // Default to English only if any English products exist, else show all.
-    if (!countForLanguage('english')) activeLanguage = 'all';
+    activeLanguage = facetCounts.languages.english ? 'english' : 'all';
+    activeCategory = 'all';
+    activeStatus = 'all';
+    searchQuery = '';
+    searchEl.value = '';
+    searchStatusEl.textContent = '';
 
     renderFilters();
     renderCategoryFilter();
     renderStatusToggle();
-    render();
-  }
-
-  function countForLanguage(lang) {
-    return lang === 'all'
-      ? products.length
-      : products.filter(p => (p.language || 'english') === lang).length;
+    refreshResults();
   }
 
   function renderFilters() {
-    const langs = ['all', ...Array.from(new Set(products.map(p => p.language || 'english'))).sort()];
+    const langs = Object.keys(facetCounts.languages);
     filtersEl.innerHTML = '';
     for (const lang of langs) {
       const btn = document.createElement('button');
+      btn.type = 'button';
       btn.className = 'chip' + (lang === activeLanguage ? ' active' : '');
+      btn.setAttribute('aria-pressed', String(lang === activeLanguage));
       const flag = LANG_FLAGS[lang] ? LANG_FLAGS[lang] + ' ' : '';
-      btn.textContent = `${flag}${LANG_LABELS[lang] || lang} (${countForLanguage(lang)})`;
+      btn.textContent = `${flag}${LANG_LABELS[lang] || lang} (${facetCounts.languages[lang].toLocaleString()})`;
       btn.addEventListener('click', () => {
         activeLanguage = lang;
         renderFilters();
-        render();
+        refreshResults();
       });
       filtersEl.appendChild(btn);
     }
   }
 
-  function countForCategory(cat) {
-    return cat === 'all'
-      ? products.length
-      : products.filter(p => (p.category || '') === cat).length;
-  }
-
-  function countForStatus(status) {
-    return status === 'all'
-      ? products.length
-      : products.filter(p => (p.status || '').toLowerCase() === status).length;
-  }
-
   function renderCategoryFilter() {
-    const categories = Array.from(new Set(products.map(p => p.category).filter(Boolean))).sort();
+    const categories = Object.keys(facetCounts.categories).filter(category => category !== 'all');
     if (!categories.length) {
       categoryFilterEl.style.display = 'none';
       return;
     }
+    categoryFilterEl.style.display = '';
     categoryFilterEl.innerHTML = '';
     const allOpt = document.createElement('option');
     allOpt.value = 'all';
-    allOpt.textContent = `All categories (${countForCategory('all').toLocaleString()})`;
+    allOpt.textContent = `All categories (${facetCounts.categories.all.toLocaleString()})`;
     categoryFilterEl.appendChild(allOpt);
     for (const cat of categories) {
       const opt = document.createElement('option');
       opt.value = cat;
-      opt.textContent = `${cat} (${countForCategory(cat).toLocaleString()})`;
+      opt.textContent = `${cat} (${facetCounts.categories[cat].toLocaleString()})`;
       categoryFilterEl.appendChild(opt);
     }
     categoryFilterEl.value = activeCategory;
   }
 
   function renderStatusToggle() {
-    if (!products.some(p => p.status)) {
+    const statuses = Object.keys(facetCounts.statuses).filter(status => status !== 'all');
+    if (!statuses.length) {
       statusToggleEl.style.display = 'none';
       return;
     }
-    const options = [
-      { value: 'all', label: 'All' },
-      { value: 'current', label: 'Current' },
-      { value: 'retired', label: 'Retired' }
-    ];
-    if (products.some(p => (p.status || '').toLowerCase() === 'unknown')) {
-      options.push({ value: 'unknown', label: 'Unknown' });
-    }
+    statusToggleEl.style.display = '';
+    const options = ['all', ...statuses];
     statusToggleEl.innerHTML = '';
-    for (const opt of options) {
+    for (const status of options) {
       const btn = document.createElement('button');
       btn.type = 'button';
-      btn.className = 'chip' + (opt.value === activeStatus ? ' active' : '');
-      btn.textContent = opt.value === 'all'
-        ? opt.label
-        : `${opt.label} (${countForStatus(opt.value).toLocaleString()})`;
+      btn.className = 'chip' + (status === activeStatus ? ' active' : '');
+      btn.setAttribute('aria-pressed', String(status === activeStatus));
+      const label = status === 'all'
+        ? 'All'
+        : status.charAt(0).toUpperCase() + status.slice(1);
+      btn.textContent = `${label} (${facetCounts.statuses[status].toLocaleString()})`;
       btn.addEventListener('click', () => {
-        activeStatus = opt.value;
+        activeStatus = status;
         renderStatusToggle();
-        render();
+        refreshResults();
       });
       statusToggleEl.appendChild(btn);
     }
   }
 
   // ── Filtering & searching ─────────────────────────────────────────────────
-  function parseQuery(value) {
-    const terms = [];
-    const re = /"([^"]+)"|(\S+)/g;
-    let m;
-    while ((m = re.exec(value.toLowerCase())) !== null) {
-      terms.push(m[1] !== undefined ? m[1] : m[2]);
+  function currentFilterState() {
+    return {
+      language: activeLanguage,
+      category: activeCategory,
+      status: activeStatus,
+      query: searchQuery,
+      sortOrder
+    };
+  }
+
+  async function updateSearch(value) {
+    searchQuery = value.trim();
+    const requestToken = searchRequestGate.begin();
+    refreshResults();
+
+    if (!searchQuery) {
+      searchStatusEl.textContent = '';
+      searchEl.removeAttribute('aria-busy');
+      return;
     }
-    return terms;
-  }
-
-  function buildSearchText(product) {
-    return [
-      product.product_id,
-      product.language,
-      product.name,
-      product.category,
-      product.status,
-      ...(product.tags || []),
-      ...(product.images || []).flatMap(img => [img.filename, img.description, img.full_text]),
-      ...(product.descriptions || []).map(desc => desc.text)
-    ].filter(Boolean).join(' ').toLowerCase();
-  }
-
-  function filteredProducts() {
-    const terms = parseQuery(searchQuery);
-    const results = products.filter(product => {
-      if (activeLanguage !== 'all' && (product.language || 'english') !== activeLanguage) return false;
-      if (activeCategory !== 'all' && (product.category || '') !== activeCategory) return false;
-      if (activeStatus !== 'all' && (product.status || '').toLowerCase() !== activeStatus) return false;
-      if (!terms.length) return true;
-      const haystack = product.search_text || buildSearchText(product);
-      return terms.every(term => haystack.includes(term));
-    });
-
-    const direction = sortOrder === 'asc' ? 1 : -1;
-    results.sort((a, b) => (Number(a.product_id) - Number(b.product_id)) * direction);
-    return results;
-  }
-
-  // ── Render grid ─────────────────────────────────────────────────────────
-  function render() {
-    const results = filteredProducts();
-    const countEl = document.getElementById('result-count');
-    countEl.textContent = results.length === products.length
-      ? products.length.toLocaleString() + ' results'
-      : results.length.toLocaleString() + ' of ' + products.length.toLocaleString();
-
-    if (!results.length) {
-      gridEl.innerHTML = '<div class="empty-state"><div style="font-size:2rem">🔍</div><p>No products match this filter.</p></div>';
+    if (deepSearchIndex) {
+      searchStatusEl.textContent = '';
+      searchEl.removeAttribute('aria-busy');
       return;
     }
 
-    const fragment = document.createDocumentFragment();
-    for (const product of results) fragment.appendChild(makeCard(product));
+    searchEl.setAttribute('aria-busy', 'true');
+    searchStatusEl.textContent = 'Loading full-text search… Showing matches from summary fields.';
+    try {
+      const loadedIndex = await searchLoader();
+      if (!searchRequestGate.isCurrent(requestToken) || searchQuery !== value.trim()) return;
+      deepSearchIndex = loadedIndex;
+      searchStatusEl.textContent = '';
+      searchEl.removeAttribute('aria-busy');
+      refreshResults();
+    } catch (error) {
+      if (!searchRequestGate.isCurrent(requestToken)) return;
+      searchEl.removeAttribute('aria-busy');
+      searchStatusEl.textContent = 'Full-text search could not load. Showing matches from summary fields only.';
+    }
+  }
+
+  // ── Render grid ─────────────────────────────────────────────────────────
+  function refreshResults() {
+    filteredResults = filterAndSort(products, currentFilterState(), deepSearchIndex);
+    visibleCount = Math.min(PAGE_SIZE, filteredResults.length);
     gridEl.innerHTML = '';
+
+    if (!filteredResults.length) {
+      gridEl.innerHTML = '<div class="empty-state"><div style="font-size:2rem">🔍</div><p>No products match this filter.</p></div>';
+    } else {
+      appendCards(0, visibleCount);
+    }
+    updateResultCount();
+  }
+
+  function appendCards(start, end) {
+    const fragment = document.createDocumentFragment();
+    for (const product of filteredResults.slice(start, end)) {
+      fragment.appendChild(makeCard(product));
+    }
     gridEl.appendChild(fragment);
+  }
+
+  function updateResultCount() {
+    resultCountEl.textContent =
+      `Showing ${visibleCount.toLocaleString()} of ${filteredResults.length.toLocaleString()} results`;
+    gridFooterEl.hidden = visibleCount >= filteredResults.length;
+  }
+
+  function loadMoreResults() {
+    const nextCount = nextBatchEnd(visibleCount, filteredResults.length);
+    appendCards(visibleCount, nextCount);
+    visibleCount = nextCount;
+    updateResultCount();
   }
 
   function firstDescription(product) {
@@ -810,13 +1008,12 @@
   }
 
   function productDisplayName(product) {
-    return product.name || firstDescription(product) || 'No description yet';
+    return product.display_name || product.name || firstDescription(product) || 'No description yet';
   }
 
   function makeCard(product) {
     const lang = product.language || 'english';
     const flag = LANG_FLAGS[lang] || '';
-    const description = firstDescription(product);
     const displayName = productDisplayName(product);
 
     const card = document.createElement('button');
@@ -831,9 +1028,20 @@
       const img = document.createElement('img');
       img.className = 'card-img';
       img.loading = 'lazy';
+      img.decoding = 'async';
       img.alt = displayName || ('Product ' + product.product_id);
-      img.src = image.b2_url;
-      img.onerror = () => { imgWrap.innerHTML = '<div class="card-img-placeholder">🖼️</div>'; };
+      const originalUrl = image.b2_url;
+      const thumbnailUrl = image.thumbnail_url;
+      let triedOriginal = !thumbnailUrl || thumbnailUrl === originalUrl;
+      img.src = thumbnailUrl || originalUrl;
+      img.onerror = () => {
+        if (!triedOriginal) {
+          triedOriginal = true;
+          img.src = originalUrl;
+          return;
+        }
+        imgWrap.innerHTML = '<div class="card-img-placeholder">🖼️</div>';
+      };
       imgWrap.appendChild(img);
     } else {
       imgWrap.innerHTML = '<div class="card-img-placeholder">🖼️</div>';
@@ -883,7 +1091,9 @@
       meta.appendChild(langEl);
     }
 
-    const imgCount = (product.images || []).length;
+    const imgCount = product.image_count !== undefined
+      ? product.image_count
+      : (product.images || []).length;
     if (imgCount > 1) {
       const countBadge = document.createElement('span');
       countBadge.className = 'img-count';
@@ -908,18 +1118,32 @@
   }
 
   // ── Modal ─────────────────────────────────────────────────────────────────
-  function openModal(product) {
+  function modalImagesFor(product) {
+    if (Array.isArray(product.images)) return product.images;
+    if (product.primary_image && product.primary_image.b2_url) {
+      return [{
+        image_id: product.product_id,
+        b2_url: product.primary_image.b2_url
+      }];
+    }
+    return [];
+  }
+
+  function renderModalProduct(product) {
     const lang = product.language || 'english';
     const flag = LANG_FLAGS[lang] || '';
+    const displayName = productDisplayName(product);
 
-    document.getElementById('modal-title').textContent = product.name
-      ? product.name + ' #' + product.product_id
-      : 'Product ' + product.product_id;
+    document.getElementById('modal-title').textContent =
+      displayName === 'No description yet'
+        ? 'Product ' + product.product_id
+        : displayName + ' #' + product.product_id;
 
     // Images
     const imgsEl = document.getElementById('modal-imgs');
     imgsEl.innerHTML = '';
-    for (const image of product.images || []) {
+    const images = modalImagesFor(product);
+    for (const image of images) {
       const wrap = document.createElement('div');
 
       const figure = document.createElement('div');
@@ -927,14 +1151,19 @@
       const img = document.createElement('img');
       img.className = 'modal-img';
       img.loading = 'lazy';
-      img.alt = image.filename || '';
+      img.decoding = 'async';
+      img.alt = image.filename || displayName;
       img.src = image.b2_url;
+      let imageAvailable = true;
       img.onerror = () => {
+        imageAvailable = false;
         figure.textContent = '—';
         figure.style.color = '#cbd5e1';
         figure.style.cursor = 'default';
       };
-      figure.addEventListener('click', () => openLightbox(img.src, image.filename || ''));
+      figure.addEventListener('click', () => {
+        if (imageAvailable) openLightbox(image.b2_url, image.filename || displayName);
+      });
       figure.appendChild(img);
 
       const label = document.createElement('div');
@@ -951,7 +1180,8 @@
     metaEl.innerHTML = '';
     addMetaTag(metaEl, '#' + product.product_id);
     addMetaTag(metaEl, (flag ? flag + ' ' : '') + (LANG_LABELS[lang] || lang));
-    addMetaTag(metaEl, (product.images || []).length + ' image' + ((product.images || []).length === 1 ? '' : 's'));
+    const imageCount = product.image_count !== undefined ? product.image_count : images.length;
+    addMetaTag(metaEl, imageCount + ' image' + (imageCount === 1 ? '' : 's'));
     if (product.category) addMetaTag(metaEl, product.category);
     if (product.status) addMetaTag(metaEl, product.status);
 
@@ -1028,8 +1258,79 @@
       ftSection.style.display = 'none';
     }
 
+  }
+
+  function showModalLoading() {
+    modalStateEl.hidden = false;
+    modalStateEl.className = 'modal-state';
+    modalStateEl.innerHTML = '';
+    const spinner = document.createElement('span');
+    spinner.className = 'spinner';
+    spinner.setAttribute('aria-hidden', 'true');
+    const message = document.createElement('span');
+    message.textContent = 'Loading full product details…';
+    modalStateEl.append(spinner, message);
+  }
+
+  function showModalError(summary) {
+    modalStateEl.hidden = false;
+    modalStateEl.className = 'modal-state modal-state--error';
+    modalStateEl.innerHTML = '';
+    const message = document.createElement('span');
+    message.textContent = 'Full product details could not be loaded.';
+    const retry = document.createElement('button');
+    retry.type = 'button';
+    retry.className = 'retry-button';
+    retry.textContent = 'Retry';
+    retry.addEventListener('click', () => {
+      if (!currentModalSummary || currentModalSummary.product_id !== summary.product_id) return;
+      const requestToken = detailRequestGate.begin();
+      showModalLoading();
+      loadModalDetail(summary, requestToken, true);
+    });
+    modalStateEl.append(message, retry);
+  }
+
+  function hideModalState() {
+    modalStateEl.hidden = true;
+    modalStateEl.className = 'modal-state';
+    modalStateEl.innerHTML = '';
+  }
+
+  async function loadModalDetail(summary, requestToken, forceRetry = false) {
+    try {
+      if (!summary.detail_shard) throw new Error('Product detail shard is missing.');
+      const shard = forceRetry
+        ? await detailLoader.retry(summary.detail_shard)
+        : await detailLoader.load(summary.detail_shard);
+      if (
+        !detailRequestGate.isCurrent(requestToken) ||
+        !currentModalSummary ||
+        currentModalSummary.product_id !== summary.product_id
+      ) return;
+
+      const detail = shard[summary.product_id];
+      if (!detail) throw new Error('Product details are missing from the shard.');
+      renderModalProduct(detail);
+      hideModalState();
+    } catch (error) {
+      if (
+        !detailRequestGate.isCurrent(requestToken) ||
+        !currentModalSummary ||
+        currentModalSummary.product_id !== summary.product_id
+      ) return;
+      showModalError(summary);
+    }
+  }
+
+  function openModal(summary) {
+    currentModalSummary = summary;
+    const requestToken = detailRequestGate.begin();
+    renderModalProduct(summary);
+    showModalLoading();
     modalBackdrop.classList.add('open');
     document.body.style.overflow = 'hidden';
+    loadModalDetail(summary, requestToken);
   }
 
   function addMetaTag(parent, text) {
@@ -1047,6 +1348,8 @@
   }
 
   function closeModal() {
+    detailRequestGate.invalidate();
+    currentModalSummary = null;
     modalBackdrop.classList.remove('open');
     document.body.style.overflow = '';
   }
@@ -1084,30 +1387,27 @@
 
   searchEl.addEventListener('input', e => {
     clearTimeout(debounceTimer);
+    searchRequestGate.invalidate();
+    const value = e.target.value;
     debounceTimer = setTimeout(() => {
-      searchQuery = e.target.value.trim();
-      render();
+      updateSearch(value);
     }, 150);
   });
 
   categoryFilterEl.addEventListener('change', e => {
     activeCategory = e.target.value;
-    render();
+    refreshResults();
   });
 
   sortEl.value = sortOrder;
   sortEl.addEventListener('change', e => {
     sortOrder = e.target.value;
-    render();
+    refreshResults();
   });
+  loadMoreEl.addEventListener('click', loadMoreResults);
 
   // ── Boot ────────────────────────────────────────────────────────────────
-  try {
-    init();
-  } catch (err) {
-    gridEl.innerHTML =
-      '<div class="empty-state"><div style="font-size:2rem">⚠️</div><p>Failed to load catalog: ' + err.message + '</p></div>';
-  }
+  loadCatalog();
 </script>
 </body>
 </html>

@@ -1,8 +1,9 @@
 # Image Archive
 
 Archive Stampin' Up CDN product images by explicit product ID. This tool is
-generic: it downloads product images as-is and does not convert SVGs, update the
-browser catalog, or scrape Stampin' Up product pages.
+generic: it downloads product images as-is and does not convert SVGs or scrape
+Stampin' Up product pages. It can also generate the static JSON assets used by
+the archive catalog.
 
 ## Usage
 
@@ -27,7 +28,7 @@ uv run --project archive python archive/archive_images.py \
   --end-id 166100
 ```
 
-Ranges are capped at 500 product IDs per run to keep CDN access bounded.
+Ranges are capped at 10,000 product IDs per run to keep CDN access bounded.
 
 The default extension is `png`. Use `--extension jpg` to fetch JPG assets.
 
@@ -63,6 +64,7 @@ directory:
 archive/output/166635/
   166635.png
   166635o01.png
+  166635.thumb.webp
   index.json
 ```
 
@@ -72,6 +74,14 @@ top-level `language` and `tags` fields. `language` defaults to `english` and is
 updated when any image detects non-English text. Each image entry includes
 `full_text`, which stores only text directly visible in that image and may be an
 empty string.
+
+Normal archive runs generate or refresh a WebP thumbnail for the primary image.
+The thumbnail is at most 512 by 512 pixels and is named
+`<product-id>.thumb.webp`. Its primary-image entry in `index.json` stores
+`thumbnail_filename`, `thumbnail_width`, `thumbnail_height`,
+`thumbnail_bytes`, `thumbnail_sha256`, and `thumbnail_source_sha256`. Suffix
+images do not get card thumbnails. A thumbnail error is reported with `--debug`
+but does not abort the archive run.
 
 The output root also contains `scan-index.json`, which tracks scanned product
 IDs separately as `seen` and `missing`, plus compressed ranges for scanned,
@@ -126,25 +136,167 @@ entries that already have descriptions.
 
 ## Catalog View
 
-The archive catalog view lives at `archive/index.html`. It reads
-`archive/catalog-data.js`, filters by language with English as the
-default, searches product IDs, tags, descriptions, and per-image `full_text`, and
-lazy-loads B2 image links only.
+The generated catalog is a static site rooted at `archive/`:
 
-The default B2 base URL is `https://stamps.charo.fun/archive/`.
-Regenerate the catalog data from local output when the archive run is at a safe
-point:
+```text
+archive/
+  index.html
+  catalog-ui.js
+  catalog-manifest.json
+  catalog-summary.json
+  catalog-search.json
+  catalog-details/
+    100.json
+    101.json
+    ...
+```
+
+`catalog-manifest.json` contains the schema version, generation version, and
+relative asset URLs. The page fetches it without a browser cache, then loads the
+thin `catalog-summary.json` needed for the product cards. Cards are rendered in
+batches of 96. The larger `catalog-search.json` deep-search index is fetched
+only after the first non-empty search. Complete product records are grouped into
+detail shards by the first three characters of the product ID; a shard is
+fetched and cached only when a product modal needs it.
+
+Card images prefer `thumbnail_url` and retry the original `b2_url` if the
+thumbnail cannot load. Catalog generation omits `thumbnail_url` when the local
+primary-image index has no thumbnail metadata, so older products fall back
+directly to the original image. Published thumbnail URLs retain the stable
+`<product-id>.thumb.webp` object name and append the full stored thumbnail hash
+as `?v=<sha256>` so immutable browser caches refresh when the object changes.
+
+GitHub Pages serves these files as ordinary static assets under the repository's
+`archive/` path. The manifest version is appended to summary, search, and detail
+requests for cache busting. Generate and publish the data assets before the
+manifest; the generator writes the manifest last. No server-side application or
+database is required.
+
+The catalog now uses `fetch()`, so opening `archive/index.html` through a
+`file://` URL is unsupported. Serve the repository over HTTP from its root:
+
+```bash
+python3 -m http.server 8000
+```
+
+Then open <http://localhost:8000/archive/>.
+
+### Generate catalog assets
+
+The default B2 base URL is `https://stamps.charo.fun/archive/`. Regenerate the
+catalog from local output with the merged MYSS metadata that is available in
+this repository:
 
 ```bash
 uv run --project archive python archive/archive_images.py \
-  --build-catalog-data \
+  --build-catalog-assets \
   --output archive/output \
-  --catalog-data archive/catalog-data.js \
-  --b2-base-url https://stamps.charo.fun/archive/
+  --catalog-output-dir archive \
+  --b2-base-url https://stamps.charo.fun/archive/ \
+  --myss-metadata myss-scraper/myss-products-with-details-merged.jsonl
 ```
+
+Catalog generation reads local indexes and does not make CDN, B2, or metadata
+site requests. Optional metadata inputs are:
+
+- `--myss-metadata PATH` for MYSS JSONL records.
+- `--official-metadata PATH` for official Stampin' Up JSONL records.
+- `--add-metadata PATH` for other JSONL records; this option is repeatable, and
+  the first matching additional record wins.
+
+The older `--build-catalog-data` flag remains as a compatibility alias for
+`--build-catalog-assets`. New commands should use `--build-catalog-assets` and
+`--catalog-output-dir`.
+
+## Thumbnail Backfill to B2 S3
+
+`archive/archive_thumbnails.py` backfills primary-image thumbnails and uploads
+them through Backblaze B2's S3-compatible API. It processes each product
+independently, continues after per-product errors, and returns a nonzero status
+when any product fails. Re-running the full command is resumable: current local
+thumbnails and remote objects whose `source-sha256` metadata matches are
+skipped.
+
+The script uses boto3's standard AWS credential chain. For a one-off shell,
+export the Backblaze application key ID and application key:
+
+```bash
+export AWS_ACCESS_KEY_ID='<Backblaze application key ID>'
+export AWS_SECRET_ACCESS_KEY='<Backblaze application key>'
+export B2_S3_ENDPOINT='https://s3.<region>.backblazeb2.com'
+export B2_S3_BUCKET='stampinup-full-backup'
+```
+
+Alternatively, store the credentials in the standard AWS shared credentials
+file outside the repository and select it with `AWS_PROFILE`. Never put keys in
+tracked files, shell scripts, command arguments, or documentation.
+
+Use product `167002` for a read-only single-product check:
+
+```bash
+uv run --project archive python archive/archive_thumbnails.py \
+  --endpoint-url "$B2_S3_ENDPOINT" \
+  --bucket "$B2_S3_BUCKET" \
+  --key-prefix archive \
+  --output-root archive/output \
+  --product-id 167002 \
+  --dry-run
+```
+
+After checking the dry-run summary, upload that one canary:
+
+```bash
+uv run --project archive python archive/archive_thumbnails.py \
+  --endpoint-url "$B2_S3_ENDPOINT" \
+  --bucket "$B2_S3_BUCKET" \
+  --key-prefix archive \
+  --output-root archive/output \
+  --product-id 167002
+```
+
+Then run the resumable full backfill:
+
+```bash
+uv run --project archive python archive/archive_thumbnails.py \
+  --endpoint-url "$B2_S3_ENDPOINT" \
+  --bucket "$B2_S3_BUCKET" \
+  --key-prefix archive \
+  --output-root archive/output
+```
+
+`--dry-run` performs no local or remote writes, but it still checks B2 and
+therefore requires working endpoint and credentials. The canary and full runs
+write thumbnail files and metadata to local output as well as uploading the
+WebP objects.
+
+The normal rollout order is:
+
+1. Run the archive job; new and revisited primary images get local thumbnails.
+2. Run the thumbnail dry-run, canary upload, and resumable full B2 backfill.
+3. Regenerate catalog assets after thumbnail metadata has been written.
+4. Run the tests and serve `archive/` locally over HTTP.
+5. Publish the archive site only after those checks pass.
 
 ## Tests
 
+Run all archive Python tests:
+
 ```bash
-uv run --project archive python -m unittest archive/test_archive_images.py
+uv run --project archive python -m unittest discover -s archive -p 'test_*.py'
+```
+
+Run the Node archive UI tests:
+
+```bash
+node --test archive/test_catalog_ui.js
+```
+
+Syntax, lockfile, and whitespace checks:
+
+```bash
+uv run --project archive python -m py_compile archive/*.py
+node --check archive/catalog-ui.js
+node --check archive/test_catalog_ui.js
+uv lock --project archive --check
+git diff --check
 ```

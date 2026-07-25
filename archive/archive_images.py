@@ -16,22 +16,26 @@ import os
 import random
 import shutil
 import sys
+import tempfile
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 from pathlib import Path
 from typing import Callable, Iterable, Mapping
+from urllib.parse import urlencode
 
 import anthropic  # pyright: ignore[reportMissingImports]
 from PIL import Image, ImageOps  # pyright: ignore[reportMissingImports]
 import requests  # pyright: ignore[reportMissingModuleSource]
 from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponential  # pyright: ignore[reportMissingImports]
 
+from archive_thumbnails import THUMBNAIL_METADATA_KEYS, create_thumbnail
+
 BASE_URL = "https://res.cloudinary.com/stampin-up/image/upload/prod/images/default-source/product-image"
 DEFAULT_MODEL = "claude-haiku-4-5-20251001"
 DEFAULT_OUTPUT_ROOT = Path(__file__).parent / "output"
-DEFAULT_ARCHIVE_CATALOG_DATA = Path(__file__).parent / "catalog-data.js"
+DEFAULT_CATALOG_OUTPUT_DIR = Path(__file__).parent
 DEFAULT_B2_BASE_URL = "https://stamps.charo.fun/archive/"
 VALID_EXTENSIONS = {"png", "jpg"}
 MAX_RANGE_PRODUCT_IDS = 10000
@@ -364,10 +368,123 @@ def load_additional_metadata(paths: Iterable[Path]) -> dict[str, dict]:
     return metadata
 
 
-def write_archive_catalog_data(catalog_data_path: Path, catalog: dict) -> None:
-    catalog_data_path.parent.mkdir(parents=True, exist_ok=True)
-    payload = json.dumps(catalog, separators=(",", ":"))
-    catalog_data_path.write_text(f"window.ARCHIVE_CATALOG_DATA = {payload};\n", encoding="utf-8")
+def write_archive_catalog_assets(catalog_output_dir: Path, catalog: dict) -> dict:
+    catalog_output_dir.mkdir(parents=True, exist_ok=True)
+    details_dir = catalog_output_dir / "catalog-details"
+    details_dir.mkdir(parents=True, exist_ok=True)
+
+    summary, search, detail_shards = _build_catalog_browser_assets(catalog)
+    version = str(catalog["updated_at"])
+    manifest = {
+        "schema_version": 1,
+        "version": version,
+        "updated_at": version,
+        "summary_url": "catalog-summary.json",
+        "search_url": "catalog-search.json",
+        "details_url": "catalog-details/",
+    }
+
+    _atomic_write_json(catalog_output_dir / "catalog-summary.json", summary)
+    _atomic_write_json(catalog_output_dir / "catalog-search.json", search)
+    for shard, products in sorted(detail_shards.items()):
+        _atomic_write_json(details_dir / f"{shard}.json", products)
+
+    expected_shard_filenames = {f"{shard}.json" for shard in detail_shards}
+    for shard_path in details_dir.glob("*.json"):
+        if shard_path.name not in expected_shard_filenames:
+            shard_path.unlink()
+
+    _atomic_write_json(catalog_output_dir / "catalog-manifest.json", manifest)
+
+    return manifest
+
+
+def _build_catalog_browser_assets(catalog: dict) -> tuple[list[dict], dict[str, str], dict[str, dict]]:
+    products = catalog.get("products") or {}
+    summary = []
+    search = {}
+    detail_shards: dict[str, dict] = {}
+
+    for product_id in _sorted_product_ids(products):
+        product = products[product_id]
+        shard = product_id[:3]
+        summary.append(_catalog_summary_product(product, shard))
+        search[product_id] = _catalog_deep_search_text(product)
+        detail_shards.setdefault(shard, {})[product_id] = product
+
+    return summary, search, detail_shards
+
+
+def _catalog_summary_product(product: dict, detail_shard: str) -> dict:
+    images = product.get("images") or []
+    primary_source = images[0]
+    primary_image = {"b2_url": primary_source["b2_url"]}
+    if primary_source.get("thumbnail_url"):
+        primary_image["thumbnail_url"] = primary_source["thumbnail_url"]
+
+    name = _clean_metadata_value(product.get("name"))
+    display_name = name or next(
+        (
+            description
+            for image in images
+            if (description := _clean_metadata_value(image.get("description")))
+        ),
+        "No description yet",
+    )
+    summary_product = {
+        "product_id": product["product_id"],
+        "language": product.get("language") or "english",
+        "display_name": display_name,
+        "tags": product.get("tags") or [],
+        "image_count": len(images),
+        "primary_image": primary_image,
+        "detail_shard": detail_shard,
+    }
+    if name:
+        summary_product["name"] = name
+    for key in ("category", "status"):
+        value = _clean_metadata_value(product.get(key))
+        if value:
+            summary_product[key] = value
+    return summary_product
+
+
+def _catalog_deep_search_text(product: dict) -> str:
+    parts = []
+    for image in product.get("images") or []:
+        parts.extend([
+            image.get("filename"),
+            image.get("description"),
+            image.get("full_text"),
+        ])
+    parts.extend(
+        description.get("text")
+        for description in product.get("descriptions") or []
+    )
+    return " ".join(
+        _clean_metadata_value(part)
+        for part in parts
+        if _clean_metadata_value(part)
+    ).lower()
+
+
+def _atomic_write_json(path: Path, data) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    file_descriptor, temporary_name = tempfile.mkstemp(
+        dir=path.parent,
+        prefix=f".{path.name}.",
+        suffix=".tmp",
+    )
+    temporary_path = Path(temporary_name)
+    try:
+        with os.fdopen(file_descriptor, "w", encoding="utf-8") as f:
+            json.dump(data, f, separators=(",", ":"), sort_keys=True)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(temporary_path, path)
+    except BaseException:
+        temporary_path.unlink(missing_ok=True)
+        raise
 
 
 def describe_existing_products(
@@ -521,6 +638,14 @@ def archive_product(
                     preserve_downloaded_at=True,
                 )
                 result.skipped.append(image_id)
+                _maybe_update_primary_thumbnail(
+                    index,
+                    product_id,
+                    image_id,
+                    product_dir,
+                    image_bytes,
+                    debug_logger,
+                )
                 if describe:
                     _debug(debug_logger, product_id, f"describing {image_path.name}")
                 _maybe_describe(index, image_id, image_path, clean_extension, describe, force_descriptions, model, describer, now, result)
@@ -557,6 +682,14 @@ def archive_product(
                 preserve_downloaded_at=False,
             )
             result.downloaded.append(image_id)
+            _maybe_update_primary_thumbnail(
+                index,
+                product_id,
+                image_id,
+                product_dir,
+                image_bytes,
+                debug_logger,
+            )
             missing_suffixes = 0
             if describe:
                 _debug(debug_logger, product_id, f"describing {image_path.name}")
@@ -703,15 +836,17 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Run descriptions against existing local output only, without CDN requests",
     )
     parser.add_argument(
+        "--build-catalog-assets",
         "--build-catalog-data",
+        dest="build_catalog_assets",
         action="store_true",
-        help="Build archive catalog-data.js from existing output indexes without CDN requests",
+        help="Build static archive catalog JSON assets from existing output indexes without CDN requests",
     )
     parser.add_argument(
-        "--catalog-data",
+        "--catalog-output-dir",
         type=Path,
-        default=DEFAULT_ARCHIVE_CATALOG_DATA,
-        help="Path for --build-catalog-data output",
+        default=DEFAULT_CATALOG_OUTPUT_DIR,
+        help="Directory for generated catalog assets (default: archive directory)",
     )
     parser.add_argument(
         "--b2-base-url",
@@ -721,19 +856,19 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--myss-metadata",
         type=Path,
-        help="Optional MYSS JSONL metadata to merge into --build-catalog-data",
+        help="Optional MYSS JSONL metadata to merge into catalog assets",
     )
     parser.add_argument(
         "--official-metadata",
         type=Path,
-        help="Optional official Stampin' Up JSONL metadata to merge into --build-catalog-data",
+        help="Optional official Stampin' Up JSONL metadata to merge into catalog assets",
     )
     parser.add_argument(
         "--add-metadata",
         type=Path,
         action="append",
         default=[],
-        help="Additional JSONL metadata to merge into --build-catalog-data. May be repeated; first matching record wins.",
+        help="Additional JSONL metadata to merge into catalog assets. May be repeated; first matching record wins.",
     )
     parser.add_argument("--extension", choices=sorted(VALID_EXTENSIONS), default="png", help="CDN image extension")
     parser.add_argument(
@@ -772,7 +907,7 @@ def main(argv: list[str] | None = None) -> int:
             )
             return 0
 
-        if args.build_catalog_data:
+        if args.build_catalog_assets:
             catalog = build_archive_catalog_data(
                 args.output,
                 args.b2_base_url,
@@ -780,8 +915,8 @@ def main(argv: list[str] | None = None) -> int:
                 official_metadata_path=args.official_metadata,
                 additional_metadata_paths=args.add_metadata,
             )
-            write_archive_catalog_data(args.catalog_data, catalog)
-            print(f"catalog-data: products={len(catalog['products'])} path={args.catalog_data}")
+            write_archive_catalog_assets(args.catalog_output_dir, catalog)
+            print(f"catalog-assets: products={len(catalog['products'])} path={args.catalog_output_dir}")
             return 0
 
         if args.describe_existing:
@@ -994,6 +1129,11 @@ def _catalog_product_from_index(
             "full_text": full_text,
             "bytes": entry.get("bytes"),
         }
+        thumbnail_filename = str(entry.get("thumbnail_filename") or "").strip()
+        thumbnail_sha256 = str(entry.get("thumbnail_sha256") or "").strip()
+        if thumbnail_filename and thumbnail_sha256:
+            version_query = urlencode({"v": thumbnail_sha256})
+            image["thumbnail_url"] = f"{base_url}{product_id}/{thumbnail_filename}?{version_query}"
         images.append(image)
 
     if not images:
@@ -1163,7 +1303,71 @@ def _upsert_image_entry(
             if key in existing:
                 entry[key] = existing[key]
 
+    for key in THUMBNAIL_METADATA_KEYS:
+        if key in existing:
+            entry[key] = existing[key]
+
     index["images"][image_id] = entry
+
+
+def _maybe_update_primary_thumbnail(
+    index: dict,
+    product_id: str,
+    image_id: str,
+    product_dir: Path,
+    image_bytes: bytes,
+    debug_logger: DebugLogger | None,
+) -> None:
+    if image_id != product_id:
+        return
+
+    entry = index["images"][image_id]
+    source_sha256 = hashlib.sha256(image_bytes).hexdigest()
+    thumbnail_path = product_dir / f"{product_id}.thumb.webp"
+    if _thumbnail_is_current(entry, thumbnail_path, source_sha256):
+        return
+
+    stale_metadata = (
+        entry.get("thumbnail_source_sha256") is not None
+        and entry.get("thumbnail_source_sha256") != source_sha256
+    )
+    try:
+        thumbnail = create_thumbnail(image_bytes, product_id)
+        thumbnail_path.write_bytes(thumbnail.data)
+    except Exception as exc:  # noqa: BLE001 - thumbnail failure must not abort archival.
+        if stale_metadata:
+            for key in THUMBNAIL_METADATA_KEYS:
+                entry.pop(key, None)
+        _debug(
+            debug_logger,
+            product_id,
+            f"thumbnail failed for {image_id}: {exc.__class__.__name__}: {exc}",
+        )
+        return
+
+    entry.update(thumbnail.index_metadata())
+    _debug(debug_logger, product_id, f"updated thumbnail {thumbnail.filename}")
+
+
+def _thumbnail_is_current(
+    entry: dict,
+    thumbnail_path: Path,
+    source_sha256: str,
+) -> bool:
+    if entry.get("thumbnail_source_sha256") != source_sha256:
+        return False
+    if entry.get("thumbnail_filename") != thumbnail_path.name or not thumbnail_path.is_file():
+        return False
+    try:
+        expected_bytes = int(entry["thumbnail_bytes"])
+        expected_sha256 = str(entry["thumbnail_sha256"])
+    except (KeyError, TypeError, ValueError):
+        return False
+    data = thumbnail_path.read_bytes()
+    return (
+        len(data) == expected_bytes
+        and hashlib.sha256(data).hexdigest() == expected_sha256
+    )
 
 
 def _maybe_describe(

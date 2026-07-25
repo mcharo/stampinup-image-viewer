@@ -1,4 +1,5 @@
 import base64
+import hashlib
 import io
 import json
 import os
@@ -13,6 +14,12 @@ from PIL import Image
 sys.path.insert(0, str(Path(__file__).parent))
 
 import archive_images
+
+
+def valid_image_bytes(size: tuple[int, int] = (800, 400), color=(20, 80, 140)) -> bytes:
+    buffer = io.BytesIO()
+    Image.new("RGB", size, color=color).save(buffer, format="PNG")
+    return buffer.getvalue()
 
 
 class FakeFetcher:
@@ -745,6 +752,153 @@ class ArchiveImagesTest(unittest.TestCase):
             index = json.loads((product_dir / "index.json").read_text())
             self.assertEqual(index["images"]["166635"]["downloaded_at"], "2026-06-03T15:00:00Z")
 
+    def test_archive_product_creates_thumbnail_for_new_primary_image_only(self):
+        source = valid_image_bytes()
+
+        def fetcher(image_id: str, extension: str) -> bytes | None:
+            if image_id in {"166635", "166635o01"}:
+                return source
+            return None
+
+        with tempfile.TemporaryDirectory() as tmp:
+            output_root = Path(tmp)
+
+            result = archive_images.archive_product(
+                product_id="166635",
+                output_root=output_root,
+                extension="png",
+                max_missing_suffixes=1,
+                delay=0,
+                fetcher=fetcher,
+                now=lambda: "2026-07-20T20:00:00Z",
+            )
+
+            self.assertEqual(result.downloaded, ["166635", "166635o01"])
+            thumbnail_path = output_root / "166635" / "166635.thumb.webp"
+            self.assertTrue(thumbnail_path.is_file())
+            index = json.loads((output_root / "166635" / "index.json").read_text())
+            primary = index["images"]["166635"]
+            self.assertEqual(primary["thumbnail_filename"], "166635.thumb.webp")
+            self.assertEqual(primary["thumbnail_width"], 512)
+            self.assertEqual(primary["thumbnail_height"], 256)
+            self.assertEqual(
+                primary["thumbnail_source_sha256"],
+                hashlib.sha256(source).hexdigest(),
+            )
+            self.assertNotIn("thumbnail_filename", index["images"]["166635o01"])
+
+    def test_archive_product_preserves_current_thumbnail_for_existing_primary(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            output_root = Path(tmp)
+            source = valid_image_bytes()
+            product_dir = output_root / "166635"
+            product_dir.mkdir()
+            (product_dir / "166635.png").write_bytes(source)
+
+            archive_images.archive_product(
+                product_id="166635",
+                output_root=output_root,
+                extension="png",
+                max_missing_suffixes=1,
+                delay=0,
+                fetcher=FakeFetcher(set()),
+                now=lambda: "2026-07-20T20:00:00Z",
+            )
+            original_thumbnail = (product_dir / "166635.thumb.webp").read_bytes()
+
+            with patch.object(
+                archive_images,
+                "create_thumbnail",
+                side_effect=AssertionError("current thumbnail should be reused"),
+            ):
+                archive_images.archive_product(
+                    product_id="166635",
+                    output_root=output_root,
+                    extension="png",
+                    max_missing_suffixes=1,
+                    delay=0,
+                    fetcher=FakeFetcher(set()),
+                    now=lambda: "2026-07-20T20:01:00Z",
+                )
+
+            self.assertEqual(
+                (product_dir / "166635.thumb.webp").read_bytes(),
+                original_thumbnail,
+            )
+            index = json.loads((product_dir / "index.json").read_text())
+            self.assertEqual(
+                index["images"]["166635"]["thumbnail_source_sha256"],
+                hashlib.sha256(source).hexdigest(),
+            )
+
+    def test_archive_product_regenerates_thumbnail_when_primary_source_changes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            output_root = Path(tmp)
+            first_source = valid_image_bytes((800, 400), color=(200, 20, 20))
+            second_source = valid_image_bytes((300, 600), color=(20, 20, 200))
+            product_dir = output_root / "166635"
+            product_dir.mkdir()
+            (product_dir / "166635.png").write_bytes(first_source)
+
+            archive_images.archive_product(
+                product_id="166635",
+                output_root=output_root,
+                extension="png",
+                max_missing_suffixes=1,
+                delay=0,
+                fetcher=FakeFetcher(set()),
+                now=lambda: "2026-07-20T20:00:00Z",
+            )
+            original_thumbnail = (product_dir / "166635.thumb.webp").read_bytes()
+
+            archive_images.archive_product(
+                product_id="166635",
+                output_root=output_root,
+                extension="png",
+                max_missing_suffixes=1,
+                delay=0,
+                force=True,
+                fetcher=lambda image_id, extension: second_source if image_id == "166635" else None,
+                now=lambda: "2026-07-20T20:01:00Z",
+            )
+
+            index = json.loads((product_dir / "index.json").read_text())
+            primary = index["images"]["166635"]
+            self.assertEqual(primary["thumbnail_width"], 256)
+            self.assertEqual(primary["thumbnail_height"], 512)
+            self.assertEqual(
+                primary["thumbnail_source_sha256"],
+                hashlib.sha256(second_source).hexdigest(),
+            )
+            self.assertNotEqual(
+                (product_dir / "166635.thumb.webp").read_bytes(),
+                original_thumbnail,
+            )
+
+    def test_archive_product_thumbnail_failure_does_not_abort_archival(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            output_root = Path(tmp)
+
+            with patch.object(
+                archive_images,
+                "create_thumbnail",
+                side_effect=OSError("malformed image"),
+            ):
+                result = archive_images.archive_product(
+                    product_id="166635",
+                    output_root=output_root,
+                    extension="png",
+                    max_missing_suffixes=1,
+                    delay=0,
+                    fetcher=FakeFetcher({"166635"}),
+                    now=lambda: "2026-07-20T20:00:00Z",
+                )
+
+            self.assertEqual(result.downloaded, ["166635"])
+            self.assertTrue((output_root / "166635" / "166635.png").is_file())
+            index = json.loads((output_root / "166635" / "index.json").read_text())
+            self.assertNotIn("thumbnail_filename", index["images"]["166635"])
+
     def test_archive_products_can_skip_scan_index_update(self):
         with tempfile.TemporaryDirectory() as tmp:
             output_root = Path(tmp)
@@ -976,6 +1130,8 @@ class ArchiveImagesTest(unittest.TestCase):
                 "images": {
                     "158669": {
                         "filename": "158669.png",
+                        "thumbnail_filename": "158669.thumb.webp",
+                        "thumbnail_sha256": "a" * 64,
                         "description": "German tea stamp set.",
                         "full_text": "KLEINE THERAPIE",
                     },
@@ -1001,8 +1157,71 @@ class ArchiveImagesTest(unittest.TestCase):
                 product["images"][0]["b2_url"],
                 "https://stamps.charo.fun/archive/158669/158669.png",
             )
+            self.assertEqual(
+                product["images"][0]["thumbnail_url"],
+                f"https://stamps.charo.fun/archive/158669/158669.thumb.webp?v={'a' * 64}",
+            )
+            self.assertNotIn("thumbnail_url", product["images"][1])
             self.assertNotIn("primary_image", product)
             self.assertNotIn("search_text", product)
+
+    def test_catalog_thumbnail_hash_changes_detail_and_summary_urls(self):
+        def product_for_hash(thumbnail_sha256: str) -> dict:
+            return archive_images._catalog_product_from_index(
+                {
+                    "product_id": "166635",
+                    "images": {
+                        "166635": {
+                            "filename": "166635.png",
+                            "thumbnail_filename": "166635.thumb.webp",
+                            "thumbnail_sha256": thumbnail_sha256,
+                        },
+                    },
+                },
+                "https://stamps.charo.fun/archive/",
+            )
+
+        first_hash = "a" * 64
+        second_hash = "b" * 64
+        first_product = product_for_hash(first_hash)
+        second_product = product_for_hash(second_hash)
+
+        first_detail_url = first_product["images"][0]["thumbnail_url"]
+        second_detail_url = second_product["images"][0]["thumbnail_url"]
+        self.assertEqual(
+            first_detail_url,
+            f"https://stamps.charo.fun/archive/166635/166635.thumb.webp?v={first_hash}",
+        )
+        self.assertEqual(
+            archive_images._catalog_summary_product(first_product, "166")["primary_image"]["thumbnail_url"],
+            first_detail_url,
+        )
+        self.assertNotEqual(second_detail_url, first_detail_url)
+        self.assertEqual(
+            archive_images._catalog_summary_product(second_product, "166")["primary_image"]["thumbnail_url"],
+            second_detail_url,
+        )
+
+    def test_catalog_summary_omits_thumbnail_url_without_index_metadata(self):
+        product = {
+            "product_id": "166635",
+            "language": "english",
+            "tags": [],
+            "images": [{
+                "image_id": "166635",
+                "filename": "166635.png",
+                "b2_url": "https://example.test/archive/166635/166635.png",
+                "description": "",
+                "full_text": "",
+            }],
+        }
+
+        summary = archive_images._catalog_summary_product(product, "166")
+
+        self.assertEqual(
+            summary["primary_image"],
+            {"b2_url": "https://example.test/archive/166635/166635.png"},
+        )
 
     def test_metadata_loaders_index_jsonl_by_item_number(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -1186,6 +1405,45 @@ class ArchiveImagesTest(unittest.TestCase):
             self.assertNotIn("name", product)
             self.assertEqual(product["status"], "unknown")
 
+    def test_build_archive_catalog_data_merges_additional_metadata_first_match_wins(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            output_root = Path(tmp) / "output"
+            for product_id in ("167583", "167585"):
+                product_dir = output_root / product_id
+                product_dir.mkdir(parents=True)
+                (product_dir / f"{product_id}.png").write_bytes(b"image")
+                (product_dir / "index.json").write_text(json.dumps({
+                    "product_id": product_id,
+                    "updated_at": "2026-06-04T20:00:00Z",
+                    "extension": "png",
+                    "images": {
+                        product_id: {"filename": f"{product_id}.png", "description": "", "full_text": ""},
+                    },
+                }), encoding="utf-8")
+            first_metadata_path = Path(tmp) / "first.jsonl"
+            second_metadata_path = Path(tmp) / "second.jsonl"
+            first_metadata_path.write_text(
+                json.dumps({"item_number": "167583", "name": "First Name"}) + "\n",
+                encoding="utf-8",
+            )
+            second_metadata_path.write_text(
+                "\n".join([
+                    json.dumps({"item_number": "167583", "name": "Second Name"}),
+                    json.dumps({"item_number": "167585", "name": "Only In Second"}),
+                ]) + "\n",
+                encoding="utf-8",
+            )
+
+            catalog = archive_images.build_archive_catalog_data(
+                output_root=output_root,
+                additional_metadata_paths=[first_metadata_path, second_metadata_path],
+                now=lambda: "now",
+            )
+
+            self.assertEqual(catalog["products"]["167583"]["name"], "First Name")
+            self.assertEqual(catalog["products"]["167585"]["name"], "Only In Second")
+            self.assertNotIn("status", catalog["products"]["167583"])
+
     def test_build_archive_catalog_data_excludes_duplicate_marked_products(self):
         with tempfile.TemporaryDirectory() as tmp:
             output_root = Path(tmp) / "output"
@@ -1213,67 +1471,371 @@ class ArchiveImagesTest(unittest.TestCase):
 
             self.assertNotIn("166884", catalog["products"])
 
-    def test_write_archive_catalog_data_js_wraps_catalog_for_file_protocol(self):
+    def test_write_archive_catalog_assets_writes_versioned_relative_manifest_last(self):
         with tempfile.TemporaryDirectory() as tmp:
-            catalog_path = Path(tmp) / "catalog-data.js"
+            output_dir = Path(tmp)
+            details_dir = output_dir / "catalog-details"
+            details_dir.mkdir()
+            stale_path = details_dir / "999.json"
+            stale_path.write_text('{"stale":true}')
+            events: list[Path] = []
+            original_atomic_write = archive_images._atomic_write_json
+            original_unlink = Path.unlink
 
-            archive_images.write_archive_catalog_data(
-                catalog_path,
-                {"updated_at": "now", "products": {}},
+            def recording_atomic_write(path: Path, data) -> None:
+                events.append(path)
+                original_atomic_write(path, data)
+
+            def recording_unlink(path: Path, *args, **kwargs) -> None:
+                events.append(path)
+                original_unlink(path, *args, **kwargs)
+
+            with patch.object(archive_images, "_atomic_write_json", side_effect=recording_atomic_write):
+                with patch.object(Path, "unlink", autospec=True, side_effect=recording_unlink):
+                    archive_images.write_archive_catalog_assets(
+                        output_dir,
+                        {"updated_at": "2026-07-20T20:00:00Z", "products": {}},
+                    )
+
+            manifest = json.loads((output_dir / "catalog-manifest.json").read_text())
+            self.assertEqual(manifest, {
+                "schema_version": 1,
+                "version": "2026-07-20T20:00:00Z",
+                "updated_at": "2026-07-20T20:00:00Z",
+                "summary_url": "catalog-summary.json",
+                "search_url": "catalog-search.json",
+                "details_url": "catalog-details/",
+            })
+            self.assertEqual(events[-1], output_dir / "catalog-manifest.json")
+
+    def test_write_archive_catalog_assets_cleanup_failure_preserves_previous_manifest(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            output_dir = Path(tmp)
+            details_dir = output_dir / "catalog-details"
+            details_dir.mkdir()
+            stale_path = details_dir / "999.json"
+            stale_path.write_text('{"stale":true}')
+            manifest_path = output_dir / "catalog-manifest.json"
+            previous_manifest = b'{"version":"previous"}'
+            manifest_path.write_bytes(previous_manifest)
+            original_unlink = Path.unlink
+
+            def fail_stale_cleanup(path: Path, *args, **kwargs) -> None:
+                if path == stale_path:
+                    raise OSError("cleanup failed")
+                original_unlink(path, *args, **kwargs)
+
+            with patch.object(Path, "unlink", autospec=True, side_effect=fail_stale_cleanup):
+                with self.assertRaisesRegex(OSError, "cleanup failed"):
+                    archive_images.write_archive_catalog_assets(
+                        output_dir,
+                        {"updated_at": "new", "products": {}},
+                    )
+
+            self.assertEqual(manifest_path.read_bytes(), previous_manifest)
+
+    def test_write_archive_catalog_assets_summary_has_exact_thin_fields_and_display_name_fallbacks(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            output_dir = Path(tmp)
+            catalog = {
+                "updated_at": "now",
+                "products": {
+                    "166881": {
+                        "product_id": "166881",
+                        "language": "english",
+                        "name": "Woolly Friends",
+                        "category": "Stamps",
+                        "status": "Current",
+                        "price": "$19.00",
+                        "tags": ["cards", "sheep"],
+                        "updated_at": "earlier",
+                        "images": [
+                            {
+                                "image_id": "166881",
+                                "filename": "166881.png",
+                                "b2_url": "https://example.test/166881/166881.png",
+                                "thumbnail_url": "https://example.test/166881/166881.thumb.webp",
+                                "description": "A sheep stamp set.",
+                                "full_text": "Hooray",
+                                "bytes": 100,
+                            },
+                            {
+                                "image_id": "166881o01",
+                                "filename": "166881o01.png",
+                                "b2_url": "https://example.test/166881/166881o01.png",
+                                "description": "Outline image.",
+                                "full_text": "",
+                                "bytes": 50,
+                            },
+                        ],
+                        "descriptions": [{"source": "official", "text": "Official text."}],
+                    },
+                    "166882": {
+                        "product_id": "166882",
+                        "language": "german",
+                        "tags": [],
+                        "images": [{
+                            "image_id": "166882",
+                            "filename": "166882.png",
+                            "b2_url": "https://example.test/166882/166882.png",
+                            "description": "German floral stamps.",
+                            "full_text": "",
+                            "bytes": 25,
+                        }],
+                    },
+                    "166883": {
+                        "product_id": "166883",
+                        "language": "english",
+                        "tags": [],
+                        "images": [{
+                            "image_id": "166883",
+                            "filename": "166883.png",
+                            "b2_url": "https://example.test/166883/166883.png",
+                            "description": "",
+                            "full_text": "",
+                            "bytes": 25,
+                        }],
+                    },
+                },
+            }
+
+            archive_images.write_archive_catalog_assets(output_dir, catalog)
+
+            summary = json.loads((output_dir / "catalog-summary.json").read_text())
+            self.assertEqual(summary[0], {
+                "product_id": "166881",
+                "language": "english",
+                "name": "Woolly Friends",
+                "display_name": "Woolly Friends",
+                "category": "Stamps",
+                "status": "Current",
+                "tags": ["cards", "sheep"],
+                "image_count": 2,
+                "primary_image": {
+                    "b2_url": "https://example.test/166881/166881.png",
+                    "thumbnail_url": "https://example.test/166881/166881.thumb.webp",
+                },
+                "detail_shard": "166",
+            })
+            self.assertEqual(summary[1]["display_name"], "German floral stamps.")
+            self.assertNotIn("name", summary[1])
+            self.assertEqual(summary[2]["display_name"], "No description yet")
+
+    def test_write_archive_catalog_assets_search_contains_only_omitted_deep_text(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            output_dir = Path(tmp)
+            archive_images.write_archive_catalog_assets(output_dir, {
+                "updated_at": "now",
+                "products": {
+                    "166881": {
+                        "product_id": "166881",
+                        "language": "english",
+                        "name": "Summary Name",
+                        "category": "Summary Category",
+                        "status": "Current",
+                        "tags": ["summary tag"],
+                        "images": [{
+                            "filename": "Special-Filename.PNG",
+                            "b2_url": "https://example.test/166881.png",
+                            "description": "Visible image description",
+                            "full_text": "OCR WORDS",
+                        }],
+                        "descriptions": [
+                            {"source": "official", "text": "Official product description"},
+                            {"source": "myss", "text": "MYSS product copy"},
+                        ],
+                    },
+                },
+            })
+
+            search = json.loads((output_dir / "catalog-search.json").read_text())
+            self.assertEqual(
+                search,
+                {
+                    "166881": (
+                        "special-filename.png visible image description ocr words "
+                        "official product description myss product copy"
+                    ),
+                },
+            )
+            self.assertNotIn("summary name", search["166881"])
+            self.assertNotIn("summary category", search["166881"])
+            self.assertNotIn("summary tag", search["166881"])
+
+    def test_write_archive_catalog_assets_shards_complete_records_deterministically(self):
+        products = {
+            "168001": {
+                "product_id": "168001",
+                "language": "english",
+                "tags": [],
+                "images": [{"filename": "168001.png", "b2_url": "https://example.test/168001.png"}],
+            },
+            "167999": {
+                "product_id": "167999",
+                "language": "english",
+                "name": "Merged Name",
+                "category": "Stamps",
+                "status": "Current",
+                "price": "$20.00",
+                "tags": ["merged"],
+                "images": [{"filename": "167999.png", "b2_url": "https://example.test/167999.png"}],
+                "descriptions": [{"source": "official", "text": "Merged description."}],
+            },
+            "167001": {
+                "product_id": "167001",
+                "language": "french",
+                "tags": [],
+                "images": [{"filename": "167001.png", "b2_url": "https://example.test/167001.png"}],
+            },
+        }
+
+        with tempfile.TemporaryDirectory() as first_tmp, tempfile.TemporaryDirectory() as second_tmp:
+            first_dir = Path(first_tmp)
+            second_dir = Path(second_tmp)
+            archive_images.write_archive_catalog_assets(
+                first_dir,
+                {"updated_at": "now", "products": products},
+            )
+            archive_images.write_archive_catalog_assets(
+                second_dir,
+                {"products": dict(reversed(list(products.items()))), "updated_at": "now"},
             )
 
-            text = catalog_path.read_text()
-            self.assertTrue(text.startswith("window.ARCHIVE_CATALOG_DATA = "))
-            self.assertIn('"products":{}', text)
-            self.assertNotIn("\n  ", text)
+            self.assertEqual(
+                sorted(path.name for path in (first_dir / "catalog-details").glob("*.json")),
+                ["167.json", "168.json"],
+            )
+            detail_text = (first_dir / "catalog-details" / "167.json").read_text()
+            self.assertEqual(
+                json.loads(detail_text),
+                {"167001": products["167001"], "167999": products["167999"]},
+            )
+            self.assertEqual(
+                detail_text,
+                (second_dir / "catalog-details" / "167.json").read_text(),
+            )
 
-    def test_default_archive_catalog_data_lives_at_archive_root(self):
+    def test_write_archive_catalog_assets_minifies_every_json_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            output_dir = Path(tmp)
+            archive_images.write_archive_catalog_assets(output_dir, {
+                "updated_at": "now",
+                "products": {
+                    "167001": {
+                        "product_id": "167001",
+                        "language": "english",
+                        "tags": [],
+                        "images": [{"filename": "167001.png", "b2_url": "https://example.test/167001.png"}],
+                    },
+                },
+            })
+
+            generated_paths = [
+                output_dir / "catalog-manifest.json",
+                output_dir / "catalog-summary.json",
+                output_dir / "catalog-search.json",
+                output_dir / "catalog-details" / "167.json",
+            ]
+            for path in generated_paths:
+                with self.subTest(path=path.name):
+                    text = path.read_text()
+                    self.assertNotIn("\n", text)
+                    self.assertNotIn(": ", text)
+                    self.assertNotIn(", ", text)
+
+    def test_write_archive_catalog_assets_removes_stale_shards_only_after_success(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            output_dir = Path(tmp)
+            details_dir = output_dir / "catalog-details"
+            details_dir.mkdir()
+            stale_path = details_dir / "999.json"
+            stale_path.write_text('{"stale":true}')
+            preserved_path = details_dir / "notes.txt"
+            preserved_path.write_text("keep")
+            catalog = {"updated_at": "now", "products": {}}
+
+            with patch.object(
+                archive_images,
+                "_atomic_write_json",
+                side_effect=OSError("write failed"),
+            ):
+                with self.assertRaisesRegex(OSError, "write failed"):
+                    archive_images.write_archive_catalog_assets(output_dir, catalog)
+
+            self.assertTrue(stale_path.exists())
+
+            archive_images.write_archive_catalog_assets(output_dir, catalog)
+
+            self.assertFalse(stale_path.exists())
+            self.assertTrue(preserved_path.exists())
+
+    def test_default_catalog_output_dir_lives_at_archive_root(self):
         self.assertEqual(
-            archive_images.DEFAULT_ARCHIVE_CATALOG_DATA,
-            Path(archive_images.__file__).parent / "catalog-data.js",
+            archive_images.DEFAULT_CATALOG_OUTPUT_DIR,
+            Path(archive_images.__file__).parent,
         )
+        args = archive_images.parse_args(["--build-catalog-assets"])
+        self.assertEqual(args.catalog_output_dir, archive_images.DEFAULT_CATALOG_OUTPUT_DIR)
 
-    def test_main_build_catalog_data_does_not_archive_products(self):
+    def test_main_build_catalog_assets_does_not_archive_products(self):
         with tempfile.TemporaryDirectory() as tmp:
             output_root = Path(tmp) / "output"
             output_root.mkdir()
-            catalog_path = Path(tmp) / "catalog-data.js"
+            catalog_output_dir = Path(tmp) / "catalog"
 
             with patch.object(archive_images, "archive_products") as archive_products:
                 with patch("sys.stdout", new_callable=io.StringIO):
                     exit_code = archive_images.main([
-                        "--build-catalog-data",
+                        "--build-catalog-assets",
                         "--output",
                         str(output_root),
-                        "--catalog-data",
-                        str(catalog_path),
+                        "--catalog-output-dir",
+                        str(catalog_output_dir),
                         "--b2-base-url",
                         "https://stamps.charo.fun/archive/",
                     ])
 
             self.assertEqual(exit_code, 0)
             archive_products.assert_not_called()
-            self.assertTrue(catalog_path.exists())
+            self.assertTrue((catalog_output_dir / "catalog-manifest.json").exists())
+
+    def test_main_build_catalog_data_compatibility_alias_builds_assets(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            output_root = Path(tmp) / "output"
+            output_root.mkdir()
+            catalog_output_dir = Path(tmp) / "catalog"
+
+            with patch("sys.stdout", new_callable=io.StringIO):
+                exit_code = archive_images.main([
+                    "--build-catalog-data",
+                    "--output",
+                    str(output_root),
+                    "--catalog-output-dir",
+                    str(catalog_output_dir),
+                ])
+
+            self.assertEqual(exit_code, 0)
+            self.assertTrue((catalog_output_dir / "catalog-manifest.json").exists())
 
     def test_main_build_catalog_data_passes_metadata_paths(self):
         with tempfile.TemporaryDirectory() as tmp:
             output_root = Path(tmp) / "output"
             output_root.mkdir()
-            catalog_path = Path(tmp) / "catalog-data.js"
+            catalog_output_dir = Path(tmp) / "catalog"
             myss_path = Path(tmp) / "myss.jsonl"
             official_path = Path(tmp) / "official.jsonl"
             myss_path.write_text("", encoding="utf-8")
             official_path.write_text("", encoding="utf-8")
 
             with patch.object(archive_images, "build_archive_catalog_data", return_value={"products": {}}) as build_catalog:
-                with patch.object(archive_images, "write_archive_catalog_data"):
+                with patch.object(archive_images, "write_archive_catalog_assets"):
                     with patch("sys.stdout", new_callable=io.StringIO):
                         exit_code = archive_images.main([
-                            "--build-catalog-data",
+                            "--build-catalog-assets",
                             "--output",
                             str(output_root),
-                            "--catalog-data",
-                            str(catalog_path),
+                            "--catalog-output-dir",
+                            str(catalog_output_dir),
                             "--myss-metadata",
                             str(myss_path),
                             "--official-metadata",
@@ -1283,6 +1845,34 @@ class ArchiveImagesTest(unittest.TestCase):
             self.assertEqual(exit_code, 0)
             self.assertEqual(build_catalog.call_args.kwargs["myss_metadata_path"], myss_path)
             self.assertEqual(build_catalog.call_args.kwargs["official_metadata_path"], official_path)
+
+    def test_main_build_catalog_data_accepts_repeated_add_metadata_paths(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            output_root = Path(tmp) / "output"
+            output_root.mkdir()
+            catalog_output_dir = Path(tmp) / "catalog"
+            first_metadata_path = Path(tmp) / "first.jsonl"
+            second_metadata_path = Path(tmp) / "second.jsonl"
+            first_metadata_path.write_text("", encoding="utf-8")
+            second_metadata_path.write_text("", encoding="utf-8")
+
+            with patch.object(archive_images, "build_archive_catalog_data", return_value={"products": {}}) as build_catalog:
+                with patch.object(archive_images, "write_archive_catalog_assets"):
+                    with patch("sys.stdout", new_callable=io.StringIO):
+                        exit_code = archive_images.main([
+                            "--build-catalog-data",
+                            "--output",
+                            str(output_root),
+                            "--catalog-output-dir",
+                            str(catalog_output_dir),
+                            "--add-metadata",
+                            str(first_metadata_path),
+                            "--add-metadata",
+                            str(second_metadata_path),
+                        ])
+
+            self.assertEqual(exit_code, 0)
+            self.assertEqual(build_catalog.call_args.kwargs["additional_metadata_paths"], [first_metadata_path, second_metadata_path])
 
 
 if __name__ == "__main__":
