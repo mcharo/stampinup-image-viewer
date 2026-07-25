@@ -1505,6 +1505,7 @@ class ArchiveImagesTest(unittest.TestCase):
                 "summary_url": "catalog-summary.json",
                 "search_url": "catalog-search.json",
                 "details_url": "catalog-details/",
+                "viewer_index_url": "viewer-index.json",
             })
             self.assertEqual(events[-1], output_dir / "catalog-manifest.json")
 
@@ -1715,6 +1716,133 @@ class ArchiveImagesTest(unittest.TestCase):
                 (second_dir / "catalog-details" / "167.json").read_text(),
             )
 
+    def viewer_index_catalog(self, products: dict, updated_at: str = "now") -> dict:
+        return {"updated_at": updated_at, "products": products}
+
+    def viewer_index_product(self, product_id: str, image_ids: list[str], **overrides) -> dict:
+        extension = overrides.pop("extension", "png")
+        return {
+            "product_id": product_id,
+            "language": "english",
+            "tags": [],
+            "images": [
+                {
+                    "image_id": image_id,
+                    "filename": f"{image_id}.{extension}",
+                    "b2_url": f"https://example.test/{product_id}/{image_id}.{extension}",
+                }
+                for image_id in image_ids
+            ],
+            **overrides,
+        }
+
+    def test_build_viewer_index_counts_contiguous_variants_and_keeps_names(self):
+        catalog = self.viewer_index_catalog({
+            "167001": self.viewer_index_product(
+                "167001",
+                ["167001", "167001o01"],
+                name="Woolly Friends",
+            ),
+            "167002": self.viewer_index_product("167002", ["167002"]),
+        })
+
+        index = archive_images._build_viewer_index(catalog)
+
+        self.assertEqual(index["schema_version"], 1)
+        self.assertEqual(index["version"], "now")
+        self.assertEqual(index["b2_base_url"], archive_images.DEFAULT_B2_BASE_URL)
+        self.assertEqual(index["products"], {
+            "167001": [2, "Woolly Friends"],
+            "167002": [1],
+        })
+
+    def test_build_viewer_index_lists_variants_explicitly_when_numbering_has_gaps(self):
+        catalog = self.viewer_index_catalog({
+            "167001": self.viewer_index_product("167001", ["167001", "167001o02"]),
+            "167002": self.viewer_index_product("167002", ["167002o01"], name="Outline Only"),
+        })
+
+        index = archive_images._build_viewer_index(catalog)
+
+        self.assertEqual(index["products"], {
+            "167001": [[0, 2]],
+            "167002": [[1], "Outline Only"],
+        })
+
+    def test_build_viewer_index_records_only_non_png_extensions(self):
+        catalog = self.viewer_index_catalog({
+            "167001": self.viewer_index_product("167001", ["167001"], extension="jpg"),
+            "167002": self.viewer_index_product(
+                "167002",
+                ["167002"],
+                extension="jpg",
+                name="Named Jpg",
+            ),
+            "167003": self.viewer_index_product("167003", ["167003"]),
+        })
+
+        index = archive_images._build_viewer_index(catalog)
+
+        self.assertEqual(index["products"], {
+            "167001": [1, "", "jpg"],
+            "167002": [1, "Named Jpg", "jpg"],
+            "167003": [1],
+        })
+
+    def test_build_viewer_index_skips_products_without_addressable_variants(self):
+        catalog = self.viewer_index_catalog({
+            "167001": self.viewer_index_product("167001", ["mystery-image"]),
+            "167002": self.viewer_index_product("167002", ["167002", "167002-extra"]),
+            "167003": {"product_id": "167003", "language": "english", "tags": [], "images": []},
+        })
+
+        index = archive_images._build_viewer_index(catalog)
+
+        self.assertEqual(index["products"], {"167002": [1]})
+
+    def test_build_viewer_index_carries_the_catalog_b2_base_url_with_a_trailing_slash(self):
+        catalog = self.viewer_index_catalog({})
+        catalog["b2_base_url"] = "https://images.example.test/archive"
+
+        index = archive_images._build_viewer_index(catalog)
+
+        self.assertEqual(index["b2_base_url"], "https://images.example.test/archive/")
+
+    def test_write_archive_catalog_assets_writes_the_viewer_index_before_the_manifest(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            output_dir = Path(tmp)
+            events: list[Path] = []
+            original_atomic_write = archive_images._atomic_write_json
+
+            def recording_atomic_write(path: Path, data) -> None:
+                events.append(path)
+                original_atomic_write(path, data)
+
+            catalog = self.viewer_index_catalog(
+                {
+                    "167001": self.viewer_index_product(
+                        "167001",
+                        ["167001", "167001o01"],
+                        name="Woolly Friends",
+                    ),
+                },
+                updated_at="2026-07-20T20:00:00Z",
+            )
+
+            with patch.object(archive_images, "_atomic_write_json", side_effect=recording_atomic_write):
+                manifest = archive_images.write_archive_catalog_assets(output_dir, catalog)
+
+            index_path = output_dir / "viewer-index.json"
+            self.assertEqual(manifest["viewer_index_url"], "viewer-index.json")
+            self.assertIn(index_path, events)
+            self.assertLess(events.index(index_path), events.index(output_dir / "catalog-manifest.json"))
+            self.assertEqual(json.loads(index_path.read_text()), {
+                "schema_version": 1,
+                "version": "2026-07-20T20:00:00Z",
+                "b2_base_url": archive_images.DEFAULT_B2_BASE_URL,
+                "products": {"167001": [2, "Woolly Friends"]},
+            })
+
     def test_write_archive_catalog_assets_minifies_every_json_file(self):
         with tempfile.TemporaryDirectory() as tmp:
             output_dir = Path(tmp)
@@ -1734,6 +1862,7 @@ class ArchiveImagesTest(unittest.TestCase):
                 output_dir / "catalog-manifest.json",
                 output_dir / "catalog-summary.json",
                 output_dir / "catalog-search.json",
+                output_dir / "viewer-index.json",
                 output_dir / "catalog-details" / "167.json",
             ]
             for path in generated_paths:

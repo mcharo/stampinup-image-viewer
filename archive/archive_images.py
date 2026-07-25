@@ -374,6 +374,7 @@ def write_archive_catalog_assets(catalog_output_dir: Path, catalog: dict) -> dic
     details_dir.mkdir(parents=True, exist_ok=True)
 
     summary, search, detail_shards = _build_catalog_browser_assets(catalog)
+    viewer_index = _build_viewer_index(catalog)
     version = str(catalog["updated_at"])
     manifest = {
         "schema_version": 1,
@@ -382,10 +383,12 @@ def write_archive_catalog_assets(catalog_output_dir: Path, catalog: dict) -> dic
         "summary_url": "catalog-summary.json",
         "search_url": "catalog-search.json",
         "details_url": "catalog-details/",
+        "viewer_index_url": "viewer-index.json",
     }
 
     _atomic_write_json(catalog_output_dir / "catalog-summary.json", summary)
     _atomic_write_json(catalog_output_dir / "catalog-search.json", search)
+    _atomic_write_json(catalog_output_dir / "viewer-index.json", viewer_index)
     for shard, products in sorted(detail_shards.items()):
         _atomic_write_json(details_dir / f"{shard}.json", products)
 
@@ -413,6 +416,75 @@ def _build_catalog_browser_assets(catalog: dict) -> tuple[list[dict], dict[str, 
         detail_shards.setdefault(shard, {})[product_id] = product
 
     return summary, search, detail_shards
+
+
+def _build_viewer_index(catalog: dict) -> dict:
+    """Return the slim product index the SVG viewer uses to resolve variants.
+
+    Each entry is `[variants, name?, extension?]`, where `variants` is the image
+    count when the variant numbers run 0..count-1 and an explicit list when they
+    do not. `name` and `extension` are only present when they carry information
+    the viewer cannot assume, and `name` is emitted as an empty string when an
+    extension needs the third slot.
+    """
+    products = catalog.get("products") or {}
+    index = {}
+    for product_id in _sorted_product_ids(products):
+        entry = _viewer_index_product(products[product_id])
+        if entry is not None:
+            index[product_id] = entry
+
+    return {
+        "schema_version": 1,
+        "version": str(catalog["updated_at"]),
+        "b2_base_url": _ensure_trailing_slash(catalog.get("b2_base_url") or DEFAULT_B2_BASE_URL),
+        "products": index,
+    }
+
+
+def _viewer_index_product(product: dict) -> list | None:
+    product_id = str(product.get("product_id") or "").strip()
+    images = product.get("images") or []
+    variants = sorted({
+        variant
+        for image in images
+        if (variant := _viewer_variant_number(image.get("image_id"), product_id)) is not None
+    })
+    if not variants:
+        return None
+
+    entry: list = [len(variants) if variants == list(range(len(variants))) else variants]
+    name = _clean_metadata_value(product.get("name"))
+    extension = _viewer_index_extension(images)
+    if extension:
+        entry.extend([name, extension])
+    elif name:
+        entry.append(name)
+    return entry
+
+
+def _viewer_variant_number(image_id, product_id: str) -> int | None:
+    clean_image_id = str(image_id or "").strip()
+    if not clean_image_id or not product_id:
+        return None
+    if clean_image_id == product_id:
+        return 0
+    suffix = clean_image_id.removeprefix(f"{product_id}o")
+    if suffix == clean_image_id or not suffix.isdigit():
+        return None
+    return int(suffix)
+
+
+def _viewer_index_extension(images: list[dict]) -> str:
+    """Return the primary image extension, or "" when it is the assumed default."""
+    extensions = [
+        extension
+        for image in images
+        if (extension := Path(str(image.get("filename") or "")).suffix.lstrip(".").lower())
+    ]
+    if not extensions or set(extensions) == {"png"}:
+        return ""
+    return extensions[0]
 
 
 def _catalog_summary_product(product: dict, detail_shard: str) -> dict:

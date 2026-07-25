@@ -145,6 +145,7 @@ archive/
   catalog-manifest.json
   catalog-summary.json
   catalog-search.json
+  viewer-index.json
   catalog-details/
     100.json
     101.json
@@ -165,6 +166,30 @@ primary-image index has no thumbnail metadata, so older products fall back
 directly to the original image. Published thumbnail URLs retain the stable
 `<product-id>.thumb.webp` object name and append the full stored thumbnail hash
 as `?v=<sha256>` so immutable browser caches refresh when the object changes.
+
+`viewer-index.json` is for the SVG viewer at the repository root rather than the
+catalog page. It is the whole archive in the smallest form the viewer needs —
+about 350 KB, versus 1.6 MB for the largest single detail shard — mapping each
+product ID to `[variants, name?, extension?]`:
+
+```json
+{
+  "schema_version": 1,
+  "version": "2026-07-20T22:30:35Z",
+  "b2_base_url": "https://stamps.charo.fun/archive/",
+  "products": {
+    "100531": [2, "Old Olive Classic Stampin' Ink Refill"],
+    "150306": [1]
+  }
+}
+```
+
+`variants` is the image count when the variant numbers run `0..count-1`, which is
+true for every product today, and an explicit list such as `[0, 2]` when they do
+not. Variant 0 is the main image and variant *n* is the `oNN` suffix. The name is
+omitted when the archive has none, and the extension only appears when the images
+are not PNG. The viewer needs this because it otherwise only knows to request the
+main image and `o01`, while 1,532 products have three or more images.
 
 Each product modal ends with an "Open in viewer" link that opens the SVG viewer
 at `index.html?id=<product-id>` in a new tab, matching the catalog view.
@@ -279,6 +304,103 @@ The normal rollout order is:
 3. Regenerate catalog assets after thumbnail metadata has been written.
 4. Run the tests and serve `archive/` locally over HTTP.
 5. Publish the archive site only after those checks pass.
+
+## Cross-Origin Reads for the Viewer
+
+The SVG viewer at the repository root falls back to archive-hosted images when
+Cloudinary has nothing for a product ID. It reads image bytes with `fetch()` and
+inspects pixels on a canvas, so those responses need an
+`Access-Control-Allow-Origin` header. The viewer's request is a simple
+cross-origin `GET` with no custom headers, so no preflight is involved and that
+one response header is all it needs.
+
+**That header comes from a Cloudflare Transform Rule, not from the bucket.**
+`stamps.charo.fun` is fronted onto B2's *native* download API — its responses
+carry `x-bz-file-name` and `x-bz-file-id` rather than S3 headers — and bucket CORS
+rules written through the S3-compatible `PutBucketCors` only cover the `s3_get`
+and `s3_head` operations, so they never match that path. Measured on the same
+object, the S3 endpoint returns the header while `stamps.charo.fun` returns none.
+
+The rule lives in the `charo.fun` zone under Rules → Create rule → Response Header
+Transform Rule (labeled "Modify Response Header" in older dashboards):
+
+- Name: `archive-cors`
+- Expression: `(http.host eq "stamps.charo.fun")`
+- Action: Set static, `Access-Control-Allow-Origin: *`
+
+**Do not add a `URI Path starts with /archive/` condition.** The same zone has URL
+Rewrite Rules (`stamps-archive-b2`, `stamps-b2`) that rewrite the path to the B2
+`/file/<bucket>/...` form, and rewrites run in an earlier phase than the response
+header transform, which therefore evaluates its expression against the *rewritten*
+path. A `/archive/` condition silently never matches — verified: with the path
+condition the header was absent even on `/archive/nope.png`, and adding it back is
+the one way to break this rule while leaving it showing as Active. Matching on the
+hostname alone is fine, since that host serves nothing but archive images.
+
+A static value at the edge is deliberate. B2 reflects the *caller's* origin (plus
+`Access-Control-Allow-Credentials: true` and `Vary: Origin`) even when its own rule
+says `*`, and Cloudflare does not honor `Vary: Origin` in its cache key, so an
+origin-specific header would be cached and then served to a different origin. A
+constant `*` is identical for every caller and therefore safe to cache, and it
+also covers copies warmed by ordinary `<img>` loads, which send no `Origin` at all
+and so would never receive a header from B2 anyway. Response header transform
+rules run on cache hits as well as misses, so adding this rule needs no cache
+purge.
+
+Verify with a cache-busting query string, which gives the CDN a distinct cache key
+and so reveals what the origin itself returns:
+
+```bash
+URL='https://stamps.charo.fun/archive/166635/166635o01.png'
+curl -sSI -H 'Origin: https://mcharo.github.io' "$URL?cachebust=$RANDOM" | grep -i access-control
+curl -sSI "$URL?cachebust=$RANDOM" | grep -i access-control
+```
+
+Both must show `access-control-allow-origin`. Until they do, the viewer still
+works: it silently keeps using Cloudinary and skips variants Cloudinary cannot
+serve.
+
+To exercise the fallback end to end, open the viewer at `index.html?id=170012`
+over HTTP. Cloudinary serves that product's main image but returns 404 for
+`170012o01.jpg`, while the archive has the outline, so the outline card appearing
+at all means the fallback worked. The substitution is safe for the conversion
+path: archive PNGs carry no alpha channel, and the viewer's black-and-white metric
+scores the PNG and the Cloudinary JPG within 0.05 percentage points of each other,
+so a fallback load reaches the same vectorize-or-not decision.
+
+## Bucket CORS
+
+Bucket-level CORS rules do not affect the viewer, which reads through the CDN, but
+they are worth having for anything that addresses the bucket's S3 endpoint
+directly. `archive/configure_cors.py` manages them through the same
+S3-compatible API and credential chain as the thumbnail backfill. Check the
+current state first:
+
+```bash
+uv run --project archive python archive/configure_cors.py \
+  --endpoint-url "$B2_S3_ENDPOINT" \
+  --bucket "$B2_S3_BUCKET" \
+  --dry-run
+```
+
+Then apply them:
+
+```bash
+uv run --project archive python archive/configure_cors.py \
+  --endpoint-url "$B2_S3_ENDPOINT" \
+  --bucket "$B2_S3_BUCKET"
+```
+
+The default rule allows `GET` and `HEAD` from any origin with a preflight lifetime
+of 86400 seconds, which is the maximum B2 accepts. Pass `--allowed-origin`
+(repeatable) to narrow it; B2 answers with the caller's origin rather than the
+literal `*`, so a narrower list mainly changes who gets refused, not what a
+permitted caller sees.
+
+Bucket keys do not include the `archive/` path segment that appears in the public
+URL: `https://stamps.charo.fun/archive/166635/166635o01.png` is the object
+`166635/166635o01.png`. The CDN adds that segment, so a direct S3-endpoint request
+has to drop it.
 
 ## Tests
 

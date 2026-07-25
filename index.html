@@ -171,6 +171,22 @@
             border-radius: calc(var(--border-radius) - 2px);
         }
 
+        /* Offer for the archive-listed images beyond the two loaded up front. */
+        .extra-variants {
+            grid-column: 1 / -1;
+            background: white;
+            padding: 1rem 1.5rem;
+            border-radius: var(--border-radius);
+            box-shadow: var(--shadow);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 1rem;
+            flex-wrap: wrap;
+            color: #6b7280;
+            font-size: 0.9rem;
+        }
+
         .controls {
             display: flex;
             gap: 1rem;
@@ -2590,13 +2606,21 @@
             return text.replace(/[|[\]{}]/g, '').replace(/\s+/g, ' ').trim();
         }
 
-        async function detectStampSetName(imageBlob, generation = workspaceGeneration) {
+        async function detectStampSetName(imageBlob, generation = workspaceGeneration, fallbackName = '') {
             if (!isWorkspaceGenerationCurrent(generation)) return;
             const infoDiv = document.getElementById('stampSetInfo');
             infoDiv.textContent = 'Detecting stamp set name...';
             detectedStampSetName = '';
             let imageUrl = null;
             let worker = null;
+
+            // OCR reads the banner printed on the product photo, which is the
+            // name people expect in a filename. The archive's product name only
+            // stands in when the banner yields nothing.
+            const useFallbackName = () => {
+                detectedStampSetName = String(fallbackName || '').trim();
+                infoDiv.textContent = detectedStampSetName ? `Stamp set: ${detectedStampSetName}` : '';
+            };
 
             try {
                 const img = new Image();
@@ -2608,7 +2632,7 @@
                 // Step 1: Find the black banner region via pixel analysis
                 const region = findBannerRegion(img);
                 if (!region) {
-                    if (isWorkspaceGenerationCurrent(generation)) infoDiv.textContent = '';
+                    if (isWorkspaceGenerationCurrent(generation)) useFallbackName();
                     return;
                 }
 
@@ -2685,12 +2709,12 @@
                     detectedStampSetName = textLines[0];
                     infoDiv.textContent = `Stamp set: ${detectedStampSetName}`;
                 } else {
-                    infoDiv.textContent = '';
+                    useFallbackName();
                 }
             } catch (err) {
                 if (isWorkspaceGenerationCurrent(generation)) {
                     console.error('OCR detection failed:', err);
-                    infoDiv.textContent = '';
+                    useFallbackName();
                 }
             } finally {
                 if (imageUrl) URL.revokeObjectURL(imageUrl);
@@ -2957,135 +2981,310 @@
             document.getElementById('stampSetInfo').textContent = '';
             errorDiv.textContent = '';
 
-            const imageUrls = [
-                `${baseUrl}/${productId}.jpg`,
-                `${baseUrl}/${productId}o01.jpg`
-            ];
-            let dieSourceBlob = null;
+            const archiveEntry = archiveProductEntry(await loadArchiveIndex(), productId);
+            if (!isWorkspaceGenerationCurrent(generation)) return;
 
-            for (const url of imageUrls) {
-                if (!isWorkspaceGenerationCurrent(generation)) return;
+            const plan = buildCatalogSourcePlan(productId, archiveEntry);
+            const context = {
+                productId,
+                generation,
+                dieSourceBlob: null,
+                archiveName: archiveEntry ? archiveEntry.name : ''
+            };
+
+            await loadCatalogSources(plan.auto, context);
+            if (!isWorkspaceGenerationCurrent(generation)) return;
+
+            if (countRenderedSources() === 0) {
+                errorDiv.textContent = 'No images found for this product ID';
+            }
+            renderExtraVariantsOffer(plan.extra, context);
+        }
+
+        // ── Archive image index ────────────────────────────────────────────
+        // The archive site published under archive/ ships viewer-index.json,
+        // mapping a product ID to [variants, name?, extension?]. It tells the
+        // viewer which image variants actually exist — the CDN is only ever
+        // probed for the main image and o01 without it — and supplies an
+        // archive-hosted URL for images the CDN no longer serves.
+        const ARCHIVE_MANIFEST_URL = 'archive/catalog-manifest.json';
+        const ARCHIVE_DEFAULT_EXTENSION = 'png';
+        const CATALOG_AUTO_VARIANT_LIMIT = 2;
+        let archiveIndexRequest = null;
+
+        function loadArchiveIndex() {
+            if (!archiveIndexRequest) archiveIndexRequest = requestArchiveIndex();
+            return archiveIndexRequest;
+        }
+
+        async function requestArchiveIndex() {
+            // Relative fetches cannot resolve from file://, and the viewer has to
+            // keep working when index.html is opened straight from disk.
+            const protocol = typeof location === 'undefined' ? '' : String(location.protocol || '');
+            if (protocol !== 'http:' && protocol !== 'https:') return null;
+
+            try {
+                const manifestResponse = await fetch(ARCHIVE_MANIFEST_URL, { cache: 'no-cache' });
+                if (!manifestResponse.ok) return null;
+                const manifest = await manifestResponse.json();
+                const indexPath = manifest && manifest.viewer_index_url;
+                if (!indexPath) return null;
+
+                const version = manifest.version ? `?v=${encodeURIComponent(manifest.version)}` : '';
+                const indexResponse = await fetch(`archive/${indexPath}${version}`);
+                if (!indexResponse.ok) return null;
+                const index = await indexResponse.json();
+                return index && index.products ? index : null;
+            } catch (error) {
+                console.warn('Archive image index unavailable:', error);
+                return null;
+            }
+        }
+
+        function archiveProductEntry(archiveIndex, productId) {
+            const entry = archiveIndex && archiveIndex.products
+                ? archiveIndex.products[String(productId)]
+                : null;
+            if (!Array.isArray(entry) || entry.length === 0) return null;
+
+            const variants = Array.isArray(entry[0])
+                ? entry[0].filter(variant => Number.isInteger(variant) && variant >= 0).sort((a, b) => a - b)
+                : variantRange(entry[0]);
+            if (variants.length === 0) return null;
+
+            const extension = typeof entry[2] === 'string' && entry[2] ? entry[2] : ARCHIVE_DEFAULT_EXTENSION;
+            return {
+                variants,
+                name: typeof entry[1] === 'string' ? entry[1] : '',
+                extension,
+                baseUrl: archiveBaseUrl(archiveIndex.b2_base_url)
+            };
+        }
+
+        function variantRange(count) {
+            if (!Number.isInteger(count) || count <= 0) return [];
+            return Array.from({ length: count }, (_, variant) => variant);
+        }
+
+        function archiveBaseUrl(value) {
+            const base = typeof value === 'string' ? value.trim() : '';
+            if (!base) return '';
+            return base.endsWith('/') ? base : `${base}/`;
+        }
+
+        function catalogImageId(productId, variant) {
+            return variant === 0 ? String(productId) : `${productId}o${String(variant).padStart(2, '0')}`;
+        }
+
+        // Splits a product's images into the two loaded on demand of the user's
+        // search and the archive-only remainder, which stays behind an explicit
+        // offer so a 26-image product does not preprocess everything up front.
+        function buildCatalogSourcePlan(productId, archiveEntry = null, autoLimit = CATALOG_AUTO_VARIANT_LIMIT) {
+            const variants = archiveEntry ? archiveEntry.variants : [0, 1];
+            const sources = variants.map(variant => {
+                const imageId = catalogImageId(productId, variant);
+                const urls = [`${baseUrl}/${imageId}.jpg`];
+                if (archiveEntry && archiveEntry.baseUrl) {
+                    urls.push(`${archiveEntry.baseUrl}${productId}/${imageId}.${archiveEntry.extension}`);
+                }
+                return {
+                    variant,
+                    role: variant === 0 ? 'main' : 'outline',
+                    imageId,
+                    urls
+                };
+            });
+
+            return { auto: sources.slice(0, autoLimit), extra: sources.slice(autoLimit) };
+        }
+
+        // Walks a source's candidate URLs (CDN first, archive mirror second) and
+        // returns the bytes of the first host that answers.
+        async function fetchCatalogSource(source) {
+            for (const url of source.urls) {
                 try {
                     const response = await fetch(url);
-                    if (!isWorkspaceGenerationCurrent(generation)) return;
-                    if (response.ok) {
-                        const blob = await response.blob();
-                        if (!isWorkspaceGenerationCurrent(generation)) return;
-                        
-                        const imageWrapper = document.createElement('div');
-                        imageWrapper.className = 'image-wrapper';
-                        
-                        if (url.includes('o01')) {
-                            const sourceBlob = dieSourceBlob || blob;
-                            // Create a temporary image to get dimensions
-                            const tempImg = document.createElement('img');
-                            const tempUrl = URL.createObjectURL(sourceBlob);
-                            tempImg.src = tempUrl;
-                            try {
-                                await new Promise(resolve => {
-                                    tempImg.onload = resolve;
-                                });
-                                if (!isWorkspaceGenerationCurrent(generation)) return;
-
-                                const originalWidth = tempImg.naturalWidth;
-                                const originalHeight = tempImg.naturalHeight;
-
-                                const preprocessingResult = await preprocessForSVG(tempImg);
-                                if (!isWorkspaceGenerationCurrent(generation)) return;
-                                const imageForVectorization = preprocessingResult.processedImage;
-                                const isBW = await isBlackAndWhite(imageForVectorization);
-                                if (!isWorkspaceGenerationCurrent(generation)) return;
-
-                                // Persist sourceBlob (the blob actually decoded/vectorized
-                                // above), not the raw outline `blob` bytes — when a die-set
-                                // is detected, sourceBlob is the main-image blob substituted
-                                // in for vectorization, and originalWidth/originalHeight are
-                                // already derived from it. Saving `blob` here would pair the
-                                // wrong bytes with these dimensions and desync a reloaded
-                                // project's raster from its saved SVG.
-                                if (isBW) {
-                                    // Default the auto-vectorize path to the color-quantize tracer
-                                    // (preserves halftone tones). The render-mode toggle below lets
-                                    // the user flip to the binary tracer for crisper line art.
-                                    const initialMode = 'binary';
-                                    imageForVectorization._renderMode = initialMode;
-                                    imageForVectorization._traceParams = defaultTraceParams();
-                                    const svg = await vectorizeImage(imageForVectorization, originalWidth, originalHeight, initialMode);
-                                    if (!isWorkspaceGenerationCurrent(generation)) return;
-                                    const record = createSourceRuntimeRecord({
-                                        generation,
-                                        blob: sourceBlob,
-                                        origin: { kind: 'catalog', productId, variant: 'outline', filename: '', url },
-                                        width: originalWidth,
-                                        height: originalHeight,
-                                        preprocess: true
-                                    });
-                                    if (!record) return;
-                                    renderConvertedSource(record, imageForVectorization, svg, imageWrapper);
-                                } else {
-                                    const record = createSourceRuntimeRecord({
-                                        generation,
-                                        blob: sourceBlob,
-                                        origin: { kind: 'catalog', productId, variant: 'outline', filename: '', url },
-                                        width: originalWidth,
-                                        height: originalHeight,
-                                        preprocess: true
-                                    });
-                                    if (!record) return;
-                                    renderRasterSource(record, imageWrapper);
-                                }
-                            } finally {
-                                URL.revokeObjectURL(tempUrl);
-                            }
-                        } else {
-                            const detectionProbe = document.createElement('img');
-                            const probeUrl = URL.createObjectURL(blob);
-                            detectionProbe.src = probeUrl;
-                            try {
-                                await new Promise((resolve, reject) => {
-                                    detectionProbe.onload = resolve;
-                                    detectionProbe.onerror = reject;
-                                });
-                                if (!isWorkspaceGenerationCurrent(generation)) return;
-                                const dieProbeResult = await preprocessForSVG(detectionProbe);
-                                if (!isWorkspaceGenerationCurrent(generation)) return;
-                                if (dieProbeResult.dieSetDetected) {
-                                    dieSourceBlob = blob;
-                                }
-                                const originalWidth = detectionProbe.naturalWidth;
-                                const originalHeight = detectionProbe.naturalHeight;
-
-                                const record = createSourceRuntimeRecord({
-                                    generation,
-                                    blob,
-                                    origin: { kind: 'catalog', productId, variant: 'main', filename: '', url },
-                                    width: originalWidth,
-                                    height: originalHeight,
-                                    preprocess: false
-                                });
-                                if (!record) return;
-                                renderRasterSource(record, imageWrapper);
-
-                                // Kick off OCR detection in the background for the product photo.
-                                detectStampSetName(blob, generation);
-                            } finally {
-                                URL.revokeObjectURL(probeUrl);
-                            }
-                        }
-
-                        if (!isWorkspaceGenerationCurrent(generation)) return;
-                        imageContainer.appendChild(imageWrapper);
-                    }
+                    if (!response.ok) continue;
+                    return { blob: await response.blob(), url };
                 } catch (error) {
-                    if (isWorkspaceGenerationCurrent(generation)) {
-                        console.error(`Error loading image ${url}:`, error);
+                    console.warn(`Error loading image ${url}:`, error);
+                }
+            }
+            return null;
+        }
+
+        async function loadCatalogSources(sources, context) {
+            const imageContainer = document.getElementById('imageContainer');
+            for (const source of sources) {
+                if (!isWorkspaceGenerationCurrent(context.generation)) return;
+                try {
+                    const fetched = await fetchCatalogSource(source);
+                    if (!isWorkspaceGenerationCurrent(context.generation)) return;
+                    if (!fetched) continue;
+
+                    const imageWrapper = document.createElement('div');
+                    imageWrapper.className = 'image-wrapper';
+                    const rendered = source.role === 'main'
+                        ? await renderCatalogMainImage(source, fetched, context, imageWrapper)
+                        : await renderCatalogOutlineImage(source, fetched, context, imageWrapper);
+                    if (!isWorkspaceGenerationCurrent(context.generation)) return;
+                    if (rendered) imageContainer.appendChild(imageWrapper);
+                } catch (error) {
+                    if (isWorkspaceGenerationCurrent(context.generation)) {
+                        console.error(`Error loading image ${source.imageId}:`, error);
                     }
                 }
             }
+        }
 
-            if (isWorkspaceGenerationCurrent(generation) && imageContainer.children.length === 0) {
-                errorDiv.textContent = 'No images found for this product ID';
+        async function renderCatalogOutlineImage(source, fetched, context, imageWrapper) {
+            const sourceBlob = context.dieSourceBlob || fetched.blob;
+            // Create a temporary image to get dimensions
+            const tempImg = document.createElement('img');
+            const tempUrl = URL.createObjectURL(sourceBlob);
+            tempImg.src = tempUrl;
+            try {
+                await new Promise(resolve => {
+                    tempImg.onload = resolve;
+                });
+                if (!isWorkspaceGenerationCurrent(context.generation)) return false;
+
+                const originalWidth = tempImg.naturalWidth;
+                const originalHeight = tempImg.naturalHeight;
+
+                const preprocessingResult = await preprocessForSVG(tempImg);
+                if (!isWorkspaceGenerationCurrent(context.generation)) return false;
+                const imageForVectorization = preprocessingResult.processedImage;
+                const isBW = await isBlackAndWhite(imageForVectorization);
+                if (!isWorkspaceGenerationCurrent(context.generation)) return false;
+
+                // Persist sourceBlob (the blob actually decoded/vectorized
+                // above), not the raw outline bytes — when a die-set is
+                // detected, sourceBlob is the main-image blob substituted in for
+                // vectorization, and originalWidth/originalHeight are already
+                // derived from it. Saving the outline bytes here would pair the
+                // wrong bytes with these dimensions and desync a reloaded
+                // project's raster from its saved SVG.
+                if (isBW) {
+                    // Default the auto-vectorize path to the color-quantize tracer
+                    // (preserves halftone tones). The render-mode toggle below lets
+                    // the user flip to the binary tracer for crisper line art.
+                    const initialMode = 'binary';
+                    imageForVectorization._renderMode = initialMode;
+                    imageForVectorization._traceParams = defaultTraceParams();
+                    const svg = await vectorizeImage(imageForVectorization, originalWidth, originalHeight, initialMode);
+                    if (!isWorkspaceGenerationCurrent(context.generation)) return false;
+                    const record = createSourceRuntimeRecord({
+                        generation: context.generation,
+                        blob: sourceBlob,
+                        origin: catalogOrigin(source, fetched, context),
+                        width: originalWidth,
+                        height: originalHeight,
+                        preprocess: true
+                    });
+                    if (!record) return false;
+                    renderConvertedSource(record, imageForVectorization, svg, imageWrapper);
+                } else {
+                    const record = createSourceRuntimeRecord({
+                        generation: context.generation,
+                        blob: sourceBlob,
+                        origin: catalogOrigin(source, fetched, context),
+                        width: originalWidth,
+                        height: originalHeight,
+                        preprocess: true
+                    });
+                    if (!record) return false;
+                    renderRasterSource(record, imageWrapper);
+                }
+                return true;
+            } finally {
+                URL.revokeObjectURL(tempUrl);
             }
+        }
+
+        async function renderCatalogMainImage(source, fetched, context, imageWrapper) {
+            const detectionProbe = document.createElement('img');
+            const probeUrl = URL.createObjectURL(fetched.blob);
+            detectionProbe.src = probeUrl;
+            try {
+                await new Promise((resolve, reject) => {
+                    detectionProbe.onload = resolve;
+                    detectionProbe.onerror = reject;
+                });
+                if (!isWorkspaceGenerationCurrent(context.generation)) return false;
+                const dieProbeResult = await preprocessForSVG(detectionProbe);
+                if (!isWorkspaceGenerationCurrent(context.generation)) return false;
+                if (dieProbeResult.dieSetDetected) {
+                    context.dieSourceBlob = fetched.blob;
+                }
+                const originalWidth = detectionProbe.naturalWidth;
+                const originalHeight = detectionProbe.naturalHeight;
+
+                const record = createSourceRuntimeRecord({
+                    generation: context.generation,
+                    blob: fetched.blob,
+                    origin: catalogOrigin(source, fetched, context),
+                    width: originalWidth,
+                    height: originalHeight,
+                    preprocess: false
+                });
+                if (!record) return false;
+                renderRasterSource(record, imageWrapper);
+
+                // Kick off OCR detection in the background for the product photo,
+                // with the archive's product name standing in when OCR comes up
+                // empty.
+                detectStampSetName(fetched.blob, context.generation, context.archiveName);
+                return true;
+            } finally {
+                URL.revokeObjectURL(probeUrl);
+            }
+        }
+
+        function catalogOrigin(source, fetched, context) {
+            return {
+                kind: 'catalog',
+                productId: context.productId,
+                variant: source.role,
+                filename: catalogFilenameFromUrl(fetched.url),
+                url: fetched.url
+            };
+        }
+
+        function catalogFilenameFromUrl(url) {
+            return String(url || '').split('?')[0].split('/').pop() || '';
+        }
+
+        function countRenderedSources() {
+            const imageContainer = document.getElementById('imageContainer');
+            return Array.from(imageContainer.children)
+                .filter(child => child.className === 'image-wrapper')
+                .length;
+        }
+
+        function renderExtraVariantsOffer(extraSources, context) {
+            if (!extraSources.length) return;
+
+            const imageContainer = document.getElementById('imageContainer');
+            const offer = document.createElement('div');
+            offer.className = 'extra-variants';
+
+            const label = document.createElement('span');
+            label.textContent = `The archive lists ${extraSources.length} more image${extraSources.length === 1 ? '' : 's'} for this product.`;
+
+            const loadButton = document.createElement('button');
+            loadButton.textContent = 'Load';
+            loadButton.onclick = async () => {
+                loadButton.disabled = true;
+                label.textContent = 'Loading the remaining images...';
+                await loadCatalogSources(extraSources, context);
+                if (!isWorkspaceGenerationCurrent(context.generation)) return;
+                offer.remove();
+            };
+
+            offer.appendChild(label);
+            offer.appendChild(loadButton);
+            imageContainer.appendChild(offer);
         }
 
         async function processUploadedImage(file) {
