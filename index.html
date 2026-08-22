@@ -3034,6 +3034,13 @@
 
         const DIE_SHEET_IDLE_LABEL = 'Extract Dies from Sheet';
 
+        // Die-sheet extraction is parked: the machinery below stays intact and
+        // tested, but neither source card offers it. Flip this to true to bring
+        // the action back on both cards; nothing else needs to change. Saved
+        // projects are unaffected either way, since a completed extraction only
+        // ever leaves a normal raster behind (see extractDieSheet).
+        const DIE_SHEET_UI_ENABLED = false;
+
         // The experimental extraction control. It appears on BOTH an
         // un-converted raster card and a converted one, because whether a
         // banner-less sheet photo reaches the raster card or is normalized and
@@ -3224,7 +3231,7 @@
 
             controls.appendChild(mode);
             controls.appendChild(trace);
-            controls.appendChild(createDieSheetExtractPanel(record, wrapper));
+            if (DIE_SHEET_UI_ENABLED) controls.appendChild(createDieSheetExtractPanel(record, wrapper));
             controls.appendChild(color.colorControl);
             controls.appendChild(color.colorPalette);
             controls.appendChild(createMainDownloadRow(svgContainer, record.origin.productId, record.width, record.height));
@@ -3319,7 +3326,9 @@
             // A die-sheet photo lands here rather than auto-converting, because
             // a cream backdrop never passes the black-or-white gate. This is
             // the primary home for the experimental extraction action.
-            wrapper.appendChild(createDieSheetExtractControl(record, wrapper));
+            if (DIE_SHEET_UI_ENABLED) {
+                wrapper.appendChild(createDieSheetExtractControl(record, wrapper));
+            }
 
             record.forceButton = forceBtn;
             updateProjectActionState();
