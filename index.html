@@ -672,23 +672,180 @@
             flex-wrap: wrap;
         }
 
-        .cricut-group input[type="number"] {
-            width: 46px;
-            padding: 0.35rem 0.25rem;
-            font-size: 0.75rem;
-            text-align: center;
-            border: 1px solid #d1d5db;
-            border-radius: 6px;
-            background: white;
+        /* ── Cricut border/flood settings panel ── */
+        .cricut-settings {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+            gap: 0.7rem 1rem;
+            padding: 0.65rem 0.75rem;
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
         }
 
-        .cricut-field {
+        .cricut-control {
+            display: flex;
+            flex-direction: column;
+            gap: 0.3rem;
+            min-width: 0;
+        }
+
+        .cricut-control-head {
             display: flex;
             align-items: center;
-            gap: 0.2rem;
+            justify-content: space-between;
+            gap: 0.4rem;
+        }
+
+        .cricut-control-label {
             font-size: 0.72rem;
+            font-weight: 600;
+            color: #374151;
+        }
+
+        .cricut-control-value {
+            display: flex;
+            align-items: center;
+            gap: 0.15rem;
+        }
+
+        .cricut-control-value input[type="number"] {
+            width: 46px;
+            padding: 0.2rem 0.15rem;
+            font-size: 0.72rem;
+            text-align: center;
+            border: 1px solid #d1d5db;
+            border-radius: 5px;
+            background: white;
+            color: #111827;
+        }
+
+        .cricut-control-unit {
+            font-size: 0.64rem;
+            color: #9ca3af;
+        }
+
+        .cricut-stepper {
+            width: 20px;
+            height: 20px;
+            padding: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.8rem;
+            line-height: 1;
+            font-weight: 600;
+            border: 1px solid #d1d5db;
+            border-radius: 5px;
+            background: white;
             color: #4b5563;
+            flex-shrink: 0;
+        }
+
+        .cricut-stepper:hover:not(:disabled) {
+            background: #eef2ff;
+            border-color: var(--primary-color);
+            color: var(--primary-color);
+        }
+
+        .cricut-stepper:disabled {
+            opacity: 0.4;
+            cursor: default;
+        }
+
+        .cricut-slider {
+            width: 100%;
+            margin: 0;
+            accent-color: var(--primary-color);
+            cursor: ew-resize;
+        }
+
+        .cricut-presets {
+            display: flex;
+            gap: 0.2rem;
+            flex-wrap: wrap;
+        }
+
+        .cricut-preset {
+            padding: 0.15rem 0.4rem;
+            font-size: 0.64rem;
+            font-weight: 500;
+            line-height: 1.4;
+            border: 1px solid #e2e8f0;
+            border-radius: 999px;
+            background: white;
+            color: #6b7280;
+        }
+
+        .cricut-preset:hover {
+            border-color: var(--primary-color);
+            color: var(--primary-color);
+        }
+
+        .cricut-preset.active {
+            background: var(--primary-color);
+            border-color: var(--primary-color);
+            color: white;
+        }
+
+        .cricut-settings-footer {
+            grid-column: 1 / -1;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+            padding-top: 0.15rem;
+            border-top: 1px solid #e5e7eb;
+        }
+
+        .cricut-legend {
+            display: flex;
+            align-items: center;
+            gap: 0.55rem;
+            flex-wrap: wrap;
+            font-size: 0.64rem;
+            color: #6b7280;
+        }
+
+        .cricut-legend-item {
+            display: flex;
+            align-items: center;
+            gap: 0.22rem;
             white-space: nowrap;
+        }
+
+        .cricut-legend-swatch {
+            width: 10px;
+            height: 10px;
+            border-radius: 3px;
+            border: 1px solid rgba(0, 0, 0, 0.15);
+            flex-shrink: 0;
+        }
+
+        .cricut-settings-footer button {
+            padding: 0.2rem 0.5rem;
+            font-size: 0.64rem;
+            font-weight: 500;
+            line-height: 1.4;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            background: white;
+            color: #6b7280;
+        }
+
+        .cricut-settings-footer button:hover {
+            border-color: var(--primary-color);
+            color: var(--primary-color);
+        }
+
+        .cricut-explain-toggle.active {
+            background: var(--primary-color);
+            border-color: var(--primary-color);
+            color: white;
+        }
+
+        .cricut-footer-spacer {
+            flex: 1 1 auto;
         }
 
         .cricut-preview {
@@ -709,6 +866,12 @@
             width: auto;
             height: auto;
             object-fit: contain;
+        }
+
+        /* A 15px border on a 150px thumbnail is barely two device pixels, so the
+           Cricut preview gets more room than the plain SVG object preview. */
+        .svg-object-preview.cricut-preview {
+            height: 220px;
         }
 
         .cricut-preview-status {
@@ -865,6 +1028,59 @@
             font-size: 0.75rem;
             color: #6b7280;
             line-height: 1.4;
+        }
+
+        /* Experimental die-sheet extraction */
+        .die-sheet-action {
+            display: flex;
+            flex-direction: column;
+            gap: 0.4rem;
+            width: 100%;
+            margin-top: 0.6rem;
+        }
+
+        .die-sheet-action-row {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            flex-wrap: wrap;
+        }
+
+        .die-sheet-action-row .die-sheet-button {
+            background-color: #7c3aed;
+            padding: 0.55rem 1.1rem;
+            font-size: 0.875rem;
+        }
+
+        .die-sheet-action-row .die-sheet-button:hover:not(:disabled) {
+            background-color: #6d28d9;
+        }
+
+        .die-sheet-action-row .die-sheet-button:disabled {
+            background-color: #9ca3af;
+            cursor: not-allowed;
+            opacity: 0.7;
+        }
+
+        .die-sheet-mirror {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+            font-size: 0.75rem;
+            color: #374151;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .die-sheet-status {
+            font-size: 0.8rem;
+            color: #6b7280;
+            font-weight: 500;
+            min-height: 1.1em;
+        }
+
+        .die-sheet-panel .die-sheet-action {
+            margin-top: 0;
         }
 
         /* Better responsive styling for object card color palettes */
@@ -1061,17 +1277,6 @@
             align-items: center;
             gap: 0.3rem;
             flex-wrap: wrap;
-        }
-
-        .composer-toolbar .cricut-group input[type="number"] {
-            width: 46px;
-            height: 28px;
-            padding: 0 0.25rem;
-            font-size: 0.72rem;
-            text-align: center;
-            border: 1px solid #d1d5db;
-            border-radius: 6px;
-            background: white;
         }
 
         .composer-pattern-panel {
@@ -1899,6 +2104,9 @@
                     // preview timer was already cleared by detachComposerState).
                     previous.objectUrls.forEach(url => URL.revokeObjectURL(url));
                     previous.objectUrls.clear();
+                    if (previous.composer && previous.composer.cricutSettings) {
+                        previous.composer.cricutSettings.dispose();
+                    }
                     activeOpenTransactionRequestId = null;
                     activeOpenTransactionRestore = null;
                     return true;
@@ -2824,6 +3032,153 @@
             wrapper.appendChild(objectsContainer);
         }
 
+        const DIE_SHEET_IDLE_LABEL = 'Extract Dies from Sheet';
+
+        // The experimental extraction control. It appears on BOTH an
+        // un-converted raster card and a converted one, because whether a
+        // banner-less sheet photo reaches the raster card or is normalized and
+        // auto-converted depends on a detectDieSetPalette gate that sits right
+        // near its own threshold for wood backdrops. Rather than tune that
+        // detector for an experiment, both cards offer the action.
+        //
+        // Extraction replaces the card's DOM partway through — the cleaned
+        // sheet renders before the individual dies are traced — which destroys
+        // this control and builds a fresh one. So the run lives on the RECORD,
+        // not in this closure: progress during the long glyph-tracing phase is
+        // routed to record.dieSheetControl (whichever control is currently
+        // live), and a control constructed mid-run renders itself as running.
+        function createDieSheetExtractControl(record, wrapper) {
+            const row = document.createElement('div');
+            row.className = 'die-sheet-action-row';
+
+            const button = document.createElement('button');
+            button.className = 'die-sheet-button';
+            button.textContent = DIE_SHEET_IDLE_LABEL;
+            button.title = 'Experimental: segment a photograph of a metal die sheet into one object per die';
+
+            const cancelButton = document.createElement('button');
+            cancelButton.className = 'btn-secondary';
+            cancelButton.textContent = 'Cancel';
+            cancelButton.style.display = 'none';
+
+            const mirrorInput = document.createElement('input');
+            mirrorInput.type = 'checkbox';
+            mirrorInput.checked = true;
+            const mirrorLabel = document.createElement('label');
+            mirrorLabel.className = 'die-sheet-mirror';
+            mirrorLabel.title = 'Dies are photographed face-up, so the sheet reads reversed. Uncheck for a photo already shot in reading orientation.';
+            const mirrorText = document.createElement('span');
+            mirrorText.textContent = 'Mirror (photographed face-up)';
+            mirrorLabel.appendChild(mirrorInput);
+            mirrorLabel.appendChild(mirrorText);
+
+            const status = document.createElement('div');
+            status.className = 'die-sheet-status';
+
+            const hint = document.createElement('span');
+            hint.className = 'raster-action-hint';
+            hint.textContent = 'Experimental — for a photo of a metal die sheet, not a product image.';
+
+            const setStatus = (message, tone) => {
+                status.textContent = message || '';
+                status.style.color = tone === 'error'
+                    ? '#dc2626'
+                    : (tone === 'done' ? '#059669' : '#6b7280');
+            };
+
+            const setRunning = running => {
+                button.disabled = running;
+                button.textContent = running ? 'Extracting...' : DIE_SHEET_IDLE_LABEL;
+                cancelButton.style.display = running ? 'inline-block' : 'none';
+                mirrorInput.disabled = running;
+            };
+
+            record.dieSheetControl = { setStatus, setRunning };
+
+            cancelButton.onclick = () => {
+                if (record.dieSheetRun) record.dieSheetRun.cancelled = true;
+                setStatus('Finishing the current die, then stopping...');
+            };
+
+            button.onclick = async () => {
+                const run = { cancelled: false };
+                record.dieSheetRun = run;
+                setRunning(true);
+                setStatus('Loading die extractor...');
+                try {
+                    const result = await extractDieSheet(record, wrapper, {
+                        mirror: mirrorInput.checked,
+                        onProgress: message => {
+                            const live = record.dieSheetControl;
+                            if (live) live.setStatus(message);
+                        },
+                        shouldCancel: () => run.cancelled
+                    });
+                    const live = record.dieSheetControl;
+                    if (!live) return;
+                    if (result.ok && result.cancelled) {
+                        live.setStatus(`Stopped after ${result.created} of ${result.total} dies.`, 'done');
+                    } else if (result.ok) {
+                        live.setStatus(`Extracted ${result.created} dies.`, 'done');
+                    } else if (result.reason === 'no-dies') {
+                        live.setStatus('No dies found. This works on a photo of a die sheet, not a product image.', 'error');
+                    } else if (result.reason === 'cancelled') {
+                        live.setStatus('Cancelled.', 'done');
+                    } else if (result.reason !== 'stale') {
+                        live.setStatus('Extraction failed.', 'error');
+                    }
+                } catch (error) {
+                    if (isWorkspaceGenerationCurrent(record.generation)) {
+                        console.error('Die sheet extraction failed', error);
+                        const live = record.dieSheetControl;
+                        // A missing or broken die-extract.js lands here. The
+                        // card stays fully usable either way.
+                        if (live) live.setStatus(`Extraction failed: ${error.message}`, 'error');
+                    }
+                } finally {
+                    record.dieSheetRun = null;
+                    const live = record.dieSheetControl;
+                    if (live) live.setRunning(false);
+                }
+            };
+
+            row.appendChild(button);
+            row.appendChild(cancelButton);
+            row.appendChild(mirrorLabel);
+            row.appendChild(hint);
+
+            const container = document.createElement('div');
+            container.className = 'die-sheet-action';
+            container.appendChild(row);
+            container.appendChild(status);
+
+            // Rebuilt mid-run, so don't look idle while dies are still tracing.
+            if (record.dieSheetRun) setRunning(true);
+
+            container._setStatus = setStatus;
+            container._button = button;
+            container._mirrorInput = mirrorInput;
+            container._cancelButton = cancelButton;
+            return container;
+        }
+
+        // On a converted card the action is tucked into a collapsed panel: it's
+        // only a recovery path there, and the common case is a card that has
+        // nothing to do with die sheets.
+        function createDieSheetExtractPanel(record, wrapper) {
+            const panel = document.createElement('details');
+            panel.className = 'tracer-params die-sheet-panel';
+            const summary = document.createElement('summary');
+            summary.textContent = 'Die sheet extraction (experimental)';
+            panel.appendChild(summary);
+
+            const body = document.createElement('div');
+            body.className = 'tracer-params-body';
+            body.appendChild(createDieSheetExtractControl(record, wrapper));
+            panel.appendChild(body);
+            return panel;
+        }
+
         // Renders the shared "converted source" UI (SVG preview, detection
         // controls, render-mode/tracer/color controls, downloads, and the
         // individual-objects area) for a registered source. `initial` carries
@@ -2869,6 +3224,7 @@
 
             controls.appendChild(mode);
             controls.appendChild(trace);
+            controls.appendChild(createDieSheetExtractPanel(record, wrapper));
             controls.appendChild(color.colorControl);
             controls.appendChild(color.colorPalette);
             controls.appendChild(createMainDownloadRow(svgContainer, record.origin.productId, record.width, record.height));
@@ -2960,6 +3316,10 @@
                 return result;
             };
             wrapper.appendChild(actionRow);
+            // A die-sheet photo lands here rather than auto-converting, because
+            // a cream backdrop never passes the black-or-white gate. This is
+            // the primary home for the experimental extraction action.
+            wrapper.appendChild(createDieSheetExtractControl(record, wrapper));
 
             record.forceButton = forceBtn;
             updateProjectActionState();
@@ -3745,6 +4105,267 @@
                 processedImage: normalized,
                 dieSetDetected: true
             };
+        }
+
+        // ── Die sheet extraction (experimental) ────────────────────────────
+        // Segments a PHOTOGRAPH of a die sheet — bare steel dies on a cream
+        // wood backdrop — into individual glyph silhouettes. That is a
+        // different problem from the one createNormalizedDieSetImage above
+        // solves: it thresholds on LUMINANCE, which is right for the catalog's
+        // white-background die scans and wrong for a photo, where the steel
+        // catches highlights brighter than the backdrop while wood grain in
+        // shadow is darker than the steel. die-extract.js thresholds on WARMTH
+        // instead, since bare steel is spectrally neutral and cream wood is not.
+        // Nothing above this banner changes: extraction only ever runs from an
+        // explicit click.
+
+        const DIE_EXTRACT_SRC = 'die-extract.js';
+        let dieExtractLoader = null;
+
+        // Loads die-extract.js on first use rather than at page load, keeping
+        // the experimental segmentation out of the app's baseline. A classic
+        // script tag is injected rather than an ES import on purpose: module
+        // loads are blocked by CORS when index.html is opened from file://,
+        // which the documented workflow relies on. The promise is cached so
+        // repeat clicks reuse one load, but a FAILED load is not cached, so a
+        // retry can still succeed.
+        function ensureDieExtractLoaded() {
+            if (dieExtractLoader) return dieExtractLoader;
+            if (globalThis.StampinUpDieExtract) {
+                dieExtractLoader = Promise.resolve(globalThis.StampinUpDieExtract);
+                return dieExtractLoader;
+            }
+
+            dieExtractLoader = new Promise((resolve, reject) => {
+                const tag = document.createElement('script');
+                tag.src = DIE_EXTRACT_SRC;
+                tag.async = true;
+                tag.onload = () => {
+                    if (globalThis.StampinUpDieExtract) resolve(globalThis.StampinUpDieExtract);
+                    else reject(new Error(`${DIE_EXTRACT_SRC} loaded but registered nothing`));
+                };
+                tag.onerror = () => reject(new Error(`Could not load ${DIE_EXTRACT_SRC}`));
+                document.head.appendChild(tag);
+            });
+            dieExtractLoader.catch(() => { dieExtractLoader = null; });
+            return dieExtractLoader;
+        }
+
+        // Hands the browser a chance to paint between the long synchronous
+        // stages of extraction. requestAnimationFrame alone would stall
+        // outright in a hidden tab, and a 37-glyph run is easily long enough
+        // for the user to switch away mid-flight, so a timer backs it up.
+        function yieldToPaint() {
+            return new Promise(resolve => {
+                let settled = false;
+                const finish = () => {
+                    if (settled) return;
+                    settled = true;
+                    resolve();
+                };
+                requestAnimationFrame(finish);
+                setTimeout(finish, 50);
+            });
+        }
+
+        function imageToImageData(img) {
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d', { willReadFrequently: true });
+            canvas.width = img.naturalWidth || img.width;
+            canvas.height = img.naturalHeight || img.height;
+            ctx.drawImage(img, 0, 0);
+            return ctx.getImageData(0, 0, canvas.width, canvas.height);
+        }
+
+        // Paints a 1 = ink mask as black-on-white, the form the tracer expects.
+        // Deliberately a plain <canvas> rather than an OffscreenCanvas: this
+        // needs toDataURL, and the rest of the file uses the same idiom.
+        function maskToCanvas(mask, width, height) {
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            canvas.width = width;
+            canvas.height = height;
+
+            const imageData = ctx.createImageData(width, height);
+            const data = imageData.data;
+            for (let i = 0; i < mask.length; i++) {
+                const value = mask[i] ? 0 : 255;
+                const p = i * 4;
+                data[p] = value;
+                data[p + 1] = value;
+                data[p + 2] = value;
+                data[p + 3] = 255;
+            }
+            ctx.putImageData(imageData, 0, 0);
+            return canvas;
+        }
+
+        // Rebuilds the full-sheet mask from the accepted glyphs alone.
+        //
+        // extractDies returns the whole thresholded sheet, which still carries
+        // the ink it REJECTED as glyphs — on a real photo that is the shadow
+        // along the edge of the sheet, a long thin bar the aspect-ratio test
+        // discards (measured at ~2.5% of the sheet's ink). Tracing the raw mask
+        // would put that bar in the full-sheet SVG the user can download, even
+        // though no die card corresponds to it. Compositing the glyphs back
+        // instead makes the sheet exactly what was extracted.
+        //
+        // Each glyph tile is its component plus a uniform pad, so the pad is
+        // recoverable from the tile and the component's own width.
+        function composeSheetMask(sheet, glyphs) {
+            const composed = new Uint8Array(sheet.width * sheet.height);
+            for (const glyph of glyphs) {
+                const pad = (glyph.width - glyph.source.w) / 2;
+                for (let y = 0; y < glyph.source.h; y++) {
+                    for (let x = 0; x < glyph.source.w; x++) {
+                        if (!glyph.mask[(y + pad) * glyph.width + (x + pad)]) continue;
+                        composed[(glyph.source.y + y) * sheet.width + (glyph.source.x + x)] = 1;
+                    }
+                }
+            }
+            return composed;
+        }
+
+        async function maskToImage(mask, width, height) {
+            const canvas = maskToCanvas(mask, width, height);
+            const image = new Image();
+            image.src = canvas.toDataURL('image/png');
+            await new Promise((resolve, reject) => {
+                image.onload = resolve;
+                image.onerror = reject;
+            });
+            return image;
+        }
+
+        // Turns a die-sheet photo into a cleaned full-sheet source plus one
+        // extracted-object card per glyph.
+        //
+        // The record's raster is REPLACED with the cleaned sheet PNG and
+        // marked as needing no preprocessing. That is what keeps project files
+        // working without a schema change: hydrateSource re-derives the raster
+        // from the stored blob and replays the saved SVG, so storing the
+        // derived sheet makes reopening exact, and re-tracing or re-detecting
+        // then operate on an image whose dimensions match record.width/height.
+        // It also means a saved project never calls back into die-extract.js.
+        //
+        // Note every vectorizeImage call passes the dimensions of the image it
+        // is actually tracing. convertToSVG sizes its canvas from those
+        // arguments, not from the image, so passing the original photo's
+        // dimensions would resample the supersampled tiles straight back down
+        // and discard the whole point of supersampling before thresholding.
+        async function extractDieSheet(record, wrapper, options = {}) {
+            const generation = record && record.generation !== undefined
+                ? record.generation
+                : workspaceGeneration;
+            if (!isWorkspaceGenerationCurrent(generation)) return { ok: false, reason: 'stale' };
+
+            const report = typeof options.onProgress === 'function' ? options.onProgress : () => {};
+            const cancelled = () => typeof options.shouldCancel === 'function' && options.shouldCancel();
+
+            report('Loading die extractor...');
+            const dieExtract = await ensureDieExtractLoaded();
+            if (!isWorkspaceGenerationCurrent(generation)) return { ok: false, reason: 'stale' };
+            if (cancelled()) return { ok: false, reason: 'cancelled' };
+
+            // Always decode from the persisted blob rather than reusing
+            // record.image: on a converted card that image may already be a
+            // normalized derivative, and segmentation needs the original
+            // colour photo to read warmth at all.
+            const img = document.createElement('img');
+            const decodeUrl = URL.createObjectURL(record.blob);
+            img.src = decodeUrl;
+            try {
+                await new Promise((resolve, reject) => { img.onload = resolve; img.onerror = reject; });
+            } finally {
+                URL.revokeObjectURL(decodeUrl);
+            }
+            if (!isWorkspaceGenerationCurrent(generation)) return { ok: false, reason: 'stale' };
+            if (cancelled()) return { ok: false, reason: 'cancelled' };
+
+            report('Finding dies...');
+            await yieldToPaint();
+            if (!isWorkspaceGenerationCurrent(generation)) return { ok: false, reason: 'stale' };
+
+            const result = dieExtract.extractDies(imageToImageData(img), {
+                mirror: options.mirror !== false,
+                scale: options.scale || dieExtract.DEFAULTS.scale
+            });
+            if (!isWorkspaceGenerationCurrent(generation)) return { ok: false, reason: 'stale' };
+            if (cancelled()) return { ok: false, reason: 'cancelled' };
+            if (!result.glyphs.length) return { ok: false, reason: 'no-dies', meta: result.meta };
+
+            const { sheet, glyphs, meta } = result;
+
+            report(`Found ${glyphs.length} dies. Tracing the sheet...`);
+            const sheetMask = composeSheetMask(sheet, glyphs);
+            const sheetCanvas = maskToCanvas(sheetMask, sheet.width, sheet.height);
+            const sheetBlob = await canvasToBlob(sheetCanvas, 'image/png');
+            if (!isWorkspaceGenerationCurrent(generation)) return { ok: false, reason: 'stale' };
+
+            const sheetImage = await maskToImage(sheetMask, sheet.width, sheet.height);
+            if (!isWorkspaceGenerationCurrent(generation)) return { ok: false, reason: 'stale' };
+
+            sheetImage._renderMode = 'binary';
+            const sheetSvg = await vectorizeImage(sheetImage, sheet.width, sheet.height, 'binary');
+            if (!isWorkspaceGenerationCurrent(generation)) return { ok: false, reason: 'stale' };
+
+            // Only now commit. Everything above is reversible, so a superseded
+            // workspace or a cancel leaves the existing card untouched.
+            record.blob = sheetBlob;
+            record.width = sheet.width;
+            record.height = sheet.height;
+            record.preprocess = false;
+
+            wrapper.innerHTML = '';
+            renderConvertedSource(record, sheetImage, sheetSvg, wrapper, {
+                mode: 'binary',
+                // Segmentation has already identified every glyph, so the
+                // ink-based auto-detect would only lay a second, redundant set
+                // of overlays over them. Re-detect stays available.
+                suppressAutoDetect: true
+            });
+
+            const traceParams = { ...(sheetImage._traceParams || defaultTraceParams()) };
+            let created = 0;
+            for (const glyph of glyphs) {
+                if (!isWorkspaceGenerationCurrent(generation)) return { ok: false, reason: 'stale', created };
+                if (cancelled()) return { ok: true, created, total: glyphs.length, cancelled: true, meta };
+
+                report(`Tracing die ${glyph.index + 1} of ${glyphs.length}...`);
+                await yieldToPaint();
+                if (!isWorkspaceGenerationCurrent(generation)) return { ok: false, reason: 'stale', created };
+
+                const glyphImage = await maskToImage(glyph.mask, glyph.width, glyph.height);
+                if (!isWorkspaceGenerationCurrent(generation)) return { ok: false, reason: 'stale', created };
+
+                // Traces run one at a time because Potrace is a global
+                // singleton, the same reason convertToColorSVG walks its
+                // layers sequentially.
+                const glyphSvg = await vectorizeImage(
+                    glyphImage, glyph.width, glyph.height, 'binary', traceParams
+                );
+                if (!isWorkspaceGenerationCurrent(generation)) return { ok: false, reason: 'stale', created };
+
+                const card = createExtractedObjectCard(
+                    glyphSvg, glyph.width, glyph.height,
+                    record.origin.productId, glyph.index + 1,
+                    sheet.width, sheet.height,
+                    {
+                        controlKey: record.id,
+                        sourceId: record.id,
+                        label: `Die ${glyph.index + 1}`,
+                        generation,
+                        // Bulk creation, so don't jump the page once per glyph.
+                        scroll: false
+                    }
+                );
+                if (card) {
+                    card.title = `Die ${glyph.index + 1} — row ${glyph.row + 1}, position ${glyph.col + 1}`;
+                    created++;
+                }
+            }
+
+            return { ok: true, created, total: glyphs.length, meta };
         }
 
         async function isBlackAndWhite(img) {
@@ -4765,6 +5386,14 @@
             };
         }
 
+        // Sliders, steppers and preset chips all write into the number input,
+        // so anything that changes a value behind their back has to bring them
+        // back in step. The hook is stashed on the input itself because the
+        // input is the handle every other code path already holds.
+        function syncCricutControl(input) {
+            if (input && typeof input._cricutSync === 'function') input._cricutSync();
+        }
+
         function readCricutOptionsFromInputs(borderInput, floodInput, writeBack = true) {
             const options = normalizeCricutOptions({
                 outerBufferPx: borderInput.value,
@@ -4773,30 +5402,378 @@
             if (writeBack) {
                 borderInput.value = options.outerBufferPx;
                 floodInput.value = options.gapFloodPx;
+                syncCricutControl(borderInput);
+                syncCricutControl(floodInput);
             }
             return options;
         }
 
-        function createCricutNumberField(labelText, defaultValue, min, max, title) {
-            const field = document.createElement('label');
-            field.className = 'cricut-field';
+        // Tints for the "explain" preview overlay. The canvas painter and the
+        // legend swatches both read these, so the two can never drift apart.
+        const CRICUT_TINTS = {
+            piece:  [255, 255, 255],
+            flood:  [245, 158, 11],
+            border: [ 20, 184, 166],
+            hole:   [167, 139, 250]
+        };
+
+        const CRICUT_PARAM_SPECS = {
+            border: {
+                label: 'Border',
+                title: 'Outer cut border in px',
+                min: 0,
+                max: CRICUT_BORDER_MAX,
+                defaultValue: CRICUT_DEFAULT_BORDER,
+                coarseStep: 1,
+                presets: [
+                    { label: 'None', value: 0 },
+                    { label: 'Thin', value: 8 },
+                    { label: 'Standard', value: CRICUT_DEFAULT_BORDER },
+                    { label: 'Thick', value: 30 }
+                ]
+            },
+            flood: {
+                label: 'Flood',
+                title: 'Connect gaps up to this px size',
+                min: 0,
+                max: CRICUT_FLOOD_MAX,
+                defaultValue: CRICUT_DEFAULT_FLOOD,
+                coarseStep: 5,
+                presets: [
+                    { label: 'Off', value: 0 },
+                    { label: 'Light', value: 20 },
+                    { label: 'Medium', value: 60 },
+                    { label: 'Strong', value: 120 }
+                ]
+            }
+        };
+
+        // Whether previews stay tinted at rest. Sliders tint themselves while
+        // being dragged regardless, so this is only about pinning the overlay
+        // on. Stored like the composer's scroll-gesture preference: a device
+        // preference, never part of a project.
+        const CRICUT_EXPLAIN_PREF_KEY = 'cricutExplainPreview';
+        let cricutExplainPinned = (() => {
+            try { return localStorage.getItem(CRICUT_EXPLAIN_PREF_KEY) === 'on'; }
+            catch (e) { return false; }
+        })();
+        const cricutExplainSyncs = new Set();
+
+        function refreshAllCricutPreviews() {
+            projectWorkspace.extractedObjects.forEach(state => {
+                if (typeof state.schedulePreview === 'function') state.schedulePreview();
+            });
+            if (composerSection && composerCricutPreviewImg) composerScheduleCricutPreview();
+        }
+
+        function setCricutExplainPinned(pinned) {
+            cricutExplainPinned = !!pinned;
+            try { localStorage.setItem(CRICUT_EXPLAIN_PREF_KEY, cricutExplainPinned ? 'on' : 'off'); }
+            catch (e) { /* private browsing: the toggle still works for this session */ }
+            cricutExplainSyncs.forEach(sync => sync());
+            refreshAllCricutPreviews();
+        }
+
+        // One border/flood control: a slider for exploring by feel, a number box
+        // for exact values, coarse +/- steppers, and preset chips. The number
+        // input remains the single source of truth — every other affordance
+        // writes into it — so readCricutOptionsFromInputs, project capture and
+        // hydration keep working through the handle they always used.
+        function createCricutControl(spec, initialValue, handlers) {
+            const control = document.createElement('div');
+            control.className = 'cricut-control';
+
+            const head = document.createElement('div');
+            head.className = 'cricut-control-head';
 
             const label = document.createElement('span');
-            label.textContent = labelText;
+            label.className = 'cricut-control-label';
+            label.textContent = spec.label;
+
+            const valueWrap = document.createElement('div');
+            valueWrap.className = 'cricut-control-value';
+
+            const minus = document.createElement('button');
+            minus.type = 'button';
+            minus.className = 'cricut-stepper';
+            minus.textContent = '−';
+            minus.title = `${spec.label} − ${spec.coarseStep}px`;
+            minus.setAttribute('aria-label', minus.title);
 
             const input = document.createElement('input');
             input.type = 'number';
-            input.min = String(min);
-            input.max = String(max);
+            input.min = String(spec.min);
+            input.max = String(spec.max);
+            // step stays 1 so a saved odd value (a flood of 9, say) round-trips
+            // exactly. The steppers are what move in coarse increments.
             input.step = '1';
-            input.value = String(defaultValue);
-            input.title = title;
-            input.setAttribute('aria-label', title);
+            input.value = String(clampInteger(initialValue, spec.min, spec.max, spec.defaultValue));
+            input.title = spec.title;
+            input.setAttribute('aria-label', spec.title);
 
-            field.appendChild(label);
-            field.appendChild(input);
-            field.input = input;
-            return field;
+            const unit = document.createElement('span');
+            unit.className = 'cricut-control-unit';
+            unit.textContent = 'px';
+
+            const plus = document.createElement('button');
+            plus.type = 'button';
+            plus.className = 'cricut-stepper';
+            plus.textContent = '+';
+            plus.title = `${spec.label} + ${spec.coarseStep}px`;
+            plus.setAttribute('aria-label', plus.title);
+
+            const slider = document.createElement('input');
+            slider.type = 'range';
+            slider.className = 'cricut-slider';
+            slider.min = String(spec.min);
+            slider.max = String(spec.max);
+            slider.step = '1';
+            slider.value = input.value;
+            slider.title = spec.title;
+            slider.setAttribute('aria-label', `${spec.label} slider`);
+
+            const presetRow = document.createElement('div');
+            presetRow.className = 'cricut-presets';
+
+            const currentValue = () => clampInteger(input.value, spec.min, spec.max, spec.defaultValue);
+
+            // `clamp` is false while the number box is being typed into, so
+            // "150" doesn't get rewritten to the max halfway through the word.
+            const refresh = (clamp) => {
+                const value = currentValue();
+                if (clamp) input.value = String(value);
+                slider.value = String(value);
+                presetButtons.forEach(chip => {
+                    const isActive = Number(chip.dataset.value) === value;
+                    if (isActive) chip.classList.add('active');
+                    else chip.classList.remove('active');
+                });
+                minus.disabled = value <= spec.min;
+                plus.disabled = value >= spec.max;
+                return value;
+            };
+
+            const setValue = (value) => {
+                input.value = String(clampInteger(value, spec.min, spec.max, spec.defaultValue));
+                refresh(true);
+            };
+
+            const commit = (value) => {
+                setValue(value);
+                handlers.onCommit();
+            };
+
+            const presetButtons = spec.presets.map(preset => {
+                const chip = document.createElement('button');
+                chip.type = 'button';
+                chip.className = 'cricut-preset';
+                chip.textContent = preset.label;
+                chip.title = `${spec.label} ${preset.value}px`;
+                chip.dataset.value = String(preset.value);
+                chip.onclick = () => commit(preset.value);
+                presetRow.appendChild(chip);
+                return chip;
+            });
+
+            minus.onclick = () => commit(currentValue() - spec.coarseStep);
+            plus.onclick = () => commit(currentValue() + spec.coarseStep);
+
+            input.addEventListener('input', () => {
+                refresh(false);
+                handlers.onLiveChange();
+            });
+            input.addEventListener('change', () => {
+                refresh(true);
+                handlers.onCommit();
+            });
+
+            // Scrub state is per control, not per panel. Pressing the other
+            // slider fires this one's `blur` *after* that one's `pointerdown`,
+            // so a flag shared between the two would be cleared by the slider
+            // being left just as the slider being grabbed set it.
+            let scrubbing = false;
+            let scrubTinted = false;
+            let releaseWatch = null;
+
+            // The scrub ends on the pointer release, not on `change`. A range
+            // input fires no `change` at all when the value it lands on is the
+            // one it started from — pressing the thumb without moving, or
+            // dragging away and back — and it keeps focus, so there is no
+            // `blur` either. Keying off `change` left the tint latched on in
+            // exactly those cases. `pointerup` is on window because the pointer
+            // is routinely released away from the slider it is dragging.
+            const endScrub = () => {
+                if (releaseWatch) {
+                    window.removeEventListener('pointerup', releaseWatch);
+                    window.removeEventListener('pointercancel', releaseWatch);
+                    releaseWatch = null;
+                }
+                if (!scrubbing) return false;
+                scrubbing = false;
+                return true;
+            };
+            // Only worth a settling render if the scrub actually tinted
+            // something; a stray click on the slider should cost nothing.
+            const settleScrub = () => {
+                const wasTinted = endScrub() && scrubTinted;
+                scrubTinted = false;
+                if (wasTinted) handlers.onCommit();
+            };
+
+            slider.addEventListener('pointerdown', () => {
+                scrubbing = true;
+                scrubTinted = false;
+                if (releaseWatch || !window.addEventListener) return;
+                releaseWatch = settleScrub;
+                window.addEventListener('pointerup', releaseWatch);
+                window.addEventListener('pointercancel', releaseWatch);
+            });
+            slider.addEventListener('blur', settleScrub);
+            slider.addEventListener('input', () => {
+                input.value = slider.value;
+                refresh(true);
+                if (scrubbing) scrubTinted = true;
+                handlers.onLiveChange();
+            });
+            slider.addEventListener('change', () => {
+                input.value = slider.value;
+                refresh(true);
+                endScrub();
+                scrubTinted = false;
+                handlers.onCommit();
+            });
+
+            input._cricutSync = () => refresh(true);
+
+            valueWrap.appendChild(minus);
+            valueWrap.appendChild(input);
+            valueWrap.appendChild(unit);
+            valueWrap.appendChild(plus);
+            head.appendChild(label);
+            head.appendChild(valueWrap);
+            control.appendChild(head);
+            control.appendChild(slider);
+            control.appendChild(presetRow);
+
+            refresh(true);
+
+            return { container: control, input, setValue, isScrubbing: () => scrubbing };
+        }
+
+        function createCricutLegend() {
+            const legend = document.createElement('div');
+            legend.className = 'cricut-legend';
+            [
+                ['piece', 'Piece'],
+                ['flood', 'Flood bridge'],
+                ['border', 'Border'],
+                ['hole', 'Sealed hole']
+            ].forEach(([tint, text]) => {
+                const item = document.createElement('div');
+                item.className = 'cricut-legend-item';
+                const swatch = document.createElement('span');
+                swatch.className = 'cricut-legend-swatch';
+                swatch.style.background = `rgb(${CRICUT_TINTS[tint].join(', ')})`;
+                const caption = document.createElement('span');
+                caption.textContent = text;
+                item.appendChild(swatch);
+                item.appendChild(caption);
+                legend.appendChild(item);
+            });
+            return legend;
+        }
+
+        // The full border + flood panel shared by object cards and the composer.
+        // `onChange({ live })` fires for every value change; `live` marks the
+        // mid-drag ones, which want a fast reuse-the-cached-stage render.
+        function createCricutSettingsPanel(config) {
+            const initial = normalizeCricutOptions(config.initial || {});
+
+            const handlers = {
+                onLiveChange: () => config.onChange({ live: true }),
+                onCommit: () => config.onChange({ live: false })
+            };
+
+            const panel = document.createElement('div');
+            panel.className = 'cricut-settings';
+
+            const borderControl = createCricutControl(CRICUT_PARAM_SPECS.border, initial.outerBufferPx, handlers);
+            const floodControl = createCricutControl(CRICUT_PARAM_SPECS.flood, initial.gapFloodPx, handlers);
+            panel.appendChild(borderControl.container);
+            panel.appendChild(floodControl.container);
+
+            const footer = document.createElement('div');
+            footer.className = 'cricut-settings-footer';
+            footer.appendChild(createCricutLegend());
+
+            const spacer = document.createElement('div');
+            spacer.className = 'cricut-footer-spacer';
+            footer.appendChild(spacer);
+
+            const explainToggle = document.createElement('button');
+            explainToggle.type = 'button';
+            explainToggle.className = 'cricut-explain-toggle';
+            explainToggle.textContent = 'Explain';
+            explainToggle.title = 'Keep the preview tinted so the border, the gaps flood bridged, and sealed holes stay identifiable. Dragging a slider tints the preview either way.';
+            const syncExplain = () => {
+                if (cricutExplainPinned) explainToggle.classList.add('active');
+                else explainToggle.classList.remove('active');
+                explainToggle.setAttribute('aria-pressed', String(cricutExplainPinned));
+            };
+            explainToggle.onclick = () => setCricutExplainPinned(!cricutExplainPinned);
+            syncExplain();
+            cricutExplainSyncs.add(syncExplain);
+            footer.appendChild(explainToggle);
+
+            const resetButton = document.createElement('button');
+            resetButton.type = 'button';
+            resetButton.textContent = 'Reset';
+            resetButton.title = `Back to the defaults (border ${CRICUT_DEFAULT_BORDER}px, flood ${CRICUT_DEFAULT_FLOOD}px)`;
+            resetButton.onclick = () => {
+                borderControl.setValue(CRICUT_DEFAULT_BORDER);
+                floodControl.setValue(CRICUT_DEFAULT_FLOOD);
+                handlers.onCommit();
+            };
+            footer.appendChild(resetButton);
+
+            if (typeof config.onApplyToAll === 'function') {
+                const applyAll = document.createElement('button');
+                applyAll.type = 'button';
+                applyAll.textContent = 'Apply to all';
+                applyAll.title = 'Copy this border and flood onto every extracted object';
+                applyAll.onclick = () => config.onApplyToAll(readCricutOptionsFromInputs(borderControl.input, floodControl.input));
+                footer.appendChild(applyAll);
+            }
+
+            panel.appendChild(footer);
+
+            return {
+                container: panel,
+                borderInput: borderControl.input,
+                floodInput: floodControl.input,
+                setValues: (options) => {
+                    const normalized = normalizeCricutOptions(options || {});
+                    borderControl.setValue(normalized.outerBufferPx);
+                    floodControl.setValue(normalized.gapFloodPx);
+                },
+                // The overlay is on while either slider is being dragged even
+                // when it isn't pinned — that's what makes the attribution
+                // discoverable without hunting for the toggle.
+                shouldExplain: () => cricutExplainPinned ||
+                    borderControl.isScrubbing() ||
+                    floodControl.isScrubbing(),
+                dispose: () => { cricutExplainSyncs.delete(syncExplain); }
+            };
+        }
+
+        // Tuning eight object cards by hand is sixteen edits; this copies one
+        // card's border/flood onto every extracted object and re-renders them.
+        function applyCricutOptionsToAllObjects(options) {
+            projectWorkspace.extractedObjects.forEach(state => {
+                if (!state.cricutPanel) return;
+                state.cricutPanel.setValues(options);
+                if (typeof state.schedulePreview === 'function') state.schedulePreview();
+            });
         }
 
         function getCricutPreviewScale(width, height, maxPreviewDim = 360) {
@@ -4872,7 +5849,8 @@
                 card: objectCard,
                 colorControl: null,
                 borderInput: null,
-                floodInput: null
+                floodInput: null,
+                cricutPanel: null
             };
             projectWorkspace.extractedObjects.set(objectId, objectState);
 
@@ -4909,6 +5887,7 @@
             removeButton.title = 'Remove';
             removeButton.onclick = () => {
                 if (typeof objectState.resetPreview === 'function') objectState.resetPreview();
+                if (objectState.cricutPanel) objectState.cricutPanel.dispose();
                 projectWorkspace.extractedObjects.delete(objectId);
                 objectCard.remove();
             };
@@ -4923,19 +5902,32 @@
             downloadJpgButton.innerHTML = dlIcon + 'JPG';
             downloadJpgButton.onclick = () => downloadObjectJPG(svg, productId, width, height);
 
-            const cricutInitial = normalizeCricutOptions(options.cricut || {});
-            const borderField = createCricutNumberField('Border', cricutInitial.outerBufferPx, 0, CRICUT_BORDER_MAX, 'Outer cut border in px');
-            const floodField = createCricutNumberField('Flood', cricutInitial.gapFloodPx, 0, CRICUT_FLOOD_MAX, 'Connect gaps up to this px size');
-            const borderInput = borderField.input;
-            const floodInput = floodField.input;
+            const cricutPanel = createCricutSettingsPanel({
+                initial: options.cricut || {},
+                onChange: ({ live }) => scheduleCricutPreview({ live }),
+                onApplyToAll: applyCricutOptionsToAllObjects
+            });
+            const borderInput = cricutPanel.borderInput;
+            const floodInput = cricutPanel.floodInput;
             objectState.borderInput = borderInput;
             objectState.floodInput = floodInput;
+            objectState.cricutPanel = cricutPanel;
             let cricutPreviewTimer = null;
             let cricutPreviewToken = 0;
 
-            const scheduleCricutPreview = () => {
+            // A mid-drag render must not queue up behind the one already in
+            // flight, or a fast scrub builds a backlog of renders whose results
+            // are all thrown away by the token check anyway.
+            let cricutPreviewBusy = false;
+            let cricutPreviewPendingLive = false;
+
+            const scheduleCricutPreview = ({ live = false } = {}) => {
                 const previewGeneration = objectState.generation;
                 if (!isWorkspaceGenerationCurrent(previewGeneration)) return;
+                if (live && cricutPreviewBusy) {
+                    cricutPreviewPendingLive = true;
+                    return;
+                }
                 cricutPreviewToken++;
                 const token = cricutPreviewToken;
                 clearTimeout(cricutPreviewTimer);
@@ -4943,11 +5935,18 @@
                 cricutPreviewStatus.style.display = 'inline-block';
                 cricutPreviewTimer = setTimeout(async () => {
                     if (!isWorkspaceGenerationCurrent(previewGeneration)) return;
+                    if (live) cricutPreviewBusy = true;
                     try {
                         const liveCricutOptions = readCricutOptionsFromInputs(borderInput, floodInput, false);
                         const canvas = await buildCricutCanvas(svg, width, height, {
                             ...liveCricutOptions,
-                            previewScale: getCricutPreviewScale(width, height)
+                            previewScale: getCricutPreviewScale(width, height),
+                            explain: cricutPanel.shouldExplain(),
+                            cache: true,
+                            cacheId: objectId,
+                            // A border drag can't have changed the artwork, so
+                            // skip re-serializing the SVG to check.
+                            reuseStage: live
                         });
                         if (token !== cricutPreviewToken ||
                             !isWorkspaceGenerationCurrent(previewGeneration)) return;
@@ -4963,8 +5962,16 @@
                             cricutPreviewStatus.style.display = 'inline-block';
                             console.error('Cricut preview failed', err);
                         }
+                    } finally {
+                        if (live) {
+                            cricutPreviewBusy = false;
+                            if (cricutPreviewPendingLive) {
+                                cricutPreviewPendingLive = false;
+                                scheduleCricutPreview({ live: true });
+                            }
+                        }
                     }
-                }, 250);
+                }, live ? 0 : 250);
             };
             const resetCricutPreview = () => {
                 cricutPreviewToken++;
@@ -4991,14 +5998,6 @@
                 }
             };
 
-            [borderInput, floodInput].forEach(input => {
-                input.addEventListener('input', scheduleCricutPreview);
-                input.addEventListener('change', () => {
-                    readCricutOptionsFromInputs(borderInput, floodInput);
-                    scheduleCricutPreview();
-                });
-            });
-
             header.appendChild(title);
             header.appendChild(removeButton);
 
@@ -5010,8 +6009,6 @@
 
             const cricutGroup = document.createElement('div');
             cricutGroup.className = 'cricut-group';
-            cricutGroup.appendChild(borderField);
-            cricutGroup.appendChild(floodField);
             cricutGroup.appendChild(cricutButton);
 
             const composerButton = document.createElement('button');
@@ -5038,6 +6035,7 @@
 
             controls.appendChild(header);
             controls.appendChild(actionRow);
+            controls.appendChild(cricutPanel.container);
             controls.appendChild(colorControl.container);
             
             objectCard.appendChild(preview);
@@ -5269,14 +6267,19 @@
 
         // --- Cricut "Print Then Cut" export ---
 
-        function renderSVGOffscreen(svg, origW, origH, targetW, targetH) {
-            return new Promise((resolve, reject) => {
-                const svgCopy = svg.cloneNode(true);
-                svgCopy.setAttribute('viewBox', `0 0 ${origW} ${origH}`);
-                svgCopy.setAttribute('width', targetW);
-                svgCopy.setAttribute('height', targetH);
+        // Serialization is a separate step from rasterizing because this string
+        // fully determines the raster: the Cricut stage cache compares it to
+        // decide whether a cached mask set still describes the current artwork.
+        function serializeSvgForRaster(svg, origW, origH, targetW, targetH) {
+            const svgCopy = svg.cloneNode(true);
+            svgCopy.setAttribute('viewBox', `0 0 ${origW} ${origH}`);
+            svgCopy.setAttribute('width', targetW);
+            svgCopy.setAttribute('height', targetH);
+            return new XMLSerializer().serializeToString(svgCopy);
+        }
 
-                const svgData = new XMLSerializer().serializeToString(svgCopy);
+        function rasterizeSvgString(svgData, targetW, targetH) {
+            return new Promise((resolve, reject) => {
                 const svgBlob = new Blob([svgData], { type: 'image/svg+xml' });
                 const svgUrl = URL.createObjectURL(svgBlob);
 
@@ -5440,29 +6443,38 @@
             return exterior;
         }
 
-        async function buildCricutCanvas(svg, width, height, rawOptions) {
-            const options = normalizeCricutOptions(rawOptions);
-            const scale = options.previewScale;
+        // Keeps the historical output dimensions: enough temporary space for
+        // aggressive gap-closing passes, on top of the border itself.
+        function cricutStagePad(scale, borderPx, floodPx) {
+            return Math.ceil((borderPx * scale * 2) + (floodPx * scale) / 2);
+        }
+
+        // Single-slot cache of the border-independent half of a Cricut render.
+        // One slot is all the border slider needs — it only ever re-reads the
+        // stage its own previous frame just built — and it bounds the memory to
+        // one set of masks instead of one per object card.
+        let cricutStageSlot = null;
+
+        // Everything a Cricut render needs that does NOT depend on the border:
+        // the rasterised artwork, the gap-closed silhouette, and the squared
+        // distance field around it. Dilating by a radius is exactly thresholding
+        // that field (see dilateCircular), so once this exists a border change
+        // costs a repaint rather than another distance transform.
+        async function buildCricutStage(svg, width, height, scale, floodPx, pad) {
             const renderW = Math.max(1, Math.round(width * scale));
             const renderH = Math.max(1, Math.round(height * scale));
-            const bufferScaled = options.outerBufferPx * scale;
-            const closeRadiusScaled = (options.gapFloodPx * scale) / 2;
-
-            // Keep the current 25px/0px output dimensions unchanged while adding
-            // enough temporary space for aggressive gap-closing passes.
-            const pad = Math.ceil((bufferScaled * 2) + closeRadiusScaled);
             const tw = renderW + pad * 2;
             const th = renderH + pad * 2;
 
-            const svgCanvas = await renderSVGOffscreen(svg, width, height, renderW, renderH);
+            const svgData = serializeSvgForRaster(svg, width, height, renderW, renderH);
+            const svgCanvas = await rasterizeSvgString(svgData, renderW, renderH);
             const renderCanvas = document.createElement('canvas');
             renderCanvas.width = tw;
             renderCanvas.height = th;
-            renderCanvas.getContext('2d').drawImage(svgCanvas, pad, pad);
-
             const ctx = renderCanvas.getContext('2d');
-            const imageData = ctx.getImageData(0, 0, tw, th);
-            const data = imageData.data;
+            ctx.drawImage(svgCanvas, pad, pad);
+
+            const data = ctx.getImageData(0, 0, tw, th).data;
             const n = tw * th;
 
             // Step 1: Classify ink pixels (alpha > 32)
@@ -5480,18 +6492,38 @@
                 silhouette[i] = (isInk[i] || !isExterior[i]) ? 1 : 0;
             }
 
-            // Step 4: Close gaps first, then apply the independent outer buffer.
-            // gapFloodPx is the max gap to bridge, so the close radius is half.
-            const closedSilhouette = closeGapsCircular(silhouette, tw, th, closeRadiusScaled);
-            const dilated = dilateCircular(closedSilhouette, tw, th, bufferScaled);
+            // Step 4: Close gaps. gapFloodPx is the max gap to bridge, so the
+            // close radius is half.
+            const closedSilhouette = closeGapsCircular(silhouette, tw, th, (floodPx * scale) / 2);
 
-            // Step 5: Second flood fill from edges through non-dilated pixels to find the
+            // Step 5: The distance field the border thresholds against.
+            const borderDistSq = distanceToMaskSquared(closedSilhouette, tw, th, 1);
+
+            return {
+                svgData, renderCanvas, tw, th, renderW, renderH, pad, scale,
+                floodPx, silhouette, closedSilhouette, borderDistSq
+            };
+        }
+
+        function paintCricutStage(stage, options, explain) {
+            const { tw, th, renderW, renderH, pad, scale, silhouette, closedSilhouette, borderDistSq, renderCanvas } = stage;
+            const n = tw * th;
+            const bufferScaled = options.outerBufferPx * scale;
+
+            // Step 6: Apply the outer buffer by thresholding the cached field.
+            const borderRadiusSquared = bufferScaled * bufferScaled;
+            const dilated = new Uint8Array(n);
+            for (let i = 0; i < n; i++) {
+                dilated[i] = borderDistSq[i] <= borderRadiusSquared ? 1 : 0;
+            }
+
+            // Step 7: Second flood fill from edges through non-dilated pixels to find the
             // true exterior. The dilated border acts as a solid wall, so any pixel
             // enclosed inside it (including interior holes that leaked through thin
             // ink seams) will NOT be reached and should be filled white.
             const trulyExterior = findExteriorPixels(dilated, tw, th);
 
-            // Step 6: Smooth the outer edge of the white region with a small blur.
+            // Step 8: Smooth the outer edge of the white region with a small blur.
             // This anti-aliases the pixel staircase on the border without visibly
             // changing the border size — interior pixels stay fully opaque (255),
             // only the outermost few pixels get a smooth alpha falloff.
@@ -5519,16 +6551,26 @@
             edgeDstCtx.filter = 'none';
             const smoothedEdge = edgeDstCtx.getImageData(0, 0, tw, th).data;
 
+            // The blur bleeds a little past the dilated wall; that fringe belongs
+            // to whichever region it is the anti-aliased edge of.
+            const fringeTint = bufferScaled > 0 ? CRICUT_TINTS.border : CRICUT_TINTS.piece;
             const outData = new ImageData(tw, th);
             const out = outData.data;
             for (let i = 0; i < n; i++) {
                 const a = smoothedEdge[i * 4 + 3];
-                if (a > 0) {
-                    out[i * 4]     = 255;
-                    out[i * 4 + 1] = 255;
-                    out[i * 4 + 2] = 255;
-                    out[i * 4 + 3] = a;   // smooth falloff at the outer edge
+                if (a === 0) continue;
+                let tint = CRICUT_TINTS.piece;
+                if (explain) {
+                    if (silhouette[i]) tint = CRICUT_TINTS.piece;
+                    else if (closedSilhouette[i]) tint = CRICUT_TINTS.flood;
+                    else if (dilated[i]) tint = CRICUT_TINTS.border;
+                    else if (!trulyExterior[i]) tint = CRICUT_TINTS.hole;
+                    else tint = fringeTint;
                 }
+                out[i * 4]     = tint[0];
+                out[i * 4 + 1] = tint[1];
+                out[i * 4 + 2] = tint[2];
+                out[i * 4 + 3] = a;   // smooth falloff at the outer edge
             }
 
             // Draw white backing, then stamp ink on top
@@ -5539,7 +6581,57 @@
             outCtx.putImageData(outData, 0, 0);
             outCtx.drawImage(renderCanvas, 0, 0);
 
-            return outCanvas;
+            // A stage padded for a wider border than this render uses gets
+            // cropped back to the framing the un-padded pipeline would produce,
+            // so a cached stage never changes what the user sees.
+            const outPad = Math.min(pad, cricutStagePad(scale, options.outerBufferPx, stage.floodPx));
+            if (outPad === pad) return outCanvas;
+            const trimmed = document.createElement('canvas');
+            trimmed.width = renderW + outPad * 2;
+            trimmed.height = renderH + outPad * 2;
+            trimmed.getContext('2d').drawImage(outCanvas, outPad - pad, outPad - pad);
+            return trimmed;
+        }
+
+        // `cache`/`cacheId`/`reuseStage`/`explain` are all transient render hints
+        // that normalizeCricutOptions deliberately drops, so none of them can
+        // reach a project file. Export callers pass none of them and therefore
+        // still take the original code path, byte for byte.
+        async function buildCricutCanvas(svg, width, height, rawOptions) {
+            const options = normalizeCricutOptions(rawOptions);
+            const hints = rawOptions && typeof rawOptions === 'object' ? rawOptions : {};
+            const useCache = !!hints.cache;
+            const scale = options.previewScale;
+
+            // Previews pad for the widest border the slider can reach, so the
+            // staged geometry — and the distance field with it — survives a
+            // border change. Exports pad exactly as they always did.
+            const pad = useCache
+                ? cricutStagePad(scale, CRICUT_BORDER_MAX, options.gapFloodPx)
+                : cricutStagePad(scale, options.outerBufferPx, options.gapFloodPx);
+            const geomKey = `${hints.cacheId || ''}|${width}x${height}|${scale}|${options.gapFloodPx}|${pad}`;
+
+            const candidate = useCache && cricutStageSlot && cricutStageSlot.geomKey === geomKey
+                ? cricutStageSlot.stage
+                : null;
+            let stage = null;
+            if (candidate && hints.reuseStage) {
+                // The caller guarantees the artwork can't have changed (a border
+                // drag), so don't even serialize it to check.
+                stage = candidate;
+            } else if (candidate) {
+                const renderW = Math.max(1, Math.round(width * scale));
+                const renderH = Math.max(1, Math.round(height * scale));
+                if (serializeSvgForRaster(svg, width, height, renderW, renderH) === candidate.svgData) {
+                    stage = candidate;
+                }
+            }
+            if (!stage) {
+                stage = await buildCricutStage(svg, width, height, scale, options.gapFloodPx, pad);
+                if (useCache) cricutStageSlot = { geomKey, stage };
+            }
+
+            return paintCricutStage(stage, options, !!hints.explain);
         }
 
         function canvasToBlob(canvas, mimeType) {
@@ -5592,6 +6684,12 @@
         let composerCricutPreviewStatus = null;
         let composerCricutPreviewTimer = null;
         let composerCricutPreviewToken = 0;
+        let composerCricutSettings = null;
+        // A mid-drag render must not queue up behind the one already in flight,
+        // or a fast scrub builds a backlog of renders whose results the token
+        // check discards anyway.
+        let composerCricutPreviewBusy = false;
+        let composerCricutPreviewPendingLive = false;
         // Monotonic composer-instance lifetime. Timer IDs and per-instance
         // preview tokens can be reused after reset/rollback; this generation
         // cannot, so an already-running old promise can never target globals
@@ -5630,6 +6728,8 @@
             composerCricutPreviewStatus = null;
             composerCricutPreviewTimer = null;
             composerCricutPreviewToken = 0;
+            if (composerCricutSettings) composerCricutSettings.dispose();
+            composerCricutSettings = null;
             composerPatternSession = null;
             composerClosePatternPanelUI();
             composerPatternPanel = null;
@@ -5667,6 +6767,7 @@
                 cricutPreviewStatus: composerCricutPreviewStatus,
                 cricutPreviewWasScheduled: composerCricutPreviewTimer !== null,
                 cricutPreviewToken: composerCricutPreviewToken,
+                cricutSettings: composerCricutSettings,
                 patternSession: composerPatternSession,
                 patternPanel: composerPatternPanel,
                 patternMode: composerPatternMode,
@@ -5701,6 +6802,9 @@
             composerCricutPreviewStatus = null;
             composerCricutPreviewTimer = null;
             composerCricutPreviewToken = 0;
+            // Not disposed: the snapshot still owns this panel in case the
+            // caller rolls back. The commit path disposes it instead.
+            composerCricutSettings = null;
             composerPatternSession = null;
             composerPatternPanel = null;
             composerPatternMode = null;
@@ -5730,6 +6834,7 @@
             // detach cleared the old timer; never resurrect that dead handle.
             composerCricutPreviewTimer = null;
             composerCricutPreviewToken = snapshot.cricutPreviewToken;
+            composerCricutSettings = snapshot.cricutSettings || null;
             composerPatternSession = snapshot.patternSession;
             composerPatternPanel = snapshot.patternPanel;
             composerPatternMode = snapshot.patternMode;
@@ -5895,8 +7000,12 @@
             composerCricutPreviewStatus.style.display = text ? 'inline-block' : 'none';
         }
 
-        function composerScheduleCricutPreview() {
+        function composerScheduleCricutPreview({ live = false } = {}) {
             if (!composerCricutPreviewImg || !composerCricutPreviewStatus) return;
+            if (live && composerCricutPreviewBusy) {
+                composerCricutPreviewPendingLive = true;
+                return;
+            }
             const instanceGeneration = composerInstanceGeneration;
             const instanceSvg = composerSvg;
             const previewImg = composerCricutPreviewImg;
@@ -5911,6 +7020,7 @@
                     instanceSvg !== composerSvg ||
                     previewImg !== composerCricutPreviewImg ||
                     previewStatus !== composerCricutPreviewStatus) return;
+                if (live) composerCricutPreviewBusy = true;
                 try {
                     const exportData = buildComposerCricutExportSvg();
                     if (!exportData) {
@@ -5932,7 +7042,13 @@
                     const previewScale = Math.max(0.5, Math.min(1.5, 720 / Math.max(exportData.width || 1, exportData.height || 1)));
                     const canvas = await buildCricutCanvas(exportData.svg, exportData.width, exportData.height, {
                         ...options,
-                        previewScale
+                        previewScale,
+                        explain: !!(composerCricutSettings && composerCricutSettings.shouldExplain()),
+                        cache: true,
+                        cacheId: 'composer',
+                        // A border drag can't have moved the scene, so skip
+                        // re-serializing it to check.
+                        reuseStage: live
                     });
                     if (token !== composerCricutPreviewToken ||
                         instanceGeneration !== composerInstanceGeneration ||
@@ -5955,8 +7071,16 @@
                         previewStatus.style.display = 'inline-block';
                         console.error('Composer Cricut preview failed', err);
                     }
+                } finally {
+                    if (live) {
+                        composerCricutPreviewBusy = false;
+                        if (composerCricutPreviewPendingLive) {
+                            composerCricutPreviewPendingLive = false;
+                            composerScheduleCricutPreview({ live: true });
+                        }
+                    }
                 }
-            }, 250);
+            }, live ? 0 : 250);
         }
 
         // ── Lazy init ──
@@ -6128,13 +7252,15 @@
             ]));
             toolbar.appendChild(mkDivider());
 
-            // Cricut export
+            // Cricut export. Only the export button rides in the toolbar; the
+            // border/flood sliders sit under the preview they drive.
             const cricutGroup = document.createElement('div');
             cricutGroup.className = 'cricut-group';
-            const cricutBorderField = createCricutNumberField('Border', CRICUT_DEFAULT_BORDER, 0, CRICUT_BORDER_MAX, 'Outer cut border in px');
-            const cricutFloodField = createCricutNumberField('Flood', CRICUT_DEFAULT_FLOOD, 0, CRICUT_FLOOD_MAX, 'Connect gaps up to this px size');
-            cricutBorderField.input.id = 'composerCricutBorder';
-            cricutFloodField.input.id = 'composerCricutFlood';
+            composerCricutSettings = createCricutSettingsPanel({
+                onChange: ({ live }) => composerScheduleCricutPreview({ live })
+            });
+            composerCricutSettings.borderInput.id = 'composerCricutBorder';
+            composerCricutSettings.floodInput.id = 'composerCricutFlood';
 
             composerCricutPreviewImg = document.createElement('img');
             composerCricutPreviewImg.alt = 'Cricut PNG preview';
@@ -6157,7 +7283,7 @@
                     cricutBtn.disabled = true;
                     labelSpan.textContent = 'Exporting...';
                     try {
-                        const options = readCricutOptionsFromInputs(cricutBorderField.input, cricutFloodField.input);
+                        const options = getComposerCricutOptions(true);
                         await composerExportCricut(options);
                     } finally {
                         cricutBtn.disabled = false;
@@ -6166,16 +7292,6 @@
                 },
             });
 
-            [cricutBorderField.input, cricutFloodField.input].forEach(input => {
-                input.addEventListener('input', composerScheduleCricutPreview);
-                input.addEventListener('change', () => {
-                    readCricutOptionsFromInputs(cricutBorderField.input, cricutFloodField.input);
-                    composerScheduleCricutPreview();
-                });
-            });
-
-            cricutGroup.appendChild(cricutBorderField);
-            cricutGroup.appendChild(cricutFloodField);
             cricutGroup.appendChild(cricutBtn);
             toolbar.appendChild(cricutGroup);
 
@@ -6325,6 +7441,7 @@
             cricutPanelHeader.textContent = 'Cricut PNG preview';
             cricutPanel.appendChild(cricutPanelHeader);
             cricutPanel.appendChild(composerCricutPreview);
+            cricutPanel.appendChild(composerCricutSettings.container);
 
             workspace.appendChild(canvasWrapper);
             workspace.appendChild(cricutPanel);
@@ -7862,6 +8979,9 @@
             ensureComposer(record.productId, { scroll: false });
             document.getElementById('composerCricutBorder').value = record.cricut.outerBufferPx;
             document.getElementById('composerCricutFlood').value = record.cricut.gapFloodPx;
+            // Writing the number inputs directly leaves the sliders and preset
+            // chips showing the old settings until they're told to catch up.
+            getComposerCricutOptions(true);
             record.objects.forEach(createComposerObjectFromRecord);
             composerDeselectAll();
             composerUpdateStatus();
