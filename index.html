@@ -5433,8 +5433,10 @@
 
         const CRICUT_DEFAULT_BORDER = 15;
         const CRICUT_DEFAULT_FLOOD = 0;
+        const CRICUT_DEFAULT_SMOOTH = 8;
         const CRICUT_BORDER_MAX = 120;
         const CRICUT_FLOOD_MAX = 300;
+        const CRICUT_SMOOTH_MAX = 60;
 
         function clampInteger(value, min, max, fallback) {
             const parsed = parseInt(value, 10);
@@ -5450,18 +5452,21 @@
             return {
                 outerBufferPx: clampInteger(raw.outerBufferPx, 0, CRICUT_BORDER_MAX, CRICUT_DEFAULT_BORDER),
                 gapFloodPx: clampInteger(raw.gapFloodPx, 0, CRICUT_FLOOD_MAX, CRICUT_DEFAULT_FLOOD),
+                smoothPx: clampInteger(raw.smoothPx, 0, CRICUT_SMOOTH_MAX, CRICUT_DEFAULT_SMOOTH),
                 previewScale: Number.isFinite(scale) && scale > 0 ? scale : 2
             };
         }
 
         // previewScale is a transient, viewport-derived hint that only sizes
         // the live Cricut PNG preview — it is not part of a saved object or
-        // scene. Captured project records keep just the durable border/flood;
-        // hydration re-derives previewScale through normalizeCricutOptions.
+        // scene. Captured project records keep just the durable
+        // border/flood/smooth; hydration re-derives previewScale through
+        // normalizeCricutOptions.
         function persistedCricutOptions(options) {
             return {
                 outerBufferPx: options.outerBufferPx,
-                gapFloodPx: options.gapFloodPx
+                gapFloodPx: options.gapFloodPx,
+                smoothPx: options.smoothPx
             };
         }
 
@@ -5473,16 +5478,23 @@
             if (input && typeof input._cricutSync === 'function') input._cricutSync();
         }
 
-        function readCricutOptionsFromInputs(borderInput, floodInput, writeBack = true) {
+        // smoothInput is optional so older callers (and states hydrated from
+        // projects saved before the control existed) fall back to the default.
+        function readCricutOptionsFromInputs(borderInput, floodInput, writeBack = true, smoothInput = null) {
             const options = normalizeCricutOptions({
                 outerBufferPx: borderInput.value,
-                gapFloodPx: floodInput.value
+                gapFloodPx: floodInput.value,
+                smoothPx: smoothInput ? smoothInput.value : undefined
             });
             if (writeBack) {
                 borderInput.value = options.outerBufferPx;
                 floodInput.value = options.gapFloodPx;
                 syncCricutControl(borderInput);
                 syncCricutControl(floodInput);
+                if (smoothInput) {
+                    smoothInput.value = options.smoothPx;
+                    syncCricutControl(smoothInput);
+                }
             }
             return options;
         }
@@ -5523,6 +5535,20 @@
                     { label: 'Light', value: 20 },
                     { label: 'Medium', value: 60 },
                     { label: 'Strong', value: 120 }
+                ]
+            },
+            smooth: {
+                label: 'Smooth',
+                title: 'Even out bumps in the border finer than this px size, so speckled or halftone edges stop making the cut line wavy. Notches deeper than this stay open — the border keeps following the shape.',
+                min: 0,
+                max: CRICUT_SMOOTH_MAX,
+                defaultValue: CRICUT_DEFAULT_SMOOTH,
+                coarseStep: 2,
+                presets: [
+                    { label: 'Off', value: 0 },
+                    { label: 'Light', value: 4 },
+                    { label: 'Medium', value: CRICUT_DEFAULT_SMOOTH },
+                    { label: 'Strong', value: 20 }
                 ]
             }
         };
@@ -5778,8 +5804,10 @@
 
             const borderControl = createCricutControl(CRICUT_PARAM_SPECS.border, initial.outerBufferPx, handlers);
             const floodControl = createCricutControl(CRICUT_PARAM_SPECS.flood, initial.gapFloodPx, handlers);
+            const smoothControl = createCricutControl(CRICUT_PARAM_SPECS.smooth, initial.smoothPx, handlers);
             panel.appendChild(borderControl.container);
             panel.appendChild(floodControl.container);
+            panel.appendChild(smoothControl.container);
 
             const footer = document.createElement('div');
             footer.className = 'cricut-settings-footer';
@@ -5807,10 +5835,11 @@
             const resetButton = document.createElement('button');
             resetButton.type = 'button';
             resetButton.textContent = 'Reset';
-            resetButton.title = `Back to the defaults (border ${CRICUT_DEFAULT_BORDER}px, flood ${CRICUT_DEFAULT_FLOOD}px)`;
+            resetButton.title = `Back to the defaults (border ${CRICUT_DEFAULT_BORDER}px, flood ${CRICUT_DEFAULT_FLOOD}px, smooth ${CRICUT_DEFAULT_SMOOTH}px)`;
             resetButton.onclick = () => {
                 borderControl.setValue(CRICUT_DEFAULT_BORDER);
                 floodControl.setValue(CRICUT_DEFAULT_FLOOD);
+                smoothControl.setValue(CRICUT_DEFAULT_SMOOTH);
                 handlers.onCommit();
             };
             footer.appendChild(resetButton);
@@ -5819,8 +5848,10 @@
                 const applyAll = document.createElement('button');
                 applyAll.type = 'button';
                 applyAll.textContent = 'Apply to all';
-                applyAll.title = 'Copy this border and flood onto every extracted object';
-                applyAll.onclick = () => config.onApplyToAll(readCricutOptionsFromInputs(borderControl.input, floodControl.input));
+                applyAll.title = 'Copy this border, flood and smoothing onto every extracted object';
+                applyAll.onclick = () => config.onApplyToAll(
+                    readCricutOptionsFromInputs(borderControl.input, floodControl.input, true, smoothControl.input)
+                );
                 footer.appendChild(applyAll);
             }
 
@@ -5830,17 +5861,20 @@
                 container: panel,
                 borderInput: borderControl.input,
                 floodInput: floodControl.input,
+                smoothInput: smoothControl.input,
                 setValues: (options) => {
                     const normalized = normalizeCricutOptions(options || {});
                     borderControl.setValue(normalized.outerBufferPx);
                     floodControl.setValue(normalized.gapFloodPx);
+                    smoothControl.setValue(normalized.smoothPx);
                 },
-                // The overlay is on while either slider is being dragged even
+                // The overlay is on while any slider is being dragged even
                 // when it isn't pinned — that's what makes the attribution
                 // discoverable without hunting for the toggle.
                 shouldExplain: () => cricutExplainPinned ||
                     borderControl.isScrubbing() ||
-                    floodControl.isScrubbing(),
+                    floodControl.isScrubbing() ||
+                    smoothControl.isScrubbing(),
                 dispose: () => { cricutExplainSyncs.delete(syncExplain); }
             };
         }
@@ -5960,6 +5994,7 @@
                 whiteBacking: options.whiteBacking !== false,
                 borderInput: null,
                 floodInput: null,
+                smoothInput: null,
                 cricutPanel: null
             };
             projectWorkspace.extractedObjects.set(objectId, objectState);
@@ -6019,8 +6054,10 @@
             });
             const borderInput = cricutPanel.borderInput;
             const floodInput = cricutPanel.floodInput;
+            const smoothInput = cricutPanel.smoothInput;
             objectState.borderInput = borderInput;
             objectState.floodInput = floodInput;
+            objectState.smoothInput = smoothInput;
             objectState.cricutPanel = cricutPanel;
             let cricutPreviewTimer = null;
             let cricutPreviewToken = 0;
@@ -6047,7 +6084,7 @@
                     if (!isWorkspaceGenerationCurrent(previewGeneration)) return;
                     if (live) cricutPreviewBusy = true;
                     try {
-                        const liveCricutOptions = readCricutOptionsFromInputs(borderInput, floodInput, false);
+                        const liveCricutOptions = readCricutOptionsFromInputs(borderInput, floodInput, false, smoothInput);
                         const canvas = await buildCricutCanvas(svg, width, height, {
                             ...liveCricutOptions,
                             previewScale: getCricutPreviewScale(width, height),
@@ -6101,7 +6138,7 @@
                 cricutButton.disabled = true;
                 cricutButton.textContent = 'Rendering...';
                 try {
-                    const liveCricutOptions = readCricutOptionsFromInputs(borderInput, floodInput);
+                    const liveCricutOptions = readCricutOptionsFromInputs(borderInput, floodInput, true, smoothInput);
                     await generateCricutPNG(svg, productId, width, height, {
                         ...liveCricutOptions,
                         whiteBacking: objectState.whiteBacking
@@ -6225,7 +6262,7 @@
                     svg: new XMLSerializer().serializeToString(state.svg),
                     color: state.colorControl.getState(),
                     whiteBacking: state.whiteBacking !== false,
-                    cricut: persistedCricutOptions(readCricutOptionsFromInputs(state.borderInput, state.floodInput, false))
+                    cricut: persistedCricutOptions(readCricutOptionsFromInputs(state.borderInput, state.floodInput, false, state.smoothInput))
                 }));
         }
 
@@ -6574,9 +6611,11 @@
         }
 
         // Keeps the historical output dimensions: enough temporary space for
-        // aggressive gap-closing passes, on top of the border itself.
-        function cricutStagePad(scale, borderPx, floodPx) {
-            return Math.ceil((borderPx * scale * 2) + (floodPx * scale) / 2);
+        // aggressive gap-closing passes, on top of the border itself. The
+        // smoothing blur also needs room: a rim that runs into the canvas edge
+        // reads transparent beyond it and would be shaved flat there.
+        function cricutStagePad(scale, borderPx, floodPx, smoothPx = 0) {
+            return Math.ceil((borderPx * scale * 2) + (floodPx * scale) / 2 + smoothPx * scale);
         }
 
         // Single-slot cache of the border-independent half of a Cricut render.
@@ -6647,16 +6686,168 @@
             };
         }
 
+        // Labels the 4-connected components of a binary mask. Returns the label
+        // per pixel (0 = not in mask) and the pixel count per label.
+        function labelComponents(mask, w, h) {
+            const labels = new Int32Array(w * h);
+            const areas = [0];
+            const queue = new Int32Array(w * h);
+            for (let start = 0; start < labels.length; start++) {
+                if (!mask[start] || labels[start]) continue;
+                const label = areas.length;
+                let head = 0, tail = 0, area = 0;
+                labels[start] = label;
+                queue[tail++] = start;
+                while (head < tail) {
+                    const idx = queue[head++];
+                    area++;
+                    const x = idx % w;
+                    const y = (idx / w) | 0;
+                    const visit = (j) => {
+                        if (mask[j] && !labels[j]) { labels[j] = label; queue[tail++] = j; }
+                    };
+                    if (x > 0)     visit(idx - 1);
+                    if (x < w - 1) visit(idx + 1);
+                    if (y > 0)     visit(idx - w);
+                    if (y < h - 1) visit(idx + w);
+                }
+                areas.push(area);
+            }
+            return { labels, areas };
+        }
+
+        // Low-passes the rim contour: Gaussian-blur the border mask and
+        // re-threshold it at 50%. Texture finer than the blur radius averages
+        // away in both directions — dips fill, bumps shave — while the contour
+        // keeps following the shape at any larger scale. Unlike a morphological
+        // close, a deep notch between two lobes stays open: most of the kernel
+        // there still sees empty space. Two guards keep the result honest.
+        //   * The shaved side never drops below 70% of the border, so the ink
+        //     always keeps a margin.
+        //   * Fill that would seal a channel previously open to the outside — a
+        //     web across a notch — is discarded, one fill component at a time,
+        //     so smoothing can round a notch's walls but never bridge it.
+        function smoothCricutRim(dilated, borderDistSq, bufferScaled, sigma, w, h) {
+            const n = w * h;
+            const src = document.createElement('canvas');
+            src.width = w;
+            src.height = h;
+            const srcCtx = src.getContext('2d');
+            const srcData = srcCtx.createImageData(w, h);
+            for (let i = 0; i < n; i++) {
+                if (dilated[i]) {
+                    srcData.data[i * 4]     = 255;
+                    srcData.data[i * 4 + 1] = 255;
+                    srcData.data[i * 4 + 2] = 255;
+                    srcData.data[i * 4 + 3] = 255;
+                }
+            }
+            srcCtx.putImageData(srcData, 0, 0);
+            const dst = document.createElement('canvas');
+            dst.width = w;
+            dst.height = h;
+            const dstCtx = dst.getContext('2d');
+            dstCtx.filter = `blur(${sigma}px)`;
+            dstCtx.drawImage(src, 0, 0);
+            dstCtx.filter = 'none';
+            const blurred = dstCtx.getImageData(0, 0, w, h).data;
+
+            const floorRadius = bufferScaled * 0.7;
+            const floorSq = floorRadius * floorRadius;
+            const smoothed = new Uint8Array(n);
+            for (let i = 0; i < n; i++) {
+                smoothed[i] = (blurred[i * 4 + 3] >= 128 || borderDistSq[i] <= floorSq) ? 1 : 0;
+            }
+
+            // Fill deeper than the kernel is not a dip being rounded off, it is
+            // a channel being filled in: a notch that happens to be narrower
+            // than the blur reads as "mostly white" all the way down. Cut the
+            // fill back to kernel depth, measured from the new outer boundary.
+            // A notch that was filled wall to wall then keeps only a plug at
+            // its mouth — which the web check below removes.
+            const exteriorBefore = findExteriorPixels(dilated, w, h);
+            let exteriorAfter = findExteriorPixels(smoothed, w, h);
+            const depthSq = distanceToMaskSquared(exteriorAfter, w, h, 1);
+            const maxDepthSq = sigma * sigma;
+            let pruned = false;
+            for (let i = 0; i < n; i++) {
+                if (smoothed[i] && !dilated[i] && depthSq[i] > maxDepthSq) {
+                    smoothed[i] = 0;
+                    pruned = true;
+                }
+            }
+            if (pruned) exteriorAfter = findExteriorPixels(smoothed, w, h);
+
+            // Anything that was reachable from the outside before smoothing and
+            // is now walled in but unfilled sits behind a web.
+            const trapped = new Uint8Array(n);
+            let anyTrapped = false;
+            for (let i = 0; i < n; i++) {
+                if (exteriorBefore[i] && !exteriorAfter[i] && !smoothed[i]) {
+                    trapped[i] = 1;
+                    anyTrapped = true;
+                }
+            }
+            if (!anyTrapped) return smoothed;
+
+            // A few stray pixels walled in behind a filled dip are just a sealed
+            // hole and paint white anyway; only a pocket at least a kernel's
+            // worth of pixels counts as a channel worth reopening.
+            const minChannelArea = Math.max(4, Math.round(sigma * sigma));
+            const trappedComponents = labelComponents(trapped, w, h);
+            const significant = new Uint8Array(n);
+            let anySignificant = false;
+            for (let i = 0; i < n; i++) {
+                if (trapped[i] && trappedComponents.areas[trappedComponents.labels[i]] >= minChannelArea) {
+                    significant[i] = 1;
+                    anySignificant = true;
+                }
+            }
+            if (!anySignificant) return smoothed;
+
+            const fill = new Uint8Array(n);
+            for (let i = 0; i < n; i++) fill[i] = smoothed[i] && !dilated[i] ? 1 : 0;
+            const fillComponents = labelComponents(fill, w, h);
+            const isWeb = new Uint8Array(fillComponents.areas.length);
+            for (let i = 0; i < n; i++) {
+                if (!significant[i]) continue;
+                const x = i % w;
+                const y = (i / w) | 0;
+                for (let dy = -1; dy <= 1; dy++) {
+                    const yy = y + dy;
+                    if (yy < 0 || yy >= h) continue;
+                    for (let dx = -1; dx <= 1; dx++) {
+                        const xx = x + dx;
+                        if (xx < 0 || xx >= w) continue;
+                        const label = fillComponents.labels[yy * w + xx];
+                        if (label) isWeb[label] = 1;
+                    }
+                }
+            }
+            for (let i = 0; i < n; i++) {
+                if (fill[i] && isWeb[fillComponents.labels[i]]) smoothed[i] = 0;
+            }
+            return smoothed;
+        }
+
         function paintCricutStage(stage, options, explain, includeWhiteBacking) {
             const { tw, th, renderW, renderH, pad, scale, silhouette, closedSilhouette, borderDistSq, renderCanvas } = stage;
             const n = tw * th;
             const bufferScaled = includeWhiteBacking ? options.outerBufferPx * scale : 0;
+            const smoothScaled = includeWhiteBacking ? options.smoothPx * scale : 0;
 
             // Step 6: Apply the outer buffer by thresholding the cached field.
             const borderRadiusSquared = bufferScaled * bufferScaled;
-            const dilated = new Uint8Array(n);
+            let dilated = new Uint8Array(n);
             for (let i = 0; i < n; i++) {
                 dilated[i] = borderDistSq[i] <= borderRadiusSquared ? 1 : 0;
+            }
+
+            // Step 6b: Smooth the rim. A speckled or halftone edge is a scatter
+            // of dots, and dilating each dot leaves a scalloped rim where every
+            // dip between neighbouring dots becomes a dip in the cut line.
+            if (smoothScaled > 0) {
+                dilated = smoothCricutRim(dilated, borderDistSq, bufferScaled, smoothScaled, tw, th);
             }
 
             // Step 7: Second flood fill from edges through non-dilated pixels to find the
@@ -6727,7 +6918,7 @@
             // cropped back to the framing the un-padded pipeline would produce,
             // so a cached stage never changes what the user sees.
             const outPad = includeWhiteBacking
-                ? Math.min(pad, cricutStagePad(scale, options.outerBufferPx, stage.floodPx))
+                ? Math.min(pad, cricutStagePad(scale, options.outerBufferPx, stage.floodPx, options.smoothPx))
                 : 0;
             if (outPad === pad) return outCanvas;
             const trimmed = document.createElement('canvas');
@@ -6749,14 +6940,15 @@
             const includeWhiteBacking = hints.whiteBacking !== false;
             const backingSvg = includeWhiteBacking ? (hints.backingSvg || svg) : null;
 
-            // Previews pad for the widest border the slider can reach, so the
-            // staged geometry — and the distance field with it — survives a
-            // border change. Exports pad exactly as they always did.
+            // Previews pad for the widest border and smoothing the sliders can
+            // reach, so the staged geometry — and the distance field with it —
+            // survives a border or smooth change. Exports pad exactly as they
+            // always did.
             const pad = !includeWhiteBacking
                 ? 0
                 : useCache
-                ? cricutStagePad(scale, CRICUT_BORDER_MAX, options.gapFloodPx)
-                : cricutStagePad(scale, options.outerBufferPx, options.gapFloodPx);
+                ? cricutStagePad(scale, CRICUT_BORDER_MAX, options.gapFloodPx, CRICUT_SMOOTH_MAX)
+                : cricutStagePad(scale, options.outerBufferPx, options.gapFloodPx, options.smoothPx);
             const geomKey = `${hints.cacheId || ''}|${width}x${height}|${scale}|${options.gapFloodPx}|${pad}`;
 
             const candidate = useCache && cricutStageSlot && cricutStageSlot.geomKey === geomKey
@@ -7160,8 +7352,9 @@
         function getComposerCricutOptions(writeBack = false) {
             const borderInput = document.getElementById('composerCricutBorder');
             const floodInput = document.getElementById('composerCricutFlood');
+            const smoothInput = document.getElementById('composerCricutSmooth');
             if (!borderInput || !floodInput) return normalizeCricutOptions();
-            return readCricutOptionsFromInputs(borderInput, floodInput, writeBack);
+            return readCricutOptionsFromInputs(borderInput, floodInput, writeBack, smoothInput);
         }
 
         function setComposerCricutPreviewStatus(text) {
@@ -7433,6 +7626,7 @@
             });
             composerCricutSettings.borderInput.id = 'composerCricutBorder';
             composerCricutSettings.floodInput.id = 'composerCricutFlood';
+            composerCricutSettings.smoothInput.id = 'composerCricutSmooth';
 
             composerCricutPreviewImg = document.createElement('img');
             composerCricutPreviewImg.alt = 'Cricut PNG preview';
@@ -9169,6 +9363,9 @@
             ensureComposer(record.productId, { scroll: false });
             document.getElementById('composerCricutBorder').value = record.cricut.outerBufferPx;
             document.getElementById('composerCricutFlood').value = record.cricut.gapFloodPx;
+            // Projects saved before the smooth control existed carry no
+            // smoothPx; the write-back below fills in the default.
+            document.getElementById('composerCricutSmooth').value = record.cricut.smoothPx;
             // Writing the number inputs directly leaves the sliders and preset
             // chips showing the old settings until they're told to catch up.
             getComposerCricutOptions(true);

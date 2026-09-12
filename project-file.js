@@ -15,6 +15,7 @@
     const MAX_TRANSFORM = 1000000;
     const CRICUT_BORDER_MAX = 120;
     const CRICUT_FLOOD_MAX = 300;
+    const CRICUT_SMOOTH_MAX = 60;
     const RASTER_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif']);
     const RENDER_MODES = new Set(['binary', 'color']);
     const SVG_ELEMENTS = new Set(['svg', 'g', 'path', 'rect', 'circle', 'ellipse', 'line', 'polyline', 'polygon']);
@@ -79,6 +80,10 @@
         const cricut = requireObject(value, label);
         requireInteger(cricut.outerBufferPx, `${label}.outerBufferPx`, 0, CRICUT_BORDER_MAX);
         requireInteger(cricut.gapFloodPx, `${label}.gapFloodPx`, 0, CRICUT_FLOOD_MAX);
+        // Optional: projects saved before border smoothing existed omit it.
+        if (cricut.smoothPx !== undefined) {
+            requireInteger(cricut.smoothPx, `${label}.smoothPx`, 0, CRICUT_SMOOTH_MAX);
+        }
         return cricut;
     }
 
