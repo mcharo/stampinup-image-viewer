@@ -1411,6 +1411,166 @@
             flex-wrap: wrap;
         }
 
+        .composer-layers-panel {
+            flex: 0 0 216px;
+            width: 216px;
+            max-height: 70vh;
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 0.45rem;
+            align-self: stretch;
+        }
+
+        .composer-layers-header {
+            display: flex;
+            align-items: baseline;
+            justify-content: space-between;
+            gap: 0.4rem;
+            font-size: 0.78rem;
+            font-weight: 600;
+            color: #475569;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            padding: 0 0.1rem;
+        }
+
+        .composer-layers-hint {
+            font-size: 0.62rem;
+            font-weight: 500;
+            letter-spacing: 0.04em;
+            color: #94a3b8;
+            text-transform: uppercase;
+        }
+
+        .composer-layers-list {
+            flex: 1 1 auto;
+            overflow-y: auto;
+            overflow-x: hidden;
+            border: 1px solid #e2e8f0;
+            border-radius: var(--border-radius);
+            background: #f8fafc;
+            min-height: 8rem;
+        }
+
+        .composer-layers-empty {
+            padding: 1.1rem 0.85rem;
+            font-size: 0.75rem;
+            line-height: 1.45;
+            color: #94a3b8;
+        }
+
+        .composer-layers-row {
+            display: flex;
+            align-items: center;
+            gap: 0.45rem;
+            width: 100%;
+            padding: 0.4rem 0.45rem;
+            border: 0;
+            border-bottom: 1px solid #e2e8f0;
+            background: white;
+            color: #334155;
+            text-align: left;
+            cursor: grab;
+            user-select: none;
+            touch-action: none;
+        }
+
+        .composer-layers-row:last-child {
+            border-bottom: 0;
+        }
+
+        .composer-layers-row:hover {
+            background: #f1f5f9;
+        }
+
+        .composer-layers-row.selected {
+            background: #e0e7ff;
+            color: #3730a3;
+        }
+
+        .composer-layers-row.selected:hover {
+            background: #c7d2fe;
+        }
+
+        .composer-layers-row.dragging {
+            opacity: 0.45;
+            cursor: grabbing;
+        }
+
+        .composer-layers-row.drop-before {
+            box-shadow: inset 0 2px 0 var(--primary-color);
+        }
+
+        .composer-layers-row.drop-after {
+            box-shadow: inset 0 -2px 0 var(--primary-color);
+        }
+
+        .composer-layer-grip {
+            width: 10px;
+            height: 14px;
+            flex-shrink: 0;
+            fill: currentColor;
+            color: #cbd5e1;
+        }
+
+        .composer-layers-row.selected .composer-layer-grip {
+            color: #818cf8;
+        }
+
+        .composer-layer-thumb {
+            width: 36px;
+            height: 36px;
+            flex-shrink: 0;
+            border-radius: 4px;
+            background:
+                linear-gradient(45deg, #f1f5f9 25%, transparent 25%),
+                linear-gradient(-45deg, #f1f5f9 25%, transparent 25%),
+                linear-gradient(45deg, transparent 75%, #f1f5f9 75%),
+                linear-gradient(-45deg, #f1f5f9 25%, transparent 75%);
+            background-size: 8px 8px;
+            background-position: 0 0, 0 4px, 4px -4px, -4px 0;
+            background-color: #fff;
+            border: 1px solid #e2e8f0;
+            overflow: hidden;
+            pointer-events: none;
+        }
+
+        .composer-layer-thumb svg {
+            display: block;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+        }
+
+        .composer-layer-meta {
+            min-width: 0;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 0.05rem;
+        }
+
+        .composer-layer-name {
+            font-size: 0.75rem;
+            font-weight: 600;
+            line-height: 1.2;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .composer-layer-id {
+            font-size: 0.62rem;
+            font-weight: 500;
+            color: #94a3b8;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .composer-layers-row.selected .composer-layer-id {
+            color: #6366f1;
+        }
+
         .composer-cricut-panel {
             flex: 1 1 380px;
             min-width: 0;
@@ -7012,6 +7172,7 @@
         let composerProductId = null;
         let composerNextId = 1;
         let composerSelected = [];   // array of <g> elements
+        let composerLayerDrag = null; // {g, row, startY, dragging}
         let composerDrag = null;     // {active, startSvgX, startSvgY, origPositions}
         let composerResizeDrag = null; // {g, corner, startSvgX, startSvgY, origScale, origTx, origTy, srcW, srcH}
         let composerRotateDrag = null; // {g, centerX, centerY, startAngle, origRotation}
@@ -7070,6 +7231,7 @@
             composerProductId = null;
             composerNextId = 1;
             composerSelected = [];
+            composerEndLayerDrag();
             composerDrag = null;
             composerResizeDrag = null;
             composerRotateDrag = null;
@@ -7148,6 +7310,7 @@
             composerProductId = null;
             composerNextId = 1;
             composerSelected = [];
+            composerEndLayerDrag();
             composerDrag = null;
             composerResizeDrag = null;
             composerRotateDrag = null;
@@ -7670,6 +7833,26 @@
             const workspace = document.createElement('div');
             workspace.className = 'composer-workspace';
 
+            const layersPanel = document.createElement('div');
+            layersPanel.className = 'composer-layers-panel';
+            const layersHeader = document.createElement('div');
+            layersHeader.className = 'composer-layers-header';
+            const layersTitle = document.createElement('span');
+            layersTitle.textContent = 'Layers';
+            const layersHint = document.createElement('span');
+            layersHint.className = 'composer-layers-hint';
+            layersHint.textContent = 'Top is front';
+            layersHeader.appendChild(layersTitle);
+            layersHeader.appendChild(layersHint);
+            const layersList = document.createElement('div');
+            layersList.className = 'composer-layers-list';
+            layersList.id = 'composerLayersList';
+            layersList.setAttribute('role', 'listbox');
+            layersList.setAttribute('aria-label', 'Composer layers, top is in front');
+            layersList.setAttribute('aria-multiselectable', 'true');
+            layersPanel.appendChild(layersHeader);
+            layersPanel.appendChild(layersList);
+
             const canvasWrapper = document.createElement('div');
             canvasWrapper.className = 'composer-canvas-wrapper';
 
@@ -7823,6 +8006,7 @@
             cricutPanel.appendChild(composerCricutPreview);
             cricutPanel.appendChild(composerCricutSettings.container);
 
+            workspace.appendChild(layersPanel);
             workspace.appendChild(canvasWrapper);
             workspace.appendChild(cricutPanel);
             composerSection.appendChild(workspace);
@@ -7833,6 +8017,7 @@
             composerStatus.textContent = 'Add objects using the "+ Composer" button on any extracted object card.';
             composerSection.appendChild(composerStatus);
             composerScheduleCricutPreview();
+            composerRefreshLayersPanel();
 
             document.getElementById('imageContainer').after(composerSection);
             composerResetHistory();
@@ -7987,6 +8172,7 @@
             g.querySelectorAll('.selection-rect, .resize-handle, .rotate-handle, .rotate-handle-stem').forEach(el => el.remove());
             composerUpdateScaleLabel();
             composerUpdateRotationLabel();
+            composerSyncLayersPanelSelection();
         }
 
         function composerDeselectAll() {
@@ -8000,6 +8186,7 @@
             composerSelected = [];
             composerUpdateScaleLabel();
             composerUpdateRotationLabel();
+            composerSyncLayersPanelSelection();
         }
 
         function composerSelectAll() {
@@ -8092,6 +8279,7 @@
                     }
                 } catch (e) {}
             });
+            composerSyncLayersPanelSelection();
         }
 
         function composerUpdateStatus() {
@@ -8101,6 +8289,7 @@
                 ? 'Add objects using the "+ Composer" button on any extracted object card.'
                 : `${count} object${count !== 1 ? 's' : ''} in workspace. Click to select, drag to move, use the ↺/↻ buttons or the round handle to rotate (Shift snaps to 15°). Shift-click for multi-select.`;
             composerScheduleCricutPreview();
+            composerRefreshLayersPanel();
         }
 
         // ── Drag ──
@@ -8415,6 +8604,270 @@
 
         // ── Layer controls ──
 
+        function composerGetLayerObjects() {
+            if (!composerSvg) return [];
+            return Array.from(composerSvg.querySelectorAll('.composer-object'));
+        }
+
+        function composerGetLayersList() {
+            return composerSection ? composerSection.querySelector('#composerLayersList') : null;
+        }
+
+        function composerLayerLabel(g) {
+            const sourceId = g.dataset.sourceObjectId || '';
+            const source = sourceId ? projectWorkspace.extractedObjects.get(sourceId) : null;
+            if (source && source.label) return source.label;
+            return `Object ${g.dataset.composerId}`;
+        }
+
+        function composerReadLayerPanelOrder() {
+            const list = composerGetLayersList();
+            if (!list) return [];
+            return Array.from(list.querySelectorAll('.composer-layers-row')).map(row => row.dataset.composerId);
+        }
+
+        function composerLayerSelectionIds() {
+            return new Set(
+                composerSelected.filter(g => g && g.isConnected).map(g => g.dataset.composerId)
+            );
+        }
+
+        function composerSyncLayersPanelSelection() {
+            const list = composerGetLayersList();
+            if (!list) return;
+            const objects = composerGetLayerObjects();
+            const rows = Array.from(list.querySelectorAll('.composer-layers-row'));
+            if (rows.length !== objects.length) {
+                composerRefreshLayersPanel();
+                return;
+            }
+            const selectedIds = composerLayerSelectionIds();
+            rows.forEach(row => {
+                const selected = selectedIds.has(row.dataset.composerId);
+                if (selected) row.classList.add('selected');
+                else row.classList.remove('selected');
+                row.setAttribute('aria-selected', selected ? 'true' : 'false');
+            });
+        }
+
+        // orderedIds is back-to-front DOM order (first id is behind everything).
+        function composerApplyLayerOrder(orderedIds) {
+            if (!composerSvg) return false;
+            const objects = composerGetLayerObjects();
+            const byId = new Map(objects.map(g => [g.dataset.composerId, g]));
+            if (!orderedIds || orderedIds.length !== objects.length) return false;
+            if (orderedIds.some(id => !byId.has(id))) return false;
+            const current = objects.map(g => g.dataset.composerId);
+            if (current.every((id, i) => id === orderedIds[i])) return false;
+
+            if (composerIsPatternPreviewActive()) composerCancelPatternPreview();
+
+            orderedIds.forEach(id => composerSvg.insertBefore(byId.get(id), null));
+            composerScheduleCricutPreview();
+            composerRefreshLayersPanel();
+            composerCommitHistory();
+            return true;
+        }
+
+        // panelDelta: -1 moves toward the front (up in the panel), +1 toward the back.
+        function composerNudgeLayer(g, panelDelta) {
+            if (!g) return false;
+            const frontIds = composerGetLayerObjects().map(o => o.dataset.composerId).reverse();
+            const i = frontIds.indexOf(g.dataset.composerId);
+            const j = Math.max(0, Math.min(frontIds.length - 1, i + panelDelta));
+            if (i < 0 || i === j) return false;
+            frontIds.splice(j, 0, frontIds.splice(i, 1)[0]);
+            return composerApplyLayerOrder(frontIds.reverse());
+        }
+
+        function composerBuildLayerThumb(g) {
+            const thumb = document.createElement('div');
+            thumb.className = 'composer-layer-thumb';
+            const srcW = Math.max(parseFloat(g.dataset.srcW || 1), 1);
+            const srcH = Math.max(parseFloat(g.dataset.srcH || 1), 1);
+            const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+            svg.setAttribute('viewBox', `0 0 ${srcW} ${srcH}`);
+            svg.setAttribute('aria-hidden', 'true');
+            composerCloneContentNodes(g, svg);
+            thumb.appendChild(svg);
+            return thumb;
+        }
+
+        function composerClearLayerDropMarks(list) {
+            if (!list) return;
+            Array.from(list.querySelectorAll('.composer-layers-row')).forEach(row => {
+                row.classList.remove('drop-before', 'drop-after', 'dragging');
+            });
+        }
+
+        function composerEndLayerDrag(opts = {}) {
+            const { commit = false } = opts;
+            const drag = composerLayerDrag;
+            composerLayerDrag = null;
+            composerUnlistenLayerDrag();
+            if (!drag) return;
+            if (commit && drag.dragging) {
+                const frontIds = composerReadLayerPanelOrder();
+                if (frontIds.length) composerApplyLayerOrder(frontIds.reverse());
+                else composerRefreshLayersPanel();
+            } else if (drag.dragging) {
+                composerRefreshLayersPanel();
+            } else {
+                composerClearLayerDropMarks(composerGetLayersList());
+            }
+        }
+
+        function composerLayerRowAtY(clientY) {
+            const list = composerGetLayersList();
+            if (!list || typeof clientY !== 'number') return null;
+            const rows = Array.from(list.querySelectorAll('.composer-layers-row'));
+            for (let i = 0; i < rows.length; i++) {
+                const row = rows[i];
+                if (typeof row.getBoundingClientRect !== 'function') return null;
+                const rect = row.getBoundingClientRect();
+                if (clientY < rect.top) return { row, before: true };
+                if (clientY <= rect.bottom) {
+                    return { row, before: clientY < rect.top + rect.height / 2 };
+                }
+            }
+            return rows.length ? { row: rows[rows.length - 1], before: false } : null;
+        }
+
+        function composerOnLayerPointerMove(e) {
+            if (!composerLayerDrag || !e) return;
+            const drag = composerLayerDrag;
+            const clientY = typeof e.clientY === 'number' ? e.clientY : drag.startY;
+            if (!drag.dragging && Math.abs(clientY - drag.startY) < 4) return;
+            drag.dragging = true;
+            if (e.preventDefault) e.preventDefault();
+            const list = composerGetLayersList();
+            if (!list || !drag.row || !drag.row.parentNode) return;
+            drag.row.classList.add('dragging');
+            const over = composerLayerRowAtY(clientY);
+            if (!over || over.row === drag.row) return;
+            if (over.before) {
+                if (over.row.previousElementSibling !== drag.row) {
+                    over.row.parentNode.insertBefore(drag.row, over.row);
+                }
+            } else {
+                const next = over.row.nextElementSibling;
+                if (next !== drag.row) {
+                    over.row.parentNode.insertBefore(drag.row, next);
+                }
+            }
+        }
+
+        function composerOnLayerPointerUp(e) {
+            if (composerLayerDrag && e) composerOnLayerPointerMove(e);
+            composerEndLayerDrag({ commit: true });
+        }
+
+        function composerListenLayerDrag() {
+            if (!window.addEventListener) return;
+            window.addEventListener('pointermove', composerOnLayerPointerMove);
+            window.addEventListener('pointerup', composerOnLayerPointerUp);
+            window.addEventListener('pointercancel', composerOnLayerPointerUp);
+            window.addEventListener('mousemove', composerOnLayerPointerMove);
+            window.addEventListener('mouseup', composerOnLayerPointerUp);
+        }
+
+        function composerUnlistenLayerDrag() {
+            if (!window.removeEventListener) return;
+            window.removeEventListener('pointermove', composerOnLayerPointerMove);
+            window.removeEventListener('pointerup', composerOnLayerPointerUp);
+            window.removeEventListener('pointercancel', composerOnLayerPointerUp);
+            window.removeEventListener('mousemove', composerOnLayerPointerMove);
+            window.removeEventListener('mouseup', composerOnLayerPointerUp);
+        }
+
+        function composerOnLayerPointerDown(e, g, row) {
+            if (e.button != null && e.button !== 0) return;
+            if (composerLayerDrag && composerLayerDrag.row === row && !composerLayerDrag.dragging) return;
+            if (e.preventDefault) e.preventDefault();
+            composerSelectObject(g, !!(e && e.shiftKey));
+            composerEndLayerDrag();
+            composerLayerDrag = { g, row, startY: e.clientY || 0, dragging: false };
+            composerListenLayerDrag();
+        }
+
+        function composerRefreshLayersPanel() {
+            const list = composerGetLayersList();
+            if (!list || (composerLayerDrag && composerLayerDrag.dragging)) return;
+
+            const active = document.activeElement;
+            const focusId = active && active.classList && active.classList.contains('composer-layers-row')
+                ? active.dataset.composerId
+                : null;
+
+            const objects = composerGetLayerObjects();
+            const selectedIds = composerLayerSelectionIds();
+
+            list.replaceChildren();
+            if (objects.length === 0) {
+                const empty = document.createElement('div');
+                empty.className = 'composer-layers-empty';
+                empty.textContent = 'Add objects with + Composer on an extracted object card.';
+                list.appendChild(empty);
+                return;
+            }
+
+            // Front-most object is last in DOM order, first in the panel.
+            objects.slice().reverse().forEach(g => {
+                const row = document.createElement('div');
+                row.className = 'composer-layers-row';
+                row.dataset.composerId = g.dataset.composerId;
+                row.setAttribute('role', 'option');
+                const selected = selectedIds.has(g.dataset.composerId);
+                row.setAttribute('aria-selected', selected ? 'true' : 'false');
+                row.tabIndex = 0;
+                if (selected) row.classList.add('selected');
+
+                const grip = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+                grip.setAttribute('viewBox', '0 0 10 14');
+                grip.setAttribute('class', 'composer-layer-grip');
+                grip.setAttribute('aria-hidden', 'true');
+                grip.innerHTML = '<circle cx="3" cy="3" r="1.2"/><circle cx="7" cy="3" r="1.2"/><circle cx="3" cy="7" r="1.2"/><circle cx="7" cy="7" r="1.2"/><circle cx="3" cy="11" r="1.2"/><circle cx="7" cy="11" r="1.2"/>';
+
+                const meta = document.createElement('div');
+                meta.className = 'composer-layer-meta';
+                const name = document.createElement('span');
+                name.className = 'composer-layer-name';
+                name.textContent = composerLayerLabel(g);
+                const idLabel = document.createElement('span');
+                idLabel.className = 'composer-layer-id';
+                idLabel.textContent = `#${g.dataset.composerId}`;
+                meta.appendChild(name);
+                meta.appendChild(idLabel);
+
+                row.appendChild(grip);
+                row.appendChild(composerBuildLayerThumb(g));
+                row.appendChild(meta);
+                row.title = 'Drag to change stacking order';
+                row.onpointerdown = (e) => composerOnLayerPointerDown(e || {}, g, row);
+                row.onmousedown = (e) => composerOnLayerPointerDown(e || {}, g, row);
+                row.onkeydown = (e) => {
+                    if (!e) return;
+                    if (e.key === 'Enter' || e.key === ' ') {
+                        if (e.preventDefault) e.preventDefault();
+                        composerSelectObject(g, !!e.shiftKey);
+                    } else if (e.altKey && e.key === 'ArrowUp') {
+                        if (e.preventDefault) e.preventDefault();
+                        composerNudgeLayer(g, -1);
+                    } else if (e.altKey && e.key === 'ArrowDown') {
+                        if (e.preventDefault) e.preventDefault();
+                        composerNudgeLayer(g, 1);
+                    }
+                };
+                list.appendChild(row);
+            });
+
+            if (focusId) {
+                const nextFocus = Array.from(list.querySelectorAll('.composer-layers-row'))
+                    .find(row => row.dataset.composerId === focusId);
+                if (nextFocus && typeof nextFocus.focus === 'function') nextFocus.focus();
+            }
+        }
+
         function composerBringForward() {
             if (composerIsPatternPreviewActive()) composerCancelPatternPreview();
             let changed = false;
@@ -8429,6 +8882,7 @@
             if (changed) {
                 composerScheduleCricutPreview();
                 composerCommitHistory();
+                composerRefreshLayersPanel();
             }
         }
 
@@ -8445,6 +8899,7 @@
             if (changed) {
                 composerScheduleCricutPreview();
                 composerCommitHistory();
+                composerRefreshLayersPanel();
             }
         }
 
