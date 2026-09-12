@@ -228,6 +228,10 @@
             requireString(object.svg, `object ${object.id} svg`);
             rejectUnsafeSvgMarkup(object.svg);
             requireColorState(object.color, `object ${object.id} color`);
+            if (Object.prototype.hasOwnProperty.call(object, 'whiteBacking') &&
+                typeof object.whiteBacking !== 'boolean') {
+                fail(`object ${object.id} whiteBacking must be a boolean`);
+            }
             requireCricutState(object.cricut, `object ${object.id} cricut`);
         }
 
@@ -237,6 +241,10 @@
             requireInteger(composer.height, 'composer.height', 1, MAX_DIMENSION);
             requireString(composer.productId, 'composer.productId', true);
             requireCricutState(composer.cricut, 'composer.cricut');
+            if (Object.prototype.hasOwnProperty.call(composer, 'whiteBacking') &&
+                typeof composer.whiteBacking !== 'boolean') {
+                fail('composer.whiteBacking must be a boolean');
+            }
             const composerIds = new Set();
             for (const object of requireArray(composer.objects, 'composer.objects')) {
                 requireObject(object, 'composer object');
@@ -257,6 +265,10 @@
                 requireFinite(object.rotation, `composer object ${object.id} rotation`, -MAX_TRANSFORM, MAX_TRANSFORM);
                 requireString(object.svg, `composer object ${object.id} svg`);
                 rejectUnsafeSvgMarkup(object.svg);
+                if (Object.prototype.hasOwnProperty.call(object, 'whiteBacking') &&
+                    typeof object.whiteBacking !== 'boolean') {
+                    fail(`composer object ${object.id} whiteBacking must be a boolean`);
+                }
             }
         }
         return document;

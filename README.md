@@ -23,6 +23,18 @@ the CDN no longer serves is retried against the archived copy.
 
 Use **Save Project** to download a self-contained `.stampinup-project` file containing the source images, vector settings, extracted objects, and composition. Use **Open Project** to restore that workspace and continue editing. Project files include their source images and can be reopened offline.
 
+### Die sheet extraction (experimental, currently hidden)
+
+This is turned off at the moment and no source card offers it; the description below is kept for when it comes back.
+
+Upload a photograph of a metal die sheet and use **Extract Dies from Sheet** to split it into one object per die, each traced to its own SVG and ready to download or drop into a composition.
+
+This works on a photo of the dies themselves. It separates steel from the backdrop by colour warmth rather than brightness, so a sheet shot on wood or paper works even where the metal catches highlights brighter than the background. **Mirror** is on by default because dies are photographed face-up and therefore read reversed; turn it off for a photo already shot in reading orientation.
+
+Where a product offers a flat illustration of the finished cut shapes alongside the photo of the steel, prefer the illustration. Extraction handles both, but a photo of steel can only ever record the cutting edge, so its shapes come out coarse — outlines weld shut and letter counters can fill in — whereas the illustration already shows the shapes the die cuts and separates perfectly. Turn **Mirror** off for an illustration, which is drawn in reading orientation.
+
+The feature is experimental and opt-in. Its code loads only when you click the button, and a saved project keeps the extracted results as ordinary images and vectors, so reopening one never depends on it.
+
 ## Live Demo
 
 Visit [https://mcharo.github.io/stampinup-image-viewer](https://mcharo.github.io/stampinup-image-viewer) to try the tool.

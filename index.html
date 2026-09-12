@@ -844,6 +844,71 @@
             color: white;
         }
 
+        /* Switch-style control: reads as a setting, not an action button. */
+        .object-action-row .white-backing-toggle,
+        .composer-cricut-panel .white-backing-toggle {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+            padding: 0.2rem 0.55rem 0.2rem 0.3rem;
+            background: transparent;
+            color: #6b7280;
+            border: 1px solid #e2e8f0;
+            border-radius: 999px;
+            font-size: 0.72rem;
+            font-weight: 500;
+            line-height: 1.4;
+        }
+
+        .object-action-row .white-backing-toggle:hover,
+        .composer-cricut-panel .white-backing-toggle:hover {
+            background: #f8fafc;
+            border-color: #cbd5e1;
+            color: #374151;
+        }
+
+        .object-action-row .white-backing-toggle[aria-checked="true"],
+        .composer-cricut-panel .white-backing-toggle[aria-checked="true"] {
+            color: #374151;
+        }
+
+        .composer-cricut-panel .white-backing-toggle {
+            background: white;
+            text-transform: none;
+            letter-spacing: normal;
+        }
+
+        .white-backing-toggle .switch-track {
+            position: relative;
+            width: 26px;
+            height: 14px;
+            border-radius: 999px;
+            background: #cbd5e1;
+            transition: background 0.15s ease;
+            flex-shrink: 0;
+        }
+
+        .white-backing-toggle .switch-track::after {
+            content: '';
+            position: absolute;
+            top: 2px;
+            left: 2px;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: white;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+            transition: transform 0.15s ease;
+        }
+
+        .white-backing-toggle[aria-checked="true"] .switch-track {
+            background: var(--primary-color);
+        }
+
+        .white-backing-toggle[aria-checked="true"] .switch-track::after {
+            transform: translateX(12px);
+        }
+
         .cricut-footer-spacer {
             flex: 1 1 auto;
         }
@@ -1355,6 +1420,11 @@
         }
 
         .composer-cricut-panel-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.5rem;
+            flex-wrap: wrap;
             font-size: 0.78rem;
             font-weight: 600;
             color: #475569;
@@ -5775,6 +5845,36 @@
             };
         }
 
+        // A switch-styled <button role="switch"> for the white fill + cut
+        // border. `isOn` is read on every sync so the switch reflects state
+        // that changed behind its back (e.g. project hydration); the returned
+        // element carries a `.sync()` for exactly that case.
+        function createWhiteBackingSwitch({ label, titleOn, titleOff, isOn, onToggle }) {
+            const toggle = document.createElement('button');
+            toggle.type = 'button';
+            toggle.className = 'white-backing-toggle';
+            toggle.setAttribute('role', 'switch');
+            const track = document.createElement('span');
+            track.className = 'switch-track';
+            track.setAttribute('aria-hidden', 'true');
+            const text = document.createElement('span');
+            text.textContent = label;
+            toggle.appendChild(track);
+            toggle.appendChild(text);
+            const sync = () => {
+                const on = !!isOn();
+                toggle.setAttribute('aria-checked', String(on));
+                toggle.title = on ? titleOn : titleOff;
+            };
+            toggle.onclick = () => {
+                onToggle();
+                sync();
+            };
+            toggle.sync = sync;
+            sync();
+            return toggle;
+        }
+
         // Tuning eight object cards by hand is sixteen edits; this copies one
         // card's border/flood onto every extracted object and re-renders them.
         function applyCricutOptionsToAllObjects(options) {
@@ -5857,6 +5957,7 @@
                 svg,
                 card: objectCard,
                 colorControl: null,
+                whiteBacking: options.whiteBacking !== false,
                 borderInput: null,
                 floodInput: null,
                 cricutPanel: null
@@ -5950,6 +6051,7 @@
                         const canvas = await buildCricutCanvas(svg, width, height, {
                             ...liveCricutOptions,
                             previewScale: getCricutPreviewScale(width, height),
+                            whiteBacking: objectState.whiteBacking,
                             explain: cricutPanel.shouldExplain(),
                             cache: true,
                             cacheId: objectId,
@@ -6000,12 +6102,26 @@
                 cricutButton.textContent = 'Rendering...';
                 try {
                     const liveCricutOptions = readCricutOptionsFromInputs(borderInput, floodInput);
-                    await generateCricutPNG(svg, productId, width, height, liveCricutOptions);
+                    await generateCricutPNG(svg, productId, width, height, {
+                        ...liveCricutOptions,
+                        whiteBacking: objectState.whiteBacking
+                    });
                 } finally {
                     cricutButton.disabled = false;
                     cricutButton.textContent = oldText;
                 }
             };
+
+            const whiteBackingToggle = createWhiteBackingSwitch({
+                label: 'White backing',
+                titleOn: 'White fill and outer cut border are included. Click to turn them off.',
+                titleOff: 'White fill and outer cut border are omitted. Click to turn them on.',
+                isOn: () => objectState.whiteBacking,
+                onToggle: () => {
+                    objectState.whiteBacking = !objectState.whiteBacking;
+                    scheduleCricutPreview();
+                }
+            });
 
             header.appendChild(title);
             header.appendChild(removeButton);
@@ -6019,12 +6135,15 @@
             const cricutGroup = document.createElement('div');
             cricutGroup.className = 'cricut-group';
             cricutGroup.appendChild(cricutButton);
+            cricutGroup.appendChild(whiteBackingToggle);
 
             const composerButton = document.createElement('button');
             composerButton.className = 'add-to-composer-btn';
             composerButton.textContent = '+ Composer';
             composerButton.title = 'Add to composition workspace';
-            composerButton.onclick = () => addToComposer(svg, width, height, productId, refW, refH, objectId);
+            composerButton.onclick = () => addToComposer(
+                svg, width, height, productId, refW, refH, objectId, objectState.whiteBacking
+            );
 
             actionRow.appendChild(downloadButton);
             actionRow.appendChild(downloadJpgButton);
@@ -6105,6 +6224,7 @@
                     referenceHeight: state.referenceHeight,
                     svg: new XMLSerializer().serializeToString(state.svg),
                     color: state.colorControl.getState(),
+                    whiteBacking: state.whiteBacking !== false,
                     cricut: persistedCricutOptions(readCricutOptionsFromInputs(state.borderInput, state.floodInput, false))
                 }));
         }
@@ -6132,6 +6252,7 @@
                     sourceId: record.sourceId,
                     label: record.label,
                     color: record.color,
+                    whiteBacking: record.whiteBacking,
                     cricut: record.cricut,
                     scroll: false
                 }
@@ -6469,7 +6590,7 @@
         // distance field around it. Dilating by a radius is exactly thresholding
         // that field (see dilateCircular), so once this exists a border change
         // costs a repaint rather than another distance transform.
-        async function buildCricutStage(svg, width, height, scale, floodPx, pad) {
+        async function buildCricutStage(svg, backingSvg, width, height, scale, floodPx, pad) {
             const renderW = Math.max(1, Math.round(width * scale));
             const renderH = Math.max(1, Math.round(height * scale));
             const tw = renderW + pad * 2;
@@ -6477,12 +6598,24 @@
 
             const svgData = serializeSvgForRaster(svg, width, height, renderW, renderH);
             const svgCanvas = await rasterizeSvgString(svgData, renderW, renderH);
+            const backingSvgData = backingSvg
+                ? serializeSvgForRaster(backingSvg, width, height, renderW, renderH)
+                : '';
+            const backingCanvas = !backingSvg
+                ? null
+                : backingSvgData === svgData
+                    ? svgCanvas
+                    : await rasterizeSvgString(backingSvgData, renderW, renderH);
             const renderCanvas = document.createElement('canvas');
             renderCanvas.width = tw;
             renderCanvas.height = th;
-            const ctx = renderCanvas.getContext('2d');
-            ctx.drawImage(svgCanvas, pad, pad);
+            renderCanvas.getContext('2d').drawImage(svgCanvas, pad, pad);
 
+            const maskCanvas = document.createElement('canvas');
+            maskCanvas.width = tw;
+            maskCanvas.height = th;
+            const ctx = maskCanvas.getContext('2d');
+            if (backingCanvas) ctx.drawImage(backingCanvas, pad, pad);
             const data = ctx.getImageData(0, 0, tw, th).data;
             const n = tw * th;
 
@@ -6509,15 +6642,15 @@
             const borderDistSq = distanceToMaskSquared(closedSilhouette, tw, th, 1);
 
             return {
-                svgData, renderCanvas, tw, th, renderW, renderH, pad, scale,
+                svgData, backingSvgData, renderCanvas, tw, th, renderW, renderH, pad, scale,
                 floodPx, silhouette, closedSilhouette, borderDistSq
             };
         }
 
-        function paintCricutStage(stage, options, explain) {
+        function paintCricutStage(stage, options, explain, includeWhiteBacking) {
             const { tw, th, renderW, renderH, pad, scale, silhouette, closedSilhouette, borderDistSq, renderCanvas } = stage;
             const n = tw * th;
-            const bufferScaled = options.outerBufferPx * scale;
+            const bufferScaled = includeWhiteBacking ? options.outerBufferPx * scale : 0;
 
             // Step 6: Apply the outer buffer by thresholding the cached field.
             const borderRadiusSquared = bufferScaled * bufferScaled;
@@ -6593,7 +6726,9 @@
             // A stage padded for a wider border than this render uses gets
             // cropped back to the framing the un-padded pipeline would produce,
             // so a cached stage never changes what the user sees.
-            const outPad = Math.min(pad, cricutStagePad(scale, options.outerBufferPx, stage.floodPx));
+            const outPad = includeWhiteBacking
+                ? Math.min(pad, cricutStagePad(scale, options.outerBufferPx, stage.floodPx))
+                : 0;
             if (outPad === pad) return outCanvas;
             const trimmed = document.createElement('canvas');
             trimmed.width = renderW + outPad * 2;
@@ -6602,20 +6737,24 @@
             return trimmed;
         }
 
-        // `cache`/`cacheId`/`reuseStage`/`explain` are all transient render hints
-        // that normalizeCricutOptions deliberately drops, so none of them can
-        // reach a project file. Export callers pass none of them and therefore
-        // still take the original code path, byte for byte.
+        // Cache/explain values and the optional backing-mask SVG are transient
+        // render hints. The owning extracted/composer object persists only its
+        // whiteBacking boolean; normalizeCricutOptions continues to handle just
+        // the numeric border/flood settings.
         async function buildCricutCanvas(svg, width, height, rawOptions) {
             const options = normalizeCricutOptions(rawOptions);
             const hints = rawOptions && typeof rawOptions === 'object' ? rawOptions : {};
             const useCache = !!hints.cache;
             const scale = options.previewScale;
+            const includeWhiteBacking = hints.whiteBacking !== false;
+            const backingSvg = includeWhiteBacking ? (hints.backingSvg || svg) : null;
 
             // Previews pad for the widest border the slider can reach, so the
             // staged geometry — and the distance field with it — survives a
             // border change. Exports pad exactly as they always did.
-            const pad = useCache
+            const pad = !includeWhiteBacking
+                ? 0
+                : useCache
                 ? cricutStagePad(scale, CRICUT_BORDER_MAX, options.gapFloodPx)
                 : cricutStagePad(scale, options.outerBufferPx, options.gapFloodPx);
             const geomKey = `${hints.cacheId || ''}|${width}x${height}|${scale}|${options.gapFloodPx}|${pad}`;
@@ -6631,16 +6770,20 @@
             } else if (candidate) {
                 const renderW = Math.max(1, Math.round(width * scale));
                 const renderH = Math.max(1, Math.round(height * scale));
-                if (serializeSvgForRaster(svg, width, height, renderW, renderH) === candidate.svgData) {
+                const svgData = serializeSvgForRaster(svg, width, height, renderW, renderH);
+                const backingSvgData = backingSvg
+                    ? serializeSvgForRaster(backingSvg, width, height, renderW, renderH)
+                    : '';
+                if (svgData === candidate.svgData && backingSvgData === candidate.backingSvgData) {
                     stage = candidate;
                 }
             }
             if (!stage) {
-                stage = await buildCricutStage(svg, width, height, scale, options.gapFloodPx, pad);
+                stage = await buildCricutStage(svg, backingSvg, width, height, scale, options.gapFloodPx, pad);
                 if (useCache) cricutStageSlot = { geomKey, stage };
             }
 
-            return paintCricutStage(stage, options, !!hints.explain);
+            return paintCricutStage(stage, options, !!hints.explain, includeWhiteBacking);
         }
 
         function canvasToBlob(canvas, mimeType) {
@@ -6652,9 +6795,12 @@
         async function generateCricutPNG(svg, productId, width, height, optionsOrBuffer, gapFloodPx) {
             if (!svg) return;
             const options = normalizeCricutOptions(optionsOrBuffer, gapFloodPx);
+            const hints = optionsOrBuffer && typeof optionsOrBuffer === 'object' ? optionsOrBuffer : {};
             const outCanvas = await buildCricutCanvas(svg, width, height, {
                 ...options,
-                previewScale: 2
+                previewScale: 2,
+                whiteBacking: hints.whiteBacking,
+                backingSvg: hints.backingSvg
             });
             const blob = await canvasToBlob(outCanvas, 'image/png');
             if (!blob) return;
@@ -6694,6 +6840,12 @@
         let composerCricutPreviewTimer = null;
         let composerCricutPreviewToken = 0;
         let composerCricutSettings = null;
+        // Scene-level override: when true the Cricut backing (white fill +
+        // cut border) wraps the whole layered composition, regardless of each
+        // object's own white-backing switch. Lets a user stack objects with
+        // their backing off and then re-apply one backing to the result.
+        let composerWholeBacking = false;
+        let composerWholeBackingToggle = null;
         // A mid-drag render must not queue up behind the one already in flight,
         // or a fast scrub builds a backlog of renders whose results the token
         // check discards anyway.
@@ -6739,6 +6891,8 @@
             composerCricutPreviewToken = 0;
             if (composerCricutSettings) composerCricutSettings.dispose();
             composerCricutSettings = null;
+            composerWholeBacking = false;
+            composerWholeBackingToggle = null;
             composerPatternSession = null;
             composerClosePatternPanelUI();
             composerPatternPanel = null;
@@ -6777,6 +6931,8 @@
                 cricutPreviewWasScheduled: composerCricutPreviewTimer !== null,
                 cricutPreviewToken: composerCricutPreviewToken,
                 cricutSettings: composerCricutSettings,
+                wholeBacking: composerWholeBacking,
+                wholeBackingToggle: composerWholeBackingToggle,
                 patternSession: composerPatternSession,
                 patternPanel: composerPatternPanel,
                 patternMode: composerPatternMode,
@@ -6814,6 +6970,8 @@
             // Not disposed: the snapshot still owns this panel in case the
             // caller rolls back. The commit path disposes it instead.
             composerCricutSettings = null;
+            composerWholeBacking = false;
+            composerWholeBackingToggle = null;
             composerPatternSession = null;
             composerPatternPanel = null;
             composerPatternMode = null;
@@ -6844,6 +7002,8 @@
             composerCricutPreviewTimer = null;
             composerCricutPreviewToken = snapshot.cricutPreviewToken;
             composerCricutSettings = snapshot.cricutSettings || null;
+            composerWholeBacking = !!snapshot.wholeBacking;
+            composerWholeBackingToggle = snapshot.wholeBackingToggle || null;
             composerPatternSession = snapshot.patternSession;
             composerPatternPanel = snapshot.patternPanel;
             composerPatternMode = snapshot.patternMode;
@@ -6882,6 +7042,7 @@
                     scale: parseFloat(g.dataset.objScale),
                     baseScale: parseFloat(g.dataset.baseScale),
                     rotation: composerGetRotation(g),
+                    whiteBacking: g.dataset.whiteBacking !== 'false',
                     svg: wrapComposerContent(g)
                 }))
             };
@@ -7052,6 +7213,8 @@
                     const canvas = await buildCricutCanvas(exportData.svg, exportData.width, exportData.height, {
                         ...options,
                         previewScale,
+                        whiteBacking: exportData.hasWhiteBacking,
+                        backingSvg: exportData.backingSvg,
                         explain: !!(composerCricutSettings && composerCricutSettings.shouldExplain()),
                         cache: true,
                         cacheId: 'composer',
@@ -7447,7 +7610,21 @@
             cricutPanel.className = 'composer-cricut-panel';
             const cricutPanelHeader = document.createElement('div');
             cricutPanelHeader.className = 'composer-cricut-panel-header';
-            cricutPanelHeader.textContent = 'Cricut PNG preview';
+            const cricutPanelTitle = document.createElement('span');
+            cricutPanelTitle.textContent = 'Cricut PNG preview';
+            cricutPanelHeader.appendChild(cricutPanelTitle);
+            composerWholeBackingToggle = createWhiteBackingSwitch({
+                label: 'Back whole composition',
+                titleOn: 'One white fill and cut border wraps the entire layered composition, overriding each object\'s own white-backing switch. Click to go back to per-object backing.',
+                titleOff: 'Each object keeps its own white-backing setting. Click to wrap the entire layered composition in one white fill and cut border.',
+                isOn: () => composerWholeBacking,
+                onToggle: () => {
+                    composerWholeBacking = !composerWholeBacking;
+                    composerScheduleCricutPreview();
+                }
+            });
+            composerWholeBackingToggle.id = 'composerWholeBackingToggle';
+            cricutPanelHeader.appendChild(composerWholeBackingToggle);
             cricutPanel.appendChild(cricutPanelHeader);
             cricutPanel.appendChild(composerCricutPreview);
             cricutPanel.appendChild(composerCricutSettings.container);
@@ -7473,7 +7650,7 @@
 
         // Builds and appends a <g class="composer-object"> from a plain
         // ComposerRecord.objects[i]-shaped record (id/sourceObjectId/
-        // sourceWidth/sourceHeight/x/y/scale/baseScale/rotation/svg): parses
+        // sourceWidth/sourceHeight/x/y/scale/baseScale/rotation/whiteBacking/svg): parses
         // record.svg through the same safe DOMParser path used elsewhere
         // (parseSvgElement — never innerHTML), clones only its children,
         // applies the exact saved transform, and keeps composerNextId ahead
@@ -7495,6 +7672,7 @@
             g.dataset.tx = record.x;
             g.dataset.ty = record.y;
             g.dataset.rotation = record.rotation;
+            g.dataset.whiteBacking = record.whiteBacking === false ? 'false' : 'true';
             composerApplyTransform(g);
 
             if (svgRoot) {
@@ -7522,7 +7700,7 @@
             return g;
         }
 
-        function addToComposer(sourceSvg, srcW, srcH, productId, refW, refH, sourceObjectId) {
+        function addToComposer(sourceSvg, srcW, srcH, productId, refW, refH, sourceObjectId, whiteBacking = true) {
             ensureComposer(productId);
 
             if (!sourceSvg.querySelector('path')) return;
@@ -7549,6 +7727,7 @@
                 scale: fitScale,
                 baseScale: fitScale,
                 rotation: 0,
+                whiteBacking: whiteBacking !== false,
                 svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${srcW} ${srcH}">${composerSerializeGroupContent(sourceSvg)}</svg>`
             });
 
@@ -8549,7 +8728,7 @@
             // DOMStringMap coerces anyway, but assigning the raw number here
             // left composerCloneObject relying on that coercion.
             clone.dataset.composerId = String(composerNextId++);
-            ['srcW', 'srcH', 'objScale', 'baseScale'].forEach(k => {
+            ['srcW', 'srcH', 'objScale', 'baseScale', 'whiteBacking'].forEach(k => {
                 if (g.dataset[k] !== undefined) clone.dataset[k] = g.dataset[k];
             });
             composerCloneContentNodes(g, clone);
@@ -8961,6 +9140,7 @@
                 height: COMPOSER_VB_H,
                 productId: composerProductId || '',
                 cricut: persistedCricutOptions(getComposerCricutOptions(false)),
+                whiteBacking: composerWholeBacking,
                 objects: objects.map(g => {
                     const candidateSourceId = g.dataset.sourceObjectId || '';
                     return {
@@ -8973,6 +9153,7 @@
                         scale: parseFloat(g.dataset.objScale),
                         baseScale: parseFloat(g.dataset.baseScale),
                         rotation: composerGetRotation(g),
+                        whiteBacking: g.dataset.whiteBacking !== 'false',
                         svg: wrapComposerContent(g)
                     };
                 })
@@ -8991,6 +9172,8 @@
             // Writing the number inputs directly leaves the sliders and preset
             // chips showing the old settings until they're told to catch up.
             getComposerCricutOptions(true);
+            composerWholeBacking = record.whiteBacking === true;
+            if (composerWholeBackingToggle) composerWholeBackingToggle.sync();
             record.objects.forEach(createComposerObjectFromRecord);
             composerDeselectAll();
             composerUpdateStatus();
@@ -9100,6 +9283,12 @@
             tmpSvg.setAttribute('viewBox', `0 0 ${W} ${H}`);
             tmpSvg.setAttribute('width', W);
             tmpSvg.setAttribute('height', H);
+            const backingSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+            backingSvg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+            backingSvg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+            backingSvg.setAttribute('width', W);
+            backingSvg.setAttribute('height', H);
+            let hasWhiteBacking = false;
 
             objects.forEach(g => {
                 const tx = parseFloat(g.dataset.tx || 0);
@@ -9108,19 +9297,34 @@
                 const rot = composerGetRotation(g);
                 const gSrcW = parseFloat(g.dataset.srcW || 0);
                 const gSrcH = parseFloat(g.dataset.srcH || 0);
+                const transform = composerBuildTransform(
+                    (tx - minX) * upscale, (ty - minY) * upscale, s * upscale, rot, gSrcW, gSrcH
+                );
                 const gWrap = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-                gWrap.setAttribute('transform', composerBuildTransform((tx - minX) * upscale, (ty - minY) * upscale, s * upscale, rot, gSrcW, gSrcH));
+                gWrap.setAttribute('transform', transform);
+                const includeObjectBacking = composerWholeBacking || g.dataset.whiteBacking !== 'false';
+                const backingWrap = includeObjectBacking
+                    ? document.createElementNS('http://www.w3.org/2000/svg', 'g')
+                    : null;
+                if (backingWrap) backingWrap.setAttribute('transform', transform);
                 const skipCls = ['selection-rect', 'hover-outline', 'resize-handle', 'rotate-handle', 'rotate-handle-stem'];
                 Array.from(g.children).forEach(child => {
                     if (child.classList && skipCls.some(c => child.classList.contains(c))) return;
                     gWrap.appendChild(child.cloneNode(true));
+                    if (backingWrap) backingWrap.appendChild(child.cloneNode(true));
                 });
+                if (backingWrap) {
+                    backingSvg.appendChild(backingWrap);
+                    hasWhiteBacking = true;
+                }
                 tmpSvg.appendChild(gWrap);
             });
 
             const pid = composerProductId || 'composed';
             return {
                 svg: tmpSvg,
+                backingSvg,
+                hasWhiteBacking,
                 productId: pid,
                 width: Math.round(W),
                 height: Math.round(H)
@@ -9130,7 +9334,11 @@
         async function composerExportCricut(options) {
             const exportData = buildComposerCricutExportSvg();
             if (!exportData) return;
-            await generateCricutPNG(exportData.svg, exportData.productId, exportData.width, exportData.height, options);
+            await generateCricutPNG(exportData.svg, exportData.productId, exportData.width, exportData.height, {
+                ...options,
+                whiteBacking: exportData.hasWhiteBacking,
+                backingSvg: exportData.backingSvg
+            });
         }
     </script>
 </body>
