@@ -16,6 +16,7 @@
     const CRICUT_BORDER_MAX = 120;
     const CRICUT_FLOOD_MAX = 300;
     const CRICUT_SMOOTH_MAX = 60;
+    const RASTER_SOFTEN_MAX = 3;
     const RASTER_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif']);
     const RENDER_MODES = new Set(['binary', 'color']);
     const SVG_ELEMENTS = new Set(['svg', 'g', 'path', 'rect', 'circle', 'ellipse', 'line', 'polyline', 'polygon']);
@@ -85,6 +86,21 @@
             requireInteger(cricut.smoothPx, `${label}.smoothPx`, 0, CRICUT_SMOOTH_MAX);
         }
         return cricut;
+    }
+
+    // Raster effects are optional as a whole: projects saved before they
+    // existed omit the record, and the viewer falls back to "off".
+    function requireRasterEffects(value, label) {
+        if (value === undefined) return value;
+        const effects = requireObject(value, label);
+        if (typeof effects.inkMixing !== 'boolean') fail(`${label}.inkMixing must be a boolean`);
+        requireInteger(effects.inkOpacity, `${label}.inkOpacity`, 0, 100);
+        // Each later effect is optional on its own, so a record written
+        // before it existed still opens (and reads as "off").
+        if (effects.softenPx !== undefined) {
+            requireFinite(effects.softenPx, `${label}.softenPx`, 0, RASTER_SOFTEN_MAX);
+        }
+        return effects;
     }
 
     function requireDimensions(value, label, widthKey = 'width', heightKey = 'height') {
@@ -238,6 +254,7 @@
                 fail(`object ${object.id} whiteBacking must be a boolean`);
             }
             requireCricutState(object.cricut, `object ${object.id} cricut`);
+            requireRasterEffects(object.effects, `object ${object.id} effects`);
         }
 
         if (document.composer !== null) {
@@ -246,6 +263,7 @@
             requireInteger(composer.height, 'composer.height', 1, MAX_DIMENSION);
             requireString(composer.productId, 'composer.productId', true);
             requireCricutState(composer.cricut, 'composer.cricut');
+            requireRasterEffects(composer.effects, 'composer.effects');
             if (Object.prototype.hasOwnProperty.call(composer, 'whiteBacking') &&
                 typeof composer.whiteBacking !== 'boolean') {
                 fail('composer.whiteBacking must be a boolean');

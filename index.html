@@ -844,8 +844,42 @@
             color: white;
         }
 
+        /* ── Ink mixing (raster effect) section of the settings panel ── */
+        .ink-mixing-control {
+            gap: 0.35rem;
+        }
+
+        .cricut-control-hint {
+            margin: 0;
+            font-size: 0.64rem;
+            line-height: 1.35;
+            color: #6b7280;
+        }
+
+        .ink-mixing-control .ink-opacity-control {
+            padding-top: 0.3rem;
+            border-top: 1px dashed #e2e8f0;
+            transition: opacity 0.15s ease;
+        }
+
+        .cricut-control.disabled {
+            opacity: 0.45;
+        }
+
+        .cricut-control.disabled .cricut-slider {
+            cursor: default;
+        }
+
+        .cricut-control.disabled .cricut-preset:hover,
+        .cricut-control.disabled .cricut-stepper:hover {
+            border-color: #e2e8f0;
+            color: #6b7280;
+            background: white;
+        }
+
         /* Switch-style control: reads as a setting, not an action button. */
         .object-action-row .white-backing-toggle,
+        .cricut-settings .white-backing-toggle,
         .composer-cricut-panel .white-backing-toggle {
             display: inline-flex;
             align-items: center;
@@ -861,6 +895,7 @@
         }
 
         .object-action-row .white-backing-toggle:hover,
+        .cricut-settings .white-backing-toggle:hover,
         .composer-cricut-panel .white-backing-toggle:hover {
             background: #f8fafc;
             border-color: #cbd5e1;
@@ -868,8 +903,15 @@
         }
 
         .object-action-row .white-backing-toggle[aria-checked="true"],
+        .cricut-settings .white-backing-toggle[aria-checked="true"],
         .composer-cricut-panel .white-backing-toggle[aria-checked="true"] {
             color: #374151;
+        }
+
+        .cricut-settings .white-backing-toggle {
+            background: white;
+            padding: 0.1rem 0.45rem 0.1rem 0.25rem;
+            font-size: 0.68rem;
         }
 
         .composer-cricut-panel .white-backing-toggle {
@@ -5597,11 +5639,39 @@
         const CRICUT_BORDER_MAX = 120;
         const CRICUT_FLOOD_MAX = 300;
         const CRICUT_SMOOTH_MAX = 60;
+        // Raster effects (see "Raster effects" below): everything off by
+        // default; mixing starts as a dye ink — fully transparent — once
+        // switched on. Softening is a Gaussian sigma in source-image pixels;
+        // beyond ~1px it stops reading as a rounded edge and starts reading
+        // as blur, so the range stays short and the step fine.
+        const RASTER_SOFTEN_MAX = 3;
+        const RASTER_SOFTEN_STEP = 0.05;
+        const RASTER_EFFECT_DEFAULTS = { inkMixing: false, inkOpacity: 0, softenPx: 0 };
 
         function clampInteger(value, min, max, fallback) {
             const parsed = parseInt(value, 10);
             if (!Number.isFinite(parsed)) return fallback;
             return Math.max(min, Math.min(max, parsed));
+        }
+
+        // Float counterpart for controls finer than a whole pixel. `step`
+        // snaps the result to the control's grid and strips the binary-float
+        // noise that would otherwise leave "0.30000000000000004" in a number
+        // box or a project file.
+        function clampNumber(value, min, max, fallback, step = 0) {
+            const parsed = typeof value === 'number' ? value : parseFloat(value);
+            if (!Number.isFinite(parsed)) return fallback;
+            let clamped = Math.max(min, Math.min(max, parsed));
+            if (step > 0) clamped = Math.max(min, Math.min(max, Math.round(clamped / step) * step));
+            return Number(clamped.toFixed(4));
+        }
+
+        // The slider/number/stepper control was built for integer pixel
+        // counts; a spec with a fractional `step` opts into float handling.
+        function clampToSpec(value, spec) {
+            return spec.step && spec.step < 1
+                ? clampNumber(value, spec.min, spec.max, spec.defaultValue, spec.step)
+                : clampInteger(value, spec.min, spec.max, spec.defaultValue);
         }
 
         function normalizeCricutOptions(optionsOrBuffer, gapFloodPx) {
@@ -5745,6 +5815,8 @@
         // writes into it — so readCricutOptionsFromInputs, project capture and
         // hydration keep working through the handle they always used.
         function createCricutControl(spec, initialValue, handlers) {
+            const unitText = spec.unit || 'px';
+            const stepText = String(spec.step || 1);
             const control = document.createElement('div');
             control.className = 'cricut-control';
 
@@ -5762,29 +5834,30 @@
             minus.type = 'button';
             minus.className = 'cricut-stepper';
             minus.textContent = '−';
-            minus.title = `${spec.label} − ${spec.coarseStep}px`;
+            minus.title = `${spec.label} − ${spec.coarseStep}${unitText}`;
             minus.setAttribute('aria-label', minus.title);
 
             const input = document.createElement('input');
             input.type = 'number';
             input.min = String(spec.min);
             input.max = String(spec.max);
-            // step stays 1 so a saved odd value (a flood of 9, say) round-trips
-            // exactly. The steppers are what move in coarse increments.
-            input.step = '1';
-            input.value = String(clampInteger(initialValue, spec.min, spec.max, spec.defaultValue));
+            // step stays at the control's finest grid (1 for pixel counts) so
+            // a saved odd value (a flood of 9, say) round-trips exactly. The
+            // steppers are what move in coarse increments.
+            input.step = stepText;
+            input.value = String(clampToSpec(initialValue, spec));
             input.title = spec.title;
             input.setAttribute('aria-label', spec.title);
 
             const unit = document.createElement('span');
             unit.className = 'cricut-control-unit';
-            unit.textContent = 'px';
+            unit.textContent = unitText;
 
             const plus = document.createElement('button');
             plus.type = 'button';
             plus.className = 'cricut-stepper';
             plus.textContent = '+';
-            plus.title = `${spec.label} + ${spec.coarseStep}px`;
+            plus.title = `${spec.label} + ${spec.coarseStep}${unitText}`;
             plus.setAttribute('aria-label', plus.title);
 
             const slider = document.createElement('input');
@@ -5792,7 +5865,7 @@
             slider.className = 'cricut-slider';
             slider.min = String(spec.min);
             slider.max = String(spec.max);
-            slider.step = '1';
+            slider.step = stepText;
             slider.value = input.value;
             slider.title = spec.title;
             slider.setAttribute('aria-label', `${spec.label} slider`);
@@ -5800,7 +5873,8 @@
             const presetRow = document.createElement('div');
             presetRow.className = 'cricut-presets';
 
-            const currentValue = () => clampInteger(input.value, spec.min, spec.max, spec.defaultValue);
+            const currentValue = () => clampToSpec(input.value, spec);
+            const tolerance = (spec.step || 1) / 2;
 
             // `clamp` is false while the number box is being typed into, so
             // "150" doesn't get rewritten to the max halfway through the word.
@@ -5809,7 +5883,7 @@
                 if (clamp) input.value = String(value);
                 slider.value = String(value);
                 presetButtons.forEach(chip => {
-                    const isActive = Number(chip.dataset.value) === value;
+                    const isActive = Math.abs(Number(chip.dataset.value) - value) < tolerance;
                     if (isActive) chip.classList.add('active');
                     else chip.classList.remove('active');
                 });
@@ -5819,7 +5893,7 @@
             };
 
             const setValue = (value) => {
-                input.value = String(clampInteger(value, spec.min, spec.max, spec.defaultValue));
+                input.value = String(clampToSpec(value, spec));
                 refresh(true);
             };
 
@@ -5833,15 +5907,16 @@
                 chip.type = 'button';
                 chip.className = 'cricut-preset';
                 chip.textContent = preset.label;
-                chip.title = `${spec.label} ${preset.value}px`;
+                chip.title = preset.title || `${spec.label} ${preset.value}${unitText}`;
                 chip.dataset.value = String(preset.value);
                 chip.onclick = () => commit(preset.value);
                 presetRow.appendChild(chip);
                 return chip;
             });
 
-            minus.onclick = () => commit(currentValue() - spec.coarseStep);
-            plus.onclick = () => commit(currentValue() + spec.coarseStep);
+            // Go through clampToSpec so float steps don't accumulate drift.
+            minus.onclick = () => commit(clampToSpec(currentValue() - spec.coarseStep, spec));
+            plus.onclick = () => commit(clampToSpec(currentValue() + spec.coarseStep, spec));
 
             input.addEventListener('input', () => {
                 refresh(false);
@@ -5920,9 +5995,125 @@
             control.appendChild(slider);
             control.appendChild(presetRow);
 
+            // Greys the whole control out (e.g. the ink opacity slider while
+            // mixing is switched off) without losing its value.
+            let disabled = false;
+            const setDisabled = (flag) => {
+                disabled = !!flag;
+                if (disabled) control.classList.add('disabled');
+                else control.classList.remove('disabled');
+                input.disabled = disabled;
+                slider.disabled = disabled;
+                presetButtons.forEach(chip => { chip.disabled = disabled; });
+                if (disabled) {
+                    minus.disabled = true;
+                    plus.disabled = true;
+                } else {
+                    refresh(true);
+                }
+            };
+
             refresh(true);
 
-            return { container: control, input, setValue, isScrubbing: () => scrubbing };
+            return { container: control, input, setValue, setDisabled, isScrubbing: () => scrubbing };
+        }
+
+        const INK_OPACITY_SPEC = {
+            label: 'Ink opacity',
+            title: 'How much each stamped layer covers the ink beneath it. 0% is a transparent dye ink whose colours multiply where they overlap; 100% is an opaque ink that hides what is under it.',
+            unit: '%',
+            min: 0,
+            max: 100,
+            defaultValue: RASTER_EFFECT_DEFAULTS.inkOpacity,
+            coarseStep: 10,
+            presets: [
+                { label: 'Dye', value: 0, title: 'Transparent dye ink: overlaps take the product of both colours' },
+                { label: 'Hybrid', value: 30, title: 'Mostly transparent with some cover' },
+                { label: 'Pigment', value: 70, title: 'Opaque pigment ink: the top layer mostly covers' }
+            ]
+        };
+
+        // Authored in source-image pixels: the same setting softens the small
+        // preview and the 2x export by the same visible amount. The step is
+        // deliberately fine — the useful range for rounding off a traced
+        // edge is a fraction of a pixel to about one.
+        const EDGE_SOFTEN_SPEC = {
+            label: 'Soften edges',
+            title: 'Gaussian blur of the finished artwork, as a sigma in source-image pixels. Small values round off the hard staircase edges tracing leaves behind; the export is softened proportionally at its higher resolution. Applies to the Cricut preview and every PNG/JPG export.',
+            unit: 'px',
+            min: 0,
+            max: RASTER_SOFTEN_MAX,
+            step: RASTER_SOFTEN_STEP,
+            defaultValue: RASTER_EFFECT_DEFAULTS.softenPx,
+            coarseStep: 0.1,
+            presets: [
+                { label: 'Off', value: 0 },
+                { label: 'Hairline', value: 0.25, title: 'Barely there: takes the jaggies off without visibly softening' },
+                { label: 'Soft', value: 0.5, title: 'A gentle anti-aliased edge' },
+                { label: 'Softer', value: 1, title: 'A clearly soft, inky edge' }
+            ]
+        };
+
+        // The "Ink mixing" section of the settings panel: a switch plus the
+        // opacity slider it enables. Both write into a plain effects record
+        // that getEffects() returns, so capture and hydration never touch the
+        // controls directly.
+        function createInkMixingControl(initialEffects, handlers) {
+            let effects = normalizeRasterEffects(initialEffects);
+
+            const control = document.createElement('div');
+            control.className = 'cricut-control ink-mixing-control';
+
+            const head = document.createElement('div');
+            head.className = 'cricut-control-head';
+            const label = document.createElement('span');
+            label.className = 'cricut-control-label';
+            label.textContent = 'Ink mixing';
+            head.appendChild(label);
+
+            const opacityControl = createCricutControl(INK_OPACITY_SPEC, effects.inkOpacity, handlers);
+            opacityControl.container.classList.add('ink-opacity-control');
+
+            const syncEnabled = () => opacityControl.setDisabled(!effects.inkMixing);
+
+            const toggle = createWhiteBackingSwitch({
+                label: 'On',
+                titleOn: 'Overlapping layers blend like stacked ink. Applies to the Cricut preview and every PNG/JPG export. Click to turn off.',
+                titleOff: 'Layers are drawn as flat, opaque shapes. Click to blend overlapping layers like stacked ink in the preview and PNG/JPG exports.',
+                isOn: () => effects.inkMixing,
+                onToggle: () => {
+                    effects = { ...effects, inkMixing: !effects.inkMixing };
+                    syncEnabled();
+                    handlers.onCommit();
+                }
+            });
+            head.appendChild(toggle);
+
+            const hint = document.createElement('p');
+            hint.className = 'cricut-control-hint';
+            hint.textContent = 'Where layers overlap, blend their colours the way stamped inks stack on paper. Applies to exports, not the canvas.';
+
+            control.appendChild(head);
+            control.appendChild(hint);
+            control.appendChild(opacityControl.container);
+            syncEnabled();
+
+            return {
+                container: control,
+                // Only the mixing half of the record; the panel merges in
+                // the other effects it owns.
+                getEffects: () => ({
+                    inkMixing: effects.inkMixing,
+                    inkOpacity: opacityControl.input.value
+                }),
+                setEffects: (next) => {
+                    effects = normalizeRasterEffects(next);
+                    opacityControl.setValue(effects.inkOpacity);
+                    toggle.sync();
+                    syncEnabled();
+                },
+                isScrubbing: opacityControl.isScrubbing
+            };
         }
 
         function createCricutLegend() {
@@ -5965,9 +6156,25 @@
             const borderControl = createCricutControl(CRICUT_PARAM_SPECS.border, initial.outerBufferPx, handlers);
             const floodControl = createCricutControl(CRICUT_PARAM_SPECS.flood, initial.gapFloodPx, handlers);
             const smoothControl = createCricutControl(CRICUT_PARAM_SPECS.smooth, initial.smoothPx, handlers);
+            const initialEffects = normalizeRasterEffects(config.initialEffects);
+            const inkMixing = createInkMixingControl(initialEffects, handlers);
+            const softenControl = createCricutControl(EDGE_SOFTEN_SPEC, initialEffects.softenPx, handlers);
+            softenControl.container.classList.add('edge-soften-control');
             panel.appendChild(borderControl.container);
             panel.appendChild(floodControl.container);
             panel.appendChild(smoothControl.container);
+            panel.appendChild(inkMixing.container);
+            panel.appendChild(softenControl.container);
+
+            const getEffects = () => normalizeRasterEffects({
+                ...inkMixing.getEffects(),
+                softenPx: softenControl.input.value
+            });
+            const setEffects = (next) => {
+                const normalized = normalizeRasterEffects(next);
+                inkMixing.setEffects(normalized);
+                softenControl.setValue(normalized.softenPx);
+            };
 
             const footer = document.createElement('div');
             footer.className = 'cricut-settings-footer';
@@ -6008,9 +6215,10 @@
                 const applyAll = document.createElement('button');
                 applyAll.type = 'button';
                 applyAll.textContent = 'Apply to all';
-                applyAll.title = 'Copy this border, flood and smoothing onto every extracted object';
+                applyAll.title = 'Copy this border, flood, smoothing, ink mixing and edge softening onto every extracted object';
                 applyAll.onclick = () => config.onApplyToAll(
-                    readCricutOptionsFromInputs(borderControl.input, floodControl.input, true, smoothControl.input)
+                    readCricutOptionsFromInputs(borderControl.input, floodControl.input, true, smoothControl.input),
+                    getEffects()
                 );
                 footer.appendChild(applyAll);
             }
@@ -6028,9 +6236,13 @@
                     floodControl.setValue(normalized.gapFloodPx);
                     smoothControl.setValue(normalized.smoothPx);
                 },
-                // The overlay is on while any slider is being dragged even
-                // when it isn't pinned — that's what makes the attribution
-                // discoverable without hunting for the toggle.
+                getEffects,
+                setEffects,
+                // The overlay is on while any Cricut slider is being dragged
+                // even when it isn't pinned — that's what makes the
+                // attribution discoverable without hunting for the toggle.
+                // The effects sliders are deliberately left out: tinting
+                // would hide the colour and edge changes they exist to show.
                 shouldExplain: () => cricutExplainPinned ||
                     borderControl.isScrubbing() ||
                     floodControl.isScrubbing() ||
@@ -6071,10 +6283,11 @@
 
         // Tuning eight object cards by hand is sixteen edits; this copies one
         // card's border/flood onto every extracted object and re-renders them.
-        function applyCricutOptionsToAllObjects(options) {
+        function applyCricutOptionsToAllObjects(options, effects) {
             projectWorkspace.extractedObjects.forEach(state => {
                 if (!state.cricutPanel) return;
                 state.cricutPanel.setValues(options);
+                if (effects) state.cricutPanel.setEffects(effects);
                 if (typeof state.schedulePreview === 'function') state.schedulePreview();
             });
         }
@@ -6205,10 +6418,11 @@
 
             const downloadJpgButton = document.createElement('button');
             downloadJpgButton.innerHTML = dlIcon + 'JPG';
-            downloadJpgButton.onclick = () => downloadObjectJPG(svg, productId, width, height);
+            downloadJpgButton.onclick = () => downloadObjectJPG(svg, productId, width, height, cricutPanel.getEffects());
 
             const cricutPanel = createCricutSettingsPanel({
                 initial: options.cricut || {},
+                initialEffects: options.effects,
                 onChange: ({ live }) => scheduleCricutPreview({ live }),
                 onApplyToAll: applyCricutOptionsToAllObjects
             });
@@ -6249,6 +6463,7 @@
                             ...liveCricutOptions,
                             previewScale: getCricutPreviewScale(width, height),
                             whiteBacking: objectState.whiteBacking,
+                            effects: cricutPanel.getEffects(),
                             explain: cricutPanel.shouldExplain(),
                             cache: true,
                             cacheId: objectId,
@@ -6301,7 +6516,8 @@
                     const liveCricutOptions = readCricutOptionsFromInputs(borderInput, floodInput, true, smoothInput);
                     await generateCricutPNG(svg, productId, width, height, {
                         ...liveCricutOptions,
-                        whiteBacking: objectState.whiteBacking
+                        whiteBacking: objectState.whiteBacking,
+                        effects: cricutPanel.getEffects()
                     });
                 } finally {
                     cricutButton.disabled = false;
@@ -6422,7 +6638,8 @@
                     svg: new XMLSerializer().serializeToString(state.svg),
                     color: state.colorControl.getState(),
                     whiteBacking: state.whiteBacking !== false,
-                    cricut: persistedCricutOptions(readCricutOptionsFromInputs(state.borderInput, state.floodInput, false, state.smoothInput))
+                    cricut: persistedCricutOptions(readCricutOptionsFromInputs(state.borderInput, state.floodInput, false, state.smoothInput)),
+                    effects: state.cricutPanel ? state.cricutPanel.getEffects() : normalizeRasterEffects()
                 }));
         }
 
@@ -6451,6 +6668,7 @@
                     color: record.color,
                     whiteBacking: record.whiteBacking,
                     cricut: record.cricut,
+                    effects: record.effects,
                     scroll: false
                 }
             );
@@ -6496,18 +6714,18 @@
             URL.revokeObjectURL(url);
         }
 
-        function downloadObjectPNG(svg, productId, originalWidth, originalHeight) {
+        function downloadObjectPNG(svg, productId, originalWidth, originalHeight, effects) {
             if (!svg) return;
             svgToImageBlob(svg, originalWidth, originalHeight, 'image/png', blob => {
                 triggerDownload(blob, buildDownloadFilename(productId, `object_${Date.now()}`).replace(/\.svg$/, '.png'));
-            });
+            }, effects);
         }
 
-        function downloadObjectJPG(svg, productId, originalWidth, originalHeight) {
+        function downloadObjectJPG(svg, productId, originalWidth, originalHeight, effects) {
             if (!svg) return;
             svgToImageBlob(svg, originalWidth, originalHeight, 'image/jpeg', blob => {
                 triggerDownload(blob, buildDownloadFilename(productId, `object_${Date.now()}`).replace(/\.svg$/, '.jpg'));
-            });
+            }, effects);
         }
 
         function downloadSVG(svg, productId, originalWidth, originalHeight) {
@@ -6540,31 +6758,23 @@
             URL.revokeObjectURL(url);
         }
 
-        function svgToImageBlob(svg, originalWidth, originalHeight, mimeType, callback) {
-            const svgCopy = svg.cloneNode(true);
-            svgCopy.setAttribute('viewBox', `0 0 ${originalWidth} ${originalHeight}`);
-            svgCopy.setAttribute('width', originalWidth);
-            svgCopy.setAttribute('height', originalHeight);
-
-            const svgData = new XMLSerializer().serializeToString(svgCopy);
-            const svgBlob = new Blob([svgData], { type: 'image/svg+xml' });
-            const svgUrl = URL.createObjectURL(svgBlob);
-
-            const img = new Image();
-            img.onload = () => {
-                const canvas = document.createElement('canvas');
-                canvas.width = originalWidth;
-                canvas.height = originalHeight;
-                const ctx = canvas.getContext('2d');
-                if (mimeType === 'image/jpeg') {
-                    ctx.fillStyle = '#ffffff';
-                    ctx.fillRect(0, 0, originalWidth, originalHeight);
-                }
-                ctx.drawImage(img, 0, 0);
-                URL.revokeObjectURL(svgUrl);
-                canvas.toBlob(callback, mimeType);
-            };
-            img.src = svgUrl;
+        // Raster effects run on the artwork first; JPG then flattens it onto
+        // white because the format has no alpha.
+        function svgToImageBlob(svg, originalWidth, originalHeight, mimeType, callback, effects) {
+            rasterizeSvgWithEffects(svg, originalWidth, originalHeight, originalWidth, originalHeight, effects)
+                .then(artwork => {
+                    const canvas = document.createElement('canvas');
+                    canvas.width = originalWidth;
+                    canvas.height = originalHeight;
+                    const ctx = canvas.getContext('2d');
+                    if (mimeType === 'image/jpeg') {
+                        ctx.fillStyle = '#ffffff';
+                        ctx.fillRect(0, 0, originalWidth, originalHeight);
+                    }
+                    ctx.drawImage(artwork, 0, 0);
+                    canvas.toBlob(callback, mimeType);
+                })
+                .catch(err => console.error('Raster export failed', err));
         }
 
         function triggerDownload(blob, filename) {
@@ -6627,6 +6837,167 @@
                 };
                 img.src = svgUrl;
             });
+        }
+
+        // --- Raster effects ---
+        //
+        // Optional post-processing that runs on the rasterized artwork itself,
+        // before a Cricut render paints its white backing and cut border
+        // underneath, and before a PNG/JPG is written out. Each object card
+        // and the composer carry one effects record next to their Cricut
+        // options; the live preview and every raster export read the same one.
+
+        function normalizeRasterEffects(raw) {
+            const source = raw && typeof raw === 'object' ? raw : {};
+            return {
+                inkMixing: source.inkMixing === true,
+                inkOpacity: clampInteger(source.inkOpacity, 0, 100, RASTER_EFFECT_DEFAULTS.inkOpacity),
+                softenPx: clampNumber(source.softenPx, 0, RASTER_SOFTEN_MAX, RASTER_EFFECT_DEFAULTS.softenPx, RASTER_SOFTEN_STEP)
+            };
+        }
+
+        // Fully opaque ink covers what is under it, which is what plain
+        // rasterization already draws, so mixing is only worth a per-layer
+        // render below 100%.
+        function inkMixingActive(effects) {
+            return effects.inkMixing && effects.inkOpacity < 100;
+        }
+
+        function edgeSofteningActive(effects) {
+            return effects.softenPx > 0;
+        }
+
+        function rasterEffectsActive(effects) {
+            return inkMixingActive(effects) || edgeSofteningActive(effects);
+        }
+
+        // Softening spreads every edge's alpha by a couple of sigma, so a
+        // raster it touched no longer describes the same footprint as the
+        // flat artwork. Mixing only recolours pixels that were already inked.
+        function rasterEffectsAlterCoverage(effects) {
+            return edgeSofteningActive(effects);
+        }
+
+        // Cache keys. The ink key covers the expensive per-layer stage on its
+        // own so a blur change can re-soften a cached ink raster instead of
+        // re-rasterizing every layer.
+        function rasterInkKey(effects) {
+            return inkMixingActive(effects) ? `ink:${effects.inkOpacity}` : '';
+        }
+
+        function rasterEffectsKey(effects) {
+            const parts = [];
+            if (inkMixingActive(effects)) parts.push(`ink:${effects.inkOpacity}`);
+            if (edgeSofteningActive(effects)) parts.push(`soften:${effects.softenPx}`);
+            return parts.join('|');
+        }
+
+        // softenPx is authored in source-image pixels so the preview and the
+        // higher-resolution export soften by the same visible amount; this
+        // converts it to the sigma of the raster actually being drawn.
+        function edgeSoftenSigma(effects, origW, targetW) {
+            if (!edgeSofteningActive(effects) || !(origW > 0)) return 0;
+            return effects.softenPx * (targetW / origW);
+        }
+
+        // A Gaussian blur of the finished artwork, alpha included. Tracing
+        // leaves every edge a hard staircase; a sub-pixel to ~1px sigma rounds
+        // that off into the anti-aliased edge a real stamped impression has,
+        // and because it runs before any Cricut backing, the softened rim
+        // fades onto the white rather than onto transparency. Anything wider
+        // just reads as out of focus, which is why the control tops out low.
+        function softenCanvasEdges(source, sigma) {
+            if (!(sigma > 0)) return source;
+            const out = document.createElement('canvas');
+            out.width = source.width;
+            out.height = source.height;
+            const ctx = out.getContext('2d');
+            ctx.filter = `blur(${sigma}px)`;
+            ctx.drawImage(source, 0, 0);
+            ctx.filter = 'none';
+            return out;
+        }
+
+        const SVG_SHARED_CHILD_TAGS = new Set(['defs', 'style', 'title', 'desc', 'metadata']);
+
+        // Ink layers are the top-level <g> children of the artwork: the
+        // composer export wraps every placed object in one, and a merged
+        // object keeps one per former layer. A traced object's top-level
+        // <path>s are colour regions of a single impression, not stacked
+        // inks, so an SVG with fewer than two groups renders flat — multiplying
+        // adjacent regions would only darken their anti-aliased seams.
+        // Returns null when there is nothing to stack.
+        function splitSvgInkLayers(svg) {
+            const shared = [];
+            const layers = [];
+            Array.from(svg.children).forEach(child => {
+                if (SVG_SHARED_CHILD_TAGS.has(child.localName)) shared.push(child);
+                else layers.push(child);
+            });
+            if (layers.filter(el => el.localName === 'g').length < 2) return null;
+            return { shared, layers };
+        }
+
+        // Stamping inks are (mostly) transparent dyes: light passes through
+        // every impression on its way to the paper and back, so stacked
+        // colours combine like stacked filters and the result is their
+        // product — canvas `multiply`. sRGB encoding is close to a power law,
+        // so multiplying the encoded channels lands within a step of
+        // multiplying linear reflectance; no colour-space round trip needed.
+        // `opacity` (0..1) then mixes toward plain source-over for pigment
+        // inks that partly cover what is under them.
+        function compositeInkLayer(ctx, layerCanvas, opacity) {
+            ctx.globalAlpha = 1;
+            ctx.globalCompositeOperation = 'multiply';
+            ctx.drawImage(layerCanvas, 0, 0);
+            if (opacity > 0) {
+                ctx.globalCompositeOperation = 'source-over';
+                ctx.globalAlpha = opacity;
+                ctx.drawImage(layerCanvas, 0, 0);
+            }
+            ctx.globalAlpha = 1;
+            ctx.globalCompositeOperation = 'source-over';
+        }
+
+        // Rasterizes `svg` at targetW x targetH with every effect applied, in
+        // pipeline order: ink mixing while the layers are still separate, then
+        // edge softening on the finished artwork. With nothing switched on
+        // this is exactly the single rasterizeSvgString pass the exports
+        // always used.
+        async function rasterizeSvgWithEffects(svg, origW, origH, targetW, targetH, effects) {
+            const normalized = normalizeRasterEffects(effects);
+            const ink = await rasterizeSvgInk(svg, origW, origH, targetW, targetH, normalized);
+            return softenCanvasEdges(ink, edgeSoftenSigma(normalized, origW, targetW));
+        }
+
+        // The ink-mixing stage alone: flat when mixing is off or there is
+        // nothing to stack, otherwise one raster per layer composited together.
+        async function rasterizeSvgInk(svg, origW, origH, targetW, targetH, effects) {
+            const normalized = normalizeRasterEffects(effects);
+            const split = inkMixingActive(normalized) ? splitSvgInkLayers(svg) : null;
+            if (!split) {
+                return rasterizeSvgString(serializeSvgForRaster(svg, origW, origH, targetW, targetH), targetW, targetH);
+            }
+
+            // Every layer renders inside the same shell — the root <svg> plus
+            // its defs/style — so gradients and clip paths keep resolving.
+            const shell = svg.cloneNode(false);
+            split.shared.forEach(node => shell.appendChild(node.cloneNode(true)));
+
+            const canvas = document.createElement('canvas');
+            canvas.width = targetW;
+            canvas.height = targetH;
+            const ctx = canvas.getContext('2d');
+            const opacity = normalized.inkOpacity / 100;
+            for (const layer of split.layers) {
+                const single = shell.cloneNode(true);
+                single.appendChild(layer.cloneNode(true));
+                const layerCanvas = await rasterizeSvgString(
+                    serializeSvgForRaster(single, origW, origH, targetW, targetH), targetW, targetH
+                );
+                compositeInkLayer(ctx, layerCanvas, opacity);
+            }
+            return canvas;
         }
 
         function distanceTransform1D(f, n, out, v, z, inf) {
@@ -6789,20 +7160,28 @@
         // distance field around it. Dilating by a radius is exactly thresholding
         // that field (see dilateCircular), so once this exists a border change
         // costs a repaint rather than another distance transform.
-        async function buildCricutStage(svg, backingSvg, width, height, scale, floodPx, pad) {
+        async function buildCricutStage(svg, backingSvg, width, height, scale, floodPx, pad, effects) {
             const renderW = Math.max(1, Math.round(width * scale));
             const renderH = Math.max(1, Math.round(height * scale));
             const tw = renderW + pad * 2;
             const th = renderH + pad * 2;
 
             const svgData = serializeSvgForRaster(svg, width, height, renderW, renderH);
-            const svgCanvas = await rasterizeSvgString(svgData, renderW, renderH);
+            const normalizedEffects = normalizeRasterEffects(effects);
+            // The ink raster is kept on the stage so a softening change can
+            // re-blur it without re-rasterizing every layer.
+            const inkCanvas = await rasterizeSvgInk(svg, width, height, renderW, renderH, normalizedEffects);
+            const svgCanvas = softenCanvasEdges(inkCanvas, edgeSoftenSigma(normalizedEffects, width, renderW));
             const backingSvgData = backingSvg
                 ? serializeSvgForRaster(backingSvg, width, height, renderW, renderH)
                 : '';
+            // The mask must describe the flat artwork's footprint. Mixing only
+            // recolours already-inked pixels, so the mixed raster still serves
+            // when the backing artwork is the artwork itself; softening moves
+            // alpha, so the mask gets its own flat render.
             const backingCanvas = !backingSvg
                 ? null
-                : backingSvgData === svgData
+                : backingSvgData === svgData && !rasterEffectsAlterCoverage(normalizedEffects)
                     ? svgCanvas
                     : await rasterizeSvgString(backingSvgData, renderW, renderH);
             const renderCanvas = document.createElement('canvas');
@@ -6842,8 +7221,33 @@
 
             return {
                 svgData, backingSvgData, renderCanvas, tw, th, renderW, renderH, pad, scale,
-                floodPx, silhouette, closedSilhouette, borderDistSq
+                floodPx, silhouette, closedSilhouette, borderDistSq,
+                inkCanvas,
+                inkKey: rasterInkKey(normalizedEffects),
+                effectsKey: rasterEffectsKey(normalizedEffects)
             };
+        }
+
+        // An effects change never moves the artwork, so the cached masks and
+        // distance field stay valid; only the artwork raster is redrawn — and
+        // only as far back down the pipeline as the change reaches: a blur
+        // change re-softens the cached ink raster, a mixing change rebuilds
+        // it. Mutates the (single-slot) cached stage in place.
+        async function restageCricutArtwork(stage, svg, width, height, effects) {
+            const normalized = normalizeRasterEffects(effects);
+            const inkKey = rasterInkKey(normalized);
+            if (inkKey !== stage.inkKey) {
+                stage.inkCanvas = await rasterizeSvgInk(svg, width, height, stage.renderW, stage.renderH, normalized);
+                stage.inkKey = inkKey;
+            }
+            const svgCanvas = softenCanvasEdges(stage.inkCanvas, edgeSoftenSigma(normalized, width, stage.renderW));
+            const renderCanvas = document.createElement('canvas');
+            renderCanvas.width = stage.tw;
+            renderCanvas.height = stage.th;
+            renderCanvas.getContext('2d').drawImage(svgCanvas, stage.pad, stage.pad);
+            stage.renderCanvas = renderCanvas;
+            stage.effectsKey = rasterEffectsKey(normalized);
+            return stage;
         }
 
         // Labels the 4-connected components of a binary mask. Returns the label
@@ -7099,6 +7503,8 @@
             const scale = options.previewScale;
             const includeWhiteBacking = hints.whiteBacking !== false;
             const backingSvg = includeWhiteBacking ? (hints.backingSvg || svg) : null;
+            const effects = normalizeRasterEffects(hints.effects);
+            const effectsKey = rasterEffectsKey(effects);
 
             // Previews pad for the widest border and smoothing the sliders can
             // reach, so the staged geometry — and the distance field with it —
@@ -7130,8 +7536,12 @@
                     stage = candidate;
                 }
             }
+            if (stage && stage.effectsKey !== effectsKey) {
+                // Same artwork, different mixing: keep the masks, redraw the ink.
+                stage = await restageCricutArtwork(stage, svg, width, height, effects);
+            }
             if (!stage) {
-                stage = await buildCricutStage(svg, backingSvg, width, height, scale, options.gapFloodPx, pad);
+                stage = await buildCricutStage(svg, backingSvg, width, height, scale, options.gapFloodPx, pad, effects);
                 if (useCache) cricutStageSlot = { geomKey, stage };
             }
 
@@ -7152,7 +7562,8 @@
                 ...options,
                 previewScale: 2,
                 whiteBacking: hints.whiteBacking,
-                backingSvg: hints.backingSvg
+                backingSvg: hints.backingSvg,
+                effects: hints.effects
             });
             const blob = await canvasToBlob(outCanvas, 'image/png');
             if (!blob) return;
@@ -7520,6 +7931,12 @@
             return readCricutOptionsFromInputs(borderInput, floodInput, writeBack, smoothInput);
         }
 
+        function getComposerRasterEffects() {
+            return composerCricutSettings
+                ? composerCricutSettings.getEffects()
+                : normalizeRasterEffects();
+        }
+
         function setComposerCricutPreviewStatus(text) {
             if (!composerCricutPreviewStatus) return;
             composerCricutPreviewStatus.textContent = text;
@@ -7571,6 +7988,7 @@
                         previewScale,
                         whiteBacking: exportData.hasWhiteBacking,
                         backingSvg: exportData.backingSvg,
+                        effects: getComposerRasterEffects(),
                         explain: !!(composerCricutSettings && composerCricutSettings.shouldExplain()),
                         cache: true,
                         cacheId: 'composer',
@@ -9789,6 +10207,7 @@
                 height: COMPOSER_VB_H,
                 productId: composerProductId || '',
                 cricut: persistedCricutOptions(getComposerCricutOptions(false)),
+                effects: getComposerRasterEffects(),
                 whiteBacking: composerWholeBacking,
                 objects: objects.map(g => {
                     const candidateSourceId = g.dataset.sourceObjectId || '';
@@ -9824,6 +10243,9 @@
             // Writing the number inputs directly leaves the sliders and preset
             // chips showing the old settings until they're told to catch up.
             getComposerCricutOptions(true);
+            // Projects saved before raster effects existed carry none;
+            // normalization inside setEffects lands them on the defaults.
+            if (composerCricutSettings) composerCricutSettings.setEffects(record.effects);
             composerWholeBacking = record.whiteBacking === true;
             if (composerWholeBackingToggle) composerWholeBackingToggle.sync();
             record.objects.forEach(createComposerObjectFromRecord);
@@ -9989,7 +10411,8 @@
             await generateCricutPNG(exportData.svg, exportData.productId, exportData.width, exportData.height, {
                 ...options,
                 whiteBacking: exportData.hasWhiteBacking,
-                backingSvg: exportData.backingSvg
+                backingSvg: exportData.backingSvg,
+                effects: getComposerRasterEffects()
             });
         }
     </script>
