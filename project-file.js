@@ -17,6 +17,13 @@
     const CRICUT_FLOOD_MAX = 300;
     const CRICUT_SMOOTH_MAX = 60;
     const RASTER_SOFTEN_MAX = 3;
+    // Composer blur layer: brush radius and Gaussian sigma are in composer
+    // canvas units (800-unit viewBox). The count limits bound validation
+    // work on a hostile file; the byte limit already bounds the payload.
+    const COMPOSER_BLUR_RADIUS_MAX = 400;
+    const COMPOSER_BLUR_STRENGTH_MAX = 100;
+    const COMPOSER_BLUR_MAX_STROKES = 5000;
+    const COMPOSER_BLUR_MAX_STROKE_POINTS = 20000;
     const RASTER_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif']);
     const RENDER_MODES = new Set(['binary', 'color']);
     const SVG_ELEMENTS = new Set(['svg', 'g', 'path', 'rect', 'circle', 'ellipse', 'line', 'polyline', 'polygon']);
@@ -101,6 +108,30 @@
             requireFinite(effects.softenPx, `${label}.softenPx`, 0, RASTER_SOFTEN_MAX);
         }
         return effects;
+    }
+
+    // The composer's blur layer is optional as a whole: projects saved before
+    // it existed omit the record and open with no blur. Each stroke is a flat
+    // [x0, y0, x1, y1, ...] polyline in composer canvas units plus the brush
+    // radius and Gaussian sigma it was painted with.
+    function requireComposerBlur(value, label) {
+        if (value === undefined) return value;
+        const blur = requireObject(value, label);
+        const strokes = requireArray(blur.strokes, `${label}.strokes`);
+        if (strokes.length > COMPOSER_BLUR_MAX_STROKES) fail(`${label}.strokes exceeds the stroke limit`);
+        strokes.forEach((stroke, index) => {
+            const strokeLabel = `${label}.strokes[${index}]`;
+            requireObject(stroke, strokeLabel);
+            const points = requireArray(stroke.points, `${strokeLabel}.points`);
+            if (points.length < 2 || points.length % 2 !== 0) fail(`${strokeLabel}.points must hold x/y pairs`);
+            if (points.length > COMPOSER_BLUR_MAX_STROKE_POINTS) fail(`${strokeLabel}.points exceeds the point limit`);
+            for (const coordinate of points) {
+                requireFinite(coordinate, `${strokeLabel}.points`, -MAX_TRANSFORM, MAX_TRANSFORM);
+            }
+            requireFinite(stroke.radius, `${strokeLabel}.radius`, 0.000001, COMPOSER_BLUR_RADIUS_MAX);
+            requireFinite(stroke.strength, `${strokeLabel}.strength`, 0.000001, COMPOSER_BLUR_STRENGTH_MAX);
+        });
+        return blur;
     }
 
     function requireDimensions(value, label, widthKey = 'width', heightKey = 'height') {
@@ -268,6 +299,7 @@
                 typeof composer.whiteBacking !== 'boolean') {
                 fail('composer.whiteBacking must be a boolean');
             }
+            requireComposerBlur(composer.blur, 'composer.blur');
             const composerIds = new Set();
             for (const object of requireArray(composer.objects, 'composer.objects')) {
                 requireObject(object, 'composer object');
@@ -447,6 +479,8 @@
     return {
         FORMAT, SCHEMA_VERSION, MIME_TYPE, MAX_PROJECT_BYTES,
         MAX_DIMENSION, MAX_PIXELS,
+        COMPOSER_BLUR_RADIUS_MAX, COMPOSER_BLUR_STRENGTH_MAX,
+        COMPOSER_BLUR_MAX_STROKES, COMPOSER_BLUR_MAX_STROKE_POINTS,
         validateProject, serializeProject, parseProjectText, sanitizeSvg,
         rejectUnsafeSvgMarkup, encodeBlob, decodeAsset, createEmptyProject,
         assertProjectTextSize, assertDecodedAssetSize, applyMigrations

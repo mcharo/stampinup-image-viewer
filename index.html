@@ -1386,7 +1386,8 @@
             flex-wrap: wrap;
         }
 
-        .composer-pattern-panel {
+        .composer-pattern-panel,
+        .composer-blur-panel {
             display: none;
             flex-wrap: wrap;
             align-items: center;
@@ -1399,23 +1400,27 @@
             font-size: 0.75rem;
         }
 
-        .composer-pattern-panel.open {
+        .composer-pattern-panel.open,
+        .composer-blur-panel.open {
             display: flex;
         }
 
-        .composer-pattern-panel .pattern-title {
+        .composer-pattern-panel .pattern-title,
+        .composer-blur-panel .pattern-title {
             font-weight: 600;
             color: #334155;
         }
 
-        .composer-pattern-panel label {
+        .composer-pattern-panel label,
+        .composer-blur-panel label {
             display: inline-flex;
             align-items: center;
             gap: 0.3rem;
             color: #475569;
         }
 
-        .composer-pattern-panel input[type="number"] {
+        .composer-pattern-panel input[type="number"],
+        .composer-blur-panel input[type="number"] {
             width: 54px;
             padding: 0.3rem 0.25rem;
             font-size: 0.72rem;
@@ -1425,7 +1430,8 @@
             background: white;
         }
 
-        .composer-pattern-panel button {
+        .composer-pattern-panel button,
+        .composer-blur-panel button {
             padding: 0.35rem 0.7rem;
             font-size: 0.72rem;
             border: 1px solid #d1d5db;
@@ -1441,9 +1447,86 @@
             color: white;
         }
 
+        .composer-blur-panel .blur-mode-group {
+            display: inline-flex;
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
+            overflow: hidden;
+        }
+
+        .composer-blur-panel .blur-mode-group button {
+            border: 0;
+            border-radius: 0;
+        }
+
+        .composer-blur-panel .blur-mode-group button + button {
+            border-left: 1px solid #d1d5db;
+        }
+
+        .composer-blur-panel .blur-mode-group button.active {
+            background: #e0e7ff;
+            color: #4338ca;
+        }
+
+        .composer-blur-panel button.blur-clear {
+            color: #b91c1c;
+        }
+
+        .composer-blur-panel .blur-count {
+            color: #64748b;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .composer-blur-panel .blur-hint {
+            flex-basis: 100%;
+            margin: 0;
+            font-size: 0.7rem;
+            color: #64748b;
+        }
+
         .composer-canvas .composer-pattern-preview {
             pointer-events: none;
             opacity: 0.4;
+        }
+
+        /* Blur layer overlay: where the raster blur will land. Strokes are
+           painted in canvas units so they zoom with the artwork. */
+        .composer-canvas .composer-blur-layer {
+            pointer-events: none;
+        }
+
+        .composer-canvas .composer-blur-layer path {
+            fill: none;
+            stroke: #3b82f6;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+
+        .composer-canvas .composer-blur-layer.hidden {
+            display: none;
+        }
+
+        .composer-canvas .composer-blur-cursor {
+            fill: rgba(59, 130, 246, 0.12);
+            stroke: #2563eb;
+            stroke-width: 1;
+            pointer-events: none;
+            vector-effect: non-scaling-stroke;
+        }
+
+        .composer-canvas .composer-blur-cursor.erase {
+            fill: rgba(239, 68, 68, 0.12);
+            stroke: #dc2626;
+            stroke-dasharray: 4 3;
+        }
+
+        .composer-canvas-wrapper svg.composer-canvas.tool-blur,
+        .composer-canvas.tool-blur .composer-object {
+            cursor: crosshair;
+        }
+
+        .composer-canvas.tool-blur .composer-object {
+            pointer-events: none;
         }
 
         .composer-workspace {
@@ -1611,6 +1694,87 @@
 
         .composer-layers-row.selected .composer-layer-id {
             color: #6366f1;
+        }
+
+        /* Pinned blur-layer row: always on top, never part of the object
+           stacking order, so it deliberately shares no class with the
+           draggable .composer-layers-row entries. */
+        .composer-layers-blur-row {
+            display: flex;
+            align-items: center;
+            gap: 0.45rem;
+            width: 100%;
+            padding: 0.4rem 0.45rem;
+            border: 0;
+            border-bottom: 1px solid #e2e8f0;
+            background: #eff6ff;
+            color: #1e3a8a;
+            text-align: left;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .composer-layers-blur-row:hover {
+            background: #dbeafe;
+        }
+
+        .composer-layers-blur-row.active {
+            background: #e0e7ff;
+            color: #3730a3;
+        }
+
+        .composer-layers-blur-row .composer-layer-thumb {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #fff;
+        }
+
+        .composer-layers-blur-row .composer-layer-thumb svg {
+            width: 22px;
+            height: 22px;
+            fill: none;
+            stroke: #3b82f6;
+            stroke-width: 2;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+
+        .composer-layers-blur-row .composer-layer-id {
+            color: #60a5fa;
+        }
+
+        .composer-layers-blur-row .blur-visibility {
+            flex-shrink: 0;
+            width: 24px;
+            height: 24px;
+            padding: 0;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border: 0;
+            border-radius: 5px;
+            background: transparent;
+            color: #3b82f6;
+            cursor: pointer;
+        }
+
+        .composer-layers-blur-row .blur-visibility:hover {
+            background: rgba(59, 130, 246, 0.12);
+        }
+
+        .composer-layers-blur-row .blur-visibility.off {
+            color: #94a3b8;
+        }
+
+        .composer-layers-blur-row .blur-visibility svg {
+            width: 15px;
+            height: 15px;
+            fill: none;
+            stroke: currentColor;
+            stroke-width: 2;
+            stroke-linecap: round;
+            stroke-linejoin: round;
         }
 
         .composer-cricut-panel {
@@ -1825,7 +1989,7 @@
             <h1>Stampin' Up Image Viewer</h1>
             <div class="app-header-controls">
                 <div class="header-group">
-                    <input type="number" id="productId" placeholder="Product ID" min="1" value="167979">
+                    <input type="number" id="productId" placeholder="Product ID" min="1">
                     <button onclick="loadImages()">Load Images</button>
                 </div>
                 <div class="header-divider"></div>
@@ -3248,15 +3412,15 @@
             }
         });
 
-        // Load images automatically on page load
-        // Pre-populate product ID from ?id= query parameter if present
+        // A plain visit starts empty so an upload can be the only image.
+        // Catalog links pass ?id=, and those still load that product.
         window.onload = function() {
             const params = new URLSearchParams(window.location.search);
             const idParam = params.get('id');
             if (idParam) {
                 document.getElementById('productId').value = idParam;
+                loadImages();
             }
-            loadImages();
         };
 
         function createSectionHeader(text) {
@@ -6849,11 +7013,56 @@
 
         function normalizeRasterEffects(raw) {
             const source = raw && typeof raw === 'object' ? raw : {};
-            return {
+            const effects = {
                 inkMixing: source.inkMixing === true,
                 inkOpacity: clampInteger(source.inkOpacity, 0, 100, RASTER_EFFECT_DEFAULTS.inkOpacity),
                 softenPx: clampNumber(source.softenPx, 0, RASTER_SOFTEN_MAX, RASTER_EFFECT_DEFAULTS.softenPx, RASTER_SOFTEN_STEP)
             };
+            // The composer's blur layer rides along as a transient render
+            // hint (see buildComposerCricutExportSvg); it is persisted as
+            // composer.blur, never inside an effects record, so the key is
+            // only present when there is something to apply.
+            const localBlur = normalizeLocalBlur(source.localBlur);
+            if (localBlur) effects.localBlur = localBlur;
+            return effects;
+        }
+
+        // Local blur strokes are authored in the coordinate space of the SVG
+        // being rasterized (the caller has already mapped them there): a flat
+        // [x0, y0, x1, y1, ...] polyline, the brush radius, and the Gaussian
+        // sigma. Returns null when nothing usable is left.
+        function normalizeLocalBlur(raw) {
+            if (!raw || typeof raw !== 'object' || !Array.isArray(raw.strokes)) return null;
+            const strokes = [];
+            raw.strokes.forEach(stroke => {
+                if (!stroke || !Array.isArray(stroke.points)) return;
+                const radius = Number(stroke.radius);
+                const strength = Number(stroke.strength);
+                if (!(radius > 0) || !(strength > 0)) return;
+                const points = stroke.points.map(Number).filter(Number.isFinite);
+                if (points.length < 2) return;
+                if (points.length % 2) points.pop();
+                strokes.push({ points, radius, strength });
+            });
+            return strokes.length ? { strokes } : null;
+        }
+
+        function localBlurActive(effects) {
+            return !!(effects.localBlur && effects.localBlur.strokes.length);
+        }
+
+        // Compact, deterministic fingerprint of a blur layer for cache keys.
+        // FNV-1a over the JSON; strokes are small enough that hashing the
+        // text is cheaper than the raster work the key protects.
+        function localBlurKey(effects) {
+            if (!localBlurActive(effects)) return '';
+            const text = JSON.stringify(effects.localBlur.strokes);
+            let hash = 0x811c9dc5;
+            for (let i = 0; i < text.length; i++) {
+                hash ^= text.charCodeAt(i);
+                hash = Math.imul(hash, 0x01000193) >>> 0;
+            }
+            return `blur:${effects.localBlur.strokes.length}:${hash.toString(16)}`;
         }
 
         // Fully opaque ink covers what is under it, which is what plain
@@ -6868,14 +7077,15 @@
         }
 
         function rasterEffectsActive(effects) {
-            return inkMixingActive(effects) || edgeSofteningActive(effects);
+            return inkMixingActive(effects) || edgeSofteningActive(effects) || localBlurActive(effects);
         }
 
-        // Softening spreads every edge's alpha by a couple of sigma, so a
-        // raster it touched no longer describes the same footprint as the
-        // flat artwork. Mixing only recolours pixels that were already inked.
+        // Softening and local blur spread every edge's alpha by a couple of
+        // sigma, so a raster they touched no longer describes the same
+        // footprint as the flat artwork. Mixing only recolours pixels that
+        // were already inked.
         function rasterEffectsAlterCoverage(effects) {
-            return edgeSofteningActive(effects);
+            return edgeSofteningActive(effects) || localBlurActive(effects);
         }
 
         // Cache keys. The ink key covers the expensive per-layer stage on its
@@ -6889,6 +7099,7 @@
             const parts = [];
             if (inkMixingActive(effects)) parts.push(`ink:${effects.inkOpacity}`);
             if (edgeSofteningActive(effects)) parts.push(`soften:${effects.softenPx}`);
+            if (localBlurActive(effects)) parts.push(localBlurKey(effects));
             return parts.join('|');
         }
 
@@ -6916,6 +7127,100 @@
             ctx.drawImage(source, 0, 0);
             ctx.filter = 'none';
             return out;
+        }
+
+        // Feather of the blur brush as a fraction of its radius: the mask is
+        // painted at the full brush width and then blurred by this much, so
+        // the effect is complete inside the stroke, at half strength on its
+        // nominal edge, and gone a little beyond — a focused blur with no
+        // visible seam against the sharp artwork around it.
+        const LOCAL_BLUR_FEATHER = 0.35;
+
+        // Paints one group of strokes as an alpha mask in raster pixels.
+        function paintLocalBlurMask(strokes, w, h, scale) {
+            const hard = document.createElement('canvas');
+            hard.width = w;
+            hard.height = h;
+            const ctx = hard.getContext('2d');
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            let maxRadius = 0;
+            strokes.forEach(stroke => {
+                const r = stroke.radius * scale;
+                maxRadius = Math.max(maxRadius, r);
+                ctx.lineWidth = Math.max(1, r * 2);
+                ctx.beginPath();
+                const pts = stroke.points;
+                ctx.moveTo(pts[0] * scale, pts[1] * scale);
+                // A single tap still needs a segment for the round caps to
+                // draw a dot.
+                if (pts.length === 2) ctx.lineTo(pts[0] * scale, pts[1] * scale);
+                for (let i = 2; i < pts.length; i += 2) ctx.lineTo(pts[i] * scale, pts[i + 1] * scale);
+                ctx.stroke();
+            });
+            const feather = maxRadius * LOCAL_BLUR_FEATHER;
+            if (!(feather >= 0.5)) return hard;
+            return softenCanvasEdges(hard, feather);
+        }
+
+        // Applies the composer's blur layer to a finished raster: where the
+        // strokes are, the artwork is replaced by a Gaussian-blurred copy of
+        // itself, blended through the feathered stroke mask
+        // (out = src * (1 - m) + blur(src) * m). Strokes share a blur pass
+        // when they share a strength, and passes run in ascending strength so
+        // a heavier stroke on top of a lighter one still reads heavier.
+        // Coordinates and sizes are in the SVG's own units; `scale` maps them
+        // to the raster being drawn.
+        function applyLocalBlur(source, effects, origW, targetW) {
+            if (!localBlurActive(effects) || !(origW > 0) || !(targetW > 0)) return source;
+            const scale = targetW / origW;
+            const w = source.width;
+            const h = source.height;
+
+            const groups = new Map();
+            effects.localBlur.strokes.forEach(stroke => {
+                const key = Number(stroke.strength.toFixed(3));
+                if (!groups.has(key)) groups.set(key, []);
+                groups.get(key).push(stroke);
+            });
+
+            let current = source;
+            Array.from(groups.keys()).sort((a, b) => a - b).forEach(strength => {
+                const sigma = strength * scale;
+                if (!(sigma > 0.05)) return;
+                const mask = paintLocalBlurMask(groups.get(strength), w, h, scale);
+
+                const blurred = document.createElement('canvas');
+                blurred.width = w;
+                blurred.height = h;
+                const blurredCtx = blurred.getContext('2d');
+                blurredCtx.filter = `blur(${sigma}px)`;
+                blurredCtx.drawImage(current, 0, 0);
+                blurredCtx.filter = 'none';
+                blurredCtx.globalCompositeOperation = 'destination-in';
+                blurredCtx.drawImage(mask, 0, 0);
+                blurredCtx.globalCompositeOperation = 'source-over';
+
+                const out = document.createElement('canvas');
+                out.width = w;
+                out.height = h;
+                const outCtx = out.getContext('2d');
+                outCtx.drawImage(current, 0, 0);
+                outCtx.globalCompositeOperation = 'destination-out';
+                outCtx.drawImage(mask, 0, 0);
+                outCtx.globalCompositeOperation = 'source-over';
+                outCtx.drawImage(blurred, 0, 0);
+                current = out;
+            });
+            return current;
+        }
+
+        // Everything that runs on the finished ink raster, in order: the
+        // global edge softening, then the composer's focused blur strokes.
+        function finishInkRaster(ink, effects, origW, targetW) {
+            const softened = softenCanvasEdges(ink, edgeSoftenSigma(effects, origW, targetW));
+            return applyLocalBlur(softened, effects, origW, targetW);
         }
 
         const SVG_SHARED_CHILD_TAGS = new Set(['defs', 'style', 'title', 'desc', 'metadata']);
@@ -6967,7 +7272,7 @@
         async function rasterizeSvgWithEffects(svg, origW, origH, targetW, targetH, effects) {
             const normalized = normalizeRasterEffects(effects);
             const ink = await rasterizeSvgInk(svg, origW, origH, targetW, targetH, normalized);
-            return softenCanvasEdges(ink, edgeSoftenSigma(normalized, origW, targetW));
+            return finishInkRaster(ink, normalized, origW, targetW);
         }
 
         // The ink-mixing stage alone: flat when mixing is off or there is
@@ -7171,7 +7476,7 @@
             // The ink raster is kept on the stage so a softening change can
             // re-blur it without re-rasterizing every layer.
             const inkCanvas = await rasterizeSvgInk(svg, width, height, renderW, renderH, normalizedEffects);
-            const svgCanvas = softenCanvasEdges(inkCanvas, edgeSoftenSigma(normalizedEffects, width, renderW));
+            const svgCanvas = finishInkRaster(inkCanvas, normalizedEffects, width, renderW);
             const backingSvgData = backingSvg
                 ? serializeSvgForRaster(backingSvg, width, height, renderW, renderH)
                 : '';
@@ -7240,7 +7545,7 @@
                 stage.inkCanvas = await rasterizeSvgInk(svg, width, height, stage.renderW, stage.renderH, normalized);
                 stage.inkKey = inkKey;
             }
-            const svgCanvas = softenCanvasEdges(stage.inkCanvas, edgeSoftenSigma(normalized, width, stage.renderW));
+            const svgCanvas = finishInkRaster(stage.inkCanvas, normalized, width, stage.renderW);
             const renderCanvas = document.createElement('canvas');
             renderCanvas.width = stage.tw;
             renderCanvas.height = stage.th;
@@ -7625,6 +7930,32 @@
         let composerHistoryFuture = [];
         let composerHistoryRestoring = false;
         let composerHistoryShortcutAttached = false;
+        // ── Blur layer ──
+        // Scene content: brush strokes in canvas units, each with the brush
+        // radius and Gaussian sigma (strength) it was painted with. The
+        // layer lives above every object and is applied only when the
+        // composition is rasterized (Cricut preview and PNG export); on the
+        // canvas it shows as a translucent overlay marking where the blur
+        // will land. Persisted as composer.blur and tracked by undo/redo.
+        const COMPOSER_TOOL_SELECT = 'select';
+        const COMPOSER_TOOL_BLUR = 'blur';
+        const COMPOSER_BLUR_RADIUS_MIN = 2;
+        const COMPOSER_BLUR_RADIUS_MAX = 200;
+        const COMPOSER_BLUR_STRENGTH_MIN = 0.5;
+        const COMPOSER_BLUR_STRENGTH_MAX = 40;
+        const COMPOSER_BLUR_STRENGTH_STEP = 0.5;
+        // Pointer samples closer than this (canvas units) are dropped so a
+        // slow drag doesn't record hundreds of near-identical points.
+        const COMPOSER_BLUR_MIN_SEGMENT = 1.5;
+        const COMPOSER_BLUR_DEFAULT_BRUSH = { radius: 24, strength: 6 };
+        let composerBlurStrokes = [];
+        let composerActiveTool = COMPOSER_TOOL_SELECT;
+        let composerBlurBrush = { ...COMPOSER_BLUR_DEFAULT_BRUSH };
+        let composerBlurErase = false;
+        let composerBlurVisible = true;   // overlay visibility (view state, not saved)
+        let composerBlurDrag = null;      // {stroke} while painting, {erase: true} while erasing
+        let composerBlurPanel = null;
+        let composerBlurInputs = {};
 
         // Full teardown of every live composer resource (DOM, timers, drag
         // state, zoom/pan, Cricut preview, pattern session/UI) — used by
@@ -7666,6 +7997,14 @@
             composerHistoryPast = [];
             composerHistoryFuture = [];
             composerHistoryRestoring = false;
+            composerBlurStrokes = [];
+            composerActiveTool = COMPOSER_TOOL_SELECT;
+            composerBlurBrush = { ...COMPOSER_BLUR_DEFAULT_BRUSH };
+            composerBlurErase = false;
+            composerBlurVisible = true;
+            composerBlurDrag = null;
+            composerBlurPanel = null;
+            composerBlurInputs = {};
         }
 
         // ── Composer snapshot/detach/restore (workspace-replacement transaction) ──
@@ -7703,7 +8042,15 @@
                 patternMode: composerPatternMode,
                 patternInputs: composerPatternInputs,
                 historyPast: composerHistoryPast,
-                historyFuture: composerHistoryFuture
+                historyFuture: composerHistoryFuture,
+                blurStrokes: composerBlurStrokes,
+                activeTool: composerActiveTool,
+                blurBrush: composerBlurBrush,
+                blurErase: composerBlurErase,
+                blurVisible: composerBlurVisible,
+                blurDrag: composerBlurDrag,
+                blurPanel: composerBlurPanel,
+                blurInputs: composerBlurInputs
             };
         }
 
@@ -7745,6 +8092,14 @@
             composerHistoryPast = [];
             composerHistoryFuture = [];
             composerHistoryRestoring = false;
+            composerBlurStrokes = [];
+            composerActiveTool = COMPOSER_TOOL_SELECT;
+            composerBlurBrush = { ...COMPOSER_BLUR_DEFAULT_BRUSH };
+            composerBlurErase = false;
+            composerBlurVisible = true;
+            composerBlurDrag = null;
+            composerBlurPanel = null;
+            composerBlurInputs = {};
         }
 
         function restoreComposerState(snapshot) {
@@ -7777,6 +8132,14 @@
             composerHistoryPast = snapshot.historyPast || [];
             composerHistoryFuture = snapshot.historyFuture || [];
             composerHistoryRestoring = false;
+            composerBlurStrokes = snapshot.blurStrokes || [];
+            composerActiveTool = snapshot.activeTool || COMPOSER_TOOL_SELECT;
+            composerBlurBrush = snapshot.blurBrush || { ...COMPOSER_BLUR_DEFAULT_BRUSH };
+            composerBlurErase = !!snapshot.blurErase;
+            composerBlurVisible = snapshot.blurVisible !== false;
+            composerBlurDrag = snapshot.blurDrag || null;
+            composerBlurPanel = snapshot.blurPanel || null;
+            composerBlurInputs = snapshot.blurInputs || {};
             if (composerSection && snapshot.anchor) snapshot.anchor.after(composerSection);
             // Recompute from restored live state in the new composer lifetime.
             if (composerSection && composerSvg) {
@@ -7798,6 +8161,7 @@
                 selectedIds: composerSelected
                     .filter(g => g && g.isConnected)
                     .map(g => g.dataset.composerId),
+                blur: composerCaptureBlurLayer(),
                 objects: Array.from(composerSvg.querySelectorAll('.composer-object')).map(g => ({
                     id: g.dataset.composerId,
                     sourceObjectId: g.dataset.sourceObjectId || '',
@@ -7817,6 +8181,7 @@
         function composerHistoryContentKey(state) {
             return JSON.stringify({
                 productId: state.productId,
+                blur: state.blur,
                 objects: state.objects
             });
         }
@@ -7871,8 +8236,15 @@
                 composerProductId = state.productId;
                 state.objects.forEach(createComposerObjectFromRecord);
                 composerNextId = Math.max(composerNextId, state.nextId || 1);
+                composerBlurDrag = null;
+                composerBlurStrokes = composerCloneBlurStrokes(state.blur ? state.blur.strokes : []);
+                composerRenderBlurOverlay();
+                composerSyncBlurPanel();
 
-                const selectedIds = new Set(state.selectedIds || []);
+                // The blur tool paints over the whole canvas and deselects on entry;
+                // reviving a saved selection while it is active would show handles
+                // the pointer cannot reach, so the selection returns with the tool.
+                const selectedIds = new Set(composerActiveTool === COMPOSER_TOOL_BLUR ? [] : (state.selectedIds || []));
                 composerSelected = Array.from(composerSvg.querySelectorAll('.composer-object'))
                     .filter(g => selectedIds.has(g.dataset.composerId));
                 composerUpdateSelectionVisuals();
@@ -7917,9 +8289,22 @@
             else composerUndo();
         }
 
+        // Escape drops back to the select tool (and cancels an in-progress
+        // stroke) — the same exit the Done button offers.
+        function composerHandleToolShortcut(e) {
+            if (!composerSection || !composerSvg || e.key !== 'Escape') return;
+            if (composerActiveTool === COMPOSER_TOOL_SELECT) return;
+            const target = e.target;
+            const tag = target && target.tagName ? target.tagName.toLowerCase() : '';
+            if (target && (target.isContentEditable || ['textarea', 'select'].includes(tag))) return;
+            e.preventDefault();
+            composerSetActiveTool(COMPOSER_TOOL_SELECT);
+        }
+
         function composerEnsureHistoryShortcut() {
             if (composerHistoryShortcutAttached || !window.addEventListener) return;
             window.addEventListener('keydown', composerHandleHistoryShortcut);
+            window.addEventListener('keydown', composerHandleToolShortcut);
             composerHistoryShortcutAttached = true;
         }
 
@@ -7988,7 +8373,7 @@
                         previewScale,
                         whiteBacking: exportData.hasWhiteBacking,
                         backingSvg: exportData.backingSvg,
-                        effects: getComposerRasterEffects(),
+                        effects: composerRenderEffects(exportData),
                         explain: !!(composerCricutSettings && composerCricutSettings.shouldExplain()),
                         cache: true,
                         cacheId: 'composer',
@@ -8075,6 +8460,7 @@
                 'merge': '<path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><rect width="7" height="5" x="7" y="7" rx="1"/><rect width="7" height="5" x="10" y="12" rx="1"/>',
                 'trash': '<path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/>',
                 'download': '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/>',
+                'blur': '<path d="M12 2.5c3.5 4.2 7 8 7 12a7 7 0 0 1-14 0c0-4 3.5-7.8 7-12z"/><path d="M12 8.5c1.6 2.1 3.2 4 3.2 6a3.2 3.2 0 0 1-6.4 0c0-2 1.6-3.9 3.2-6z" opacity="0.5"/>',
             };
             const mkIcon = (name) => {
                 const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
@@ -8185,6 +8571,16 @@
             const gridPatternButton = mkBtn({ icon: 'pattern-grid', label: 'Grid', title: 'Repeat the selected object in a grid', onclick: () => composerTogglePatternPanel('grid') });
             gridPatternButton.id = 'composerPatternGridButton';
             toolbar.appendChild(mkGroup('Pattern', [circularPatternButton, gridPatternButton]));
+            toolbar.appendChild(mkDivider());
+
+            // Blur tool toggle (active state wired in the blur panel code)
+            const blurToolButton = mkBtn({
+                icon: 'blur', label: 'Blur',
+                title: 'Paint focused blur onto the composition. Shows in the Cricut preview and PNG export.',
+                onclick: () => composerToggleBlurTool()
+            });
+            blurToolButton.id = 'composerBlurToolButton';
+            toolbar.appendChild(mkGroup('Effects', [blurToolButton]));
 
             // Push editing actions and export to the right end
             const spacer = document.createElement('div');
@@ -8244,6 +8640,7 @@
 
             composerSection.appendChild(toolbar);
             composerSection.appendChild(composerBuildPatternPanel());
+            composerSection.appendChild(composerBuildBlurPanel());
 
             // Workspace — canvas on the left, large Cricut preview on the right.
             // The preview lives beside the canvas (instead of jammed into the
@@ -8282,7 +8679,7 @@
             // Empty-canvas drag pans the viewport. A click (no drag) still
             // deselects / cancels pattern preview.
             composerSvg.addEventListener('mousedown', (e) => {
-                if (e.target === composerSvg) {
+                if (e.target === composerSvg && composerActiveTool === COMPOSER_TOOL_SELECT) {
                     composerPanDrag = {
                         active: true,
                         startClientX: e.clientX,
@@ -8294,7 +8691,7 @@
                 }
             });
             composerSvg.addEventListener('touchstart', (e) => {
-                if (e.target === composerSvg && e.touches.length === 1) {
+                if (e.target === composerSvg && e.touches.length === 1 && composerActiveTool === COMPOSER_TOOL_SELECT) {
                     composerPanDrag = {
                         active: true,
                         startClientX: e.touches[0].clientX,
@@ -8703,9 +9100,14 @@
         function composerUpdateStatus() {
             if (!composerStatus) return;
             const count = composerSvg.querySelectorAll('.composer-object').length;
-            composerStatus.textContent = count === 0
-                ? 'Add objects using the "+ Composer" button on any extracted object card.'
-                : `${count} object${count !== 1 ? 's' : ''} in workspace. Click to select, drag to move, use the ↺/↻ buttons or the round handle to rotate (Shift snaps to 15°). Shift-click for multi-select.`;
+            if (composerActiveTool === COMPOSER_TOOL_BLUR) {
+                composerStatus.textContent = composerBlurStatusText();
+            } else {
+                composerStatus.textContent = count === 0
+                    ? 'Add objects using the "+ Composer" button on any extracted object card.'
+                    : `${count} object${count !== 1 ? 's' : ''} in workspace. Click to select, drag to move, use the ↺/↻ buttons or the round handle to rotate (Shift snaps to 15°). Shift-click for multi-select.`;
+            }
+            composerKeepBlurOverlayOnTop();
             composerScheduleCricutPreview();
             composerRefreshLayersPanel();
         }
@@ -8758,6 +9160,20 @@
             const clientX = e.touches ? e.touches[0].clientX : e.clientX;
             const clientY = e.touches ? e.touches[0].clientY : e.clientY;
             const svgPt = composerSvgPoint(clientX, clientY);
+
+            // Blur tool: every press paints (or erases) regardless of what is
+            // under the pointer; objects are not selectable while it is on.
+            if (composerActiveTool === COMPOSER_TOOL_BLUR) {
+                e.preventDefault();
+                if (composerBlurErase) {
+                    composerBlurDrag = { erase: true, removed: false };
+                    composerEraseBlurAt(svgPt.x, svgPt.y);
+                } else {
+                    composerBeginBlurStroke(svgPt.x, svgPt.y);
+                }
+                composerUpdateBlurCursor(svgPt.x, svgPt.y);
+                return;
+            }
 
             // Check if the rotate handle was clicked
             const rotHandle = e.target.closest('.rotate-handle');
@@ -8844,6 +9260,17 @@
         function composerOnPointerMove(e) {
             const clientX = e.touches ? e.touches[0].clientX : e.clientX;
             const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+
+            if (composerActiveTool === COMPOSER_TOOL_BLUR) {
+                const svgPt = composerSvgPoint(clientX, clientY);
+                composerUpdateBlurCursor(svgPt.x, svgPt.y);
+                if (composerBlurDrag) {
+                    e.preventDefault();
+                    if (composerBlurDrag.erase) composerEraseBlurAt(svgPt.x, svgPt.y);
+                    else composerExtendBlurStroke(svgPt.x, svgPt.y);
+                }
+                return;
+            }
 
             // Handle canvas pan (empty-background drag)
             if (composerPanDrag && composerPanDrag.active) {
@@ -8984,6 +9411,11 @@
         }
 
         function composerOnPointerUp(e) {
+            if (composerBlurDrag) {
+                composerEndBlurStroke();
+            }
+            if (e && e.type === 'mouseleave') composerHideBlurCursor();
+
             if (composerPanDrag && composerPanDrag.active) {
                 const wasClick = !composerPanDrag.moved;
                 composerPanDrag = null;
@@ -9018,6 +9450,422 @@
                 composerScheduleCricutPreview();
                 if (!composerIsPatternPreviewActive()) composerCommitHistory();
             }
+        }
+
+        // ── Blur layer & blur tool ──
+
+        function composerCloneBlurStrokes(strokes) {
+            return (strokes || []).map(stroke => ({
+                points: stroke.points.slice(),
+                radius: stroke.radius,
+                strength: stroke.strength
+            }));
+        }
+
+        // The persisted / history shape of the layer. Always an object (an
+        // empty strokes list means "no blur"), so a project that had blur
+        // and lost it still round-trips as such.
+        function composerCaptureBlurLayer() {
+            return { strokes: composerCloneBlurStrokes(composerBlurStrokes) };
+        }
+
+        // Clamps a saved or restored stroke into the live brush ranges;
+        // returns null for anything that cannot be drawn.
+        function composerNormalizeBlurStroke(raw) {
+            if (!raw || !Array.isArray(raw.points)) return null;
+            const points = raw.points.map(Number).filter(Number.isFinite);
+            if (points.length % 2) points.pop();
+            if (points.length < 2) return null;
+            const radius = clampNumber(raw.radius, COMPOSER_BLUR_RADIUS_MIN, COMPOSER_BLUR_RADIUS_MAX, NaN);
+            const strength = clampNumber(raw.strength, COMPOSER_BLUR_STRENGTH_MIN, COMPOSER_BLUR_STRENGTH_MAX, NaN, COMPOSER_BLUR_STRENGTH_STEP);
+            if (!Number.isFinite(radius) || !Number.isFinite(strength)) return null;
+            return { points, radius, strength };
+        }
+
+        // Replaces the layer wholesale (project open / history restore).
+        function composerSetBlurStrokes(strokes) {
+            composerBlurDrag = null;
+            composerBlurStrokes = (strokes || [])
+                .map(composerNormalizeBlurStroke)
+                .filter(Boolean);
+            composerRenderBlurOverlay();
+            composerSyncBlurPanel();
+        }
+
+        // How far (canvas units) blurred ink can bleed past the flat artwork:
+        // three sigma of the heaviest stroke. The export bounds grow by this
+        // so a blur along an edge is not clipped by the raster's edge.
+        function composerBlurBleed() {
+            let bleed = 0;
+            composerBlurStrokes.forEach(stroke => { bleed = Math.max(bleed, stroke.strength * 3); });
+            return bleed;
+        }
+
+        function composerBlurStrokePathData(stroke) {
+            const pts = stroke.points;
+            let d = `M${pts[0]} ${pts[1]}`;
+            // A tap needs a zero-length segment for the round caps to paint.
+            if (pts.length === 2) d += ` L${pts[0]} ${pts[1]}`;
+            for (let i = 2; i < pts.length; i += 2) d += ` L${pts[i]} ${pts[i + 1]}`;
+            return d;
+        }
+
+        function composerBlurStrokeOpacity(stroke) {
+            return (0.2 + 0.3 * Math.min(1, stroke.strength / 20)).toFixed(3);
+        }
+
+        function composerBuildBlurStrokePath(stroke) {
+            const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            path.setAttribute('d', composerBlurStrokePathData(stroke));
+            path.setAttribute('stroke-width', stroke.radius * 2);
+            path.setAttribute('opacity', composerBlurStrokeOpacity(stroke));
+            return path;
+        }
+
+        // The overlay group sits above every object (and is re-appended so
+        // it stays there after objects are added). It never carries content
+        // the exports read: buildComposerCricutExportSvg and captureComposer
+        // walk .composer-object nodes only.
+        function composerGetBlurOverlay() {
+            if (!composerSvg) return null;
+            let overlay = composerSvg.querySelector('.composer-blur-layer');
+            if (!overlay) {
+                overlay = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+                overlay.setAttribute('aria-hidden', 'true');
+            }
+            overlay.setAttribute('class', composerBlurVisible ? 'composer-blur-layer' : 'composer-blur-layer hidden');
+            // insertBefore(null) moves an already-attached node to the end.
+            composerSvg.insertBefore(overlay, null);
+            // Keep the brush cursor above the overlay it previews.
+            const cursor = composerSvg.querySelector('.composer-blur-cursor');
+            if (cursor) composerSvg.insertBefore(cursor, null);
+            return overlay;
+        }
+
+        function composerRenderBlurOverlay() {
+            const overlay = composerGetBlurOverlay();
+            if (!overlay) return;
+            overlay.replaceChildren(...composerBlurStrokes.map(composerBuildBlurStrokePath));
+        }
+
+        // Objects are appended / reordered as direct children of the canvas;
+        // call after any such change so the layer stays in front of them.
+        function composerKeepBlurOverlayOnTop() {
+            if (!composerSvg) return;
+            if (composerBlurStrokes.length || composerSvg.querySelector('.composer-blur-layer')) {
+                composerGetBlurOverlay();
+            }
+        }
+
+        function composerSetBlurVisible(visible) {
+            composerBlurVisible = visible !== false;
+            composerGetBlurOverlay();
+            composerSyncBlurPanel();
+            composerRefreshLayersPanel();
+        }
+
+        function composerUpdateBlurCursor(x, y) {
+            if (!composerSvg || composerActiveTool !== COMPOSER_TOOL_BLUR) return;
+            let cursor = composerSvg.querySelector('.composer-blur-cursor');
+            if (!cursor) {
+                cursor = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                cursor.setAttribute('aria-hidden', 'true');
+                composerSvg.appendChild(cursor);
+            }
+            cursor.setAttribute('class', composerBlurErase ? 'composer-blur-cursor erase' : 'composer-blur-cursor');
+            cursor.setAttribute('cx', x);
+            cursor.setAttribute('cy', y);
+            cursor.setAttribute('r', composerBlurBrush.radius);
+        }
+
+        function composerHideBlurCursor() {
+            const cursor = composerSvg && composerSvg.querySelector('.composer-blur-cursor');
+            if (cursor) cursor.remove();
+        }
+
+        function composerBeginBlurStroke(x, y) {
+            if (!composerSvg) return null;
+            const stroke = {
+                points: [x, y],
+                radius: composerBlurBrush.radius,
+                strength: composerBlurBrush.strength
+            };
+            composerBlurStrokes.push(stroke);
+            const overlay = composerGetBlurOverlay();
+            const path = composerBuildBlurStrokePath(stroke);
+            overlay.appendChild(path);
+            composerBlurDrag = { stroke, path };
+            composerSyncBlurPanel();
+            return stroke;
+        }
+
+        function composerExtendBlurStroke(x, y) {
+            if (!composerBlurDrag || !composerBlurDrag.stroke) return;
+            const pts = composerBlurDrag.stroke.points;
+            const lastX = pts[pts.length - 2];
+            const lastY = pts[pts.length - 1];
+            if (Math.hypot(x - lastX, y - lastY) < COMPOSER_BLUR_MIN_SEGMENT) return;
+            pts.push(x, y);
+            composerBlurDrag.path.setAttribute('d', composerBlurStrokePathData(composerBlurDrag.stroke));
+        }
+
+        // Ends a paint or erase drag: one history entry per gesture, and one
+        // preview render, since a live re-blur per pointer sample would be
+        // pure waste — the raster only matters once the hand lifts.
+        function composerEndBlurStroke() {
+            const drag = composerBlurDrag;
+            composerBlurDrag = null;
+            if (!drag) return;
+            const changed = drag.stroke ? true : !!drag.removed;
+            if (!changed) return;
+            composerSyncBlurPanel();
+            composerRefreshLayersPanel();
+            composerScheduleCricutPreview();
+            composerCommitHistory();
+        }
+
+        function composerPointSegmentDistance(px, py, ax, ay, bx, by) {
+            const dx = bx - ax;
+            const dy = by - ay;
+            const lenSq = dx * dx + dy * dy;
+            let t = 0;
+            if (lenSq > 0) t = Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / lenSq));
+            return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
+        }
+
+        function composerBlurStrokeHit(stroke, x, y, slack = 0) {
+            const pts = stroke.points;
+            const reach = stroke.radius + slack;
+            if (pts.length === 2) return Math.hypot(x - pts[0], y - pts[1]) <= reach;
+            for (let i = 2; i < pts.length; i += 2) {
+                if (composerPointSegmentDistance(x, y, pts[i - 2], pts[i - 1], pts[i], pts[i + 1]) <= reach) return true;
+            }
+            return false;
+        }
+
+        // Erasing removes whole strokes the pointer touches: a stroke is the
+        // unit the user painted, so it is the unit they take back.
+        function composerEraseBlurAt(x, y) {
+            const before = composerBlurStrokes.length;
+            composerBlurStrokes = composerBlurStrokes.filter(stroke => !composerBlurStrokeHit(stroke, x, y));
+            if (composerBlurStrokes.length === before) return false;
+            if (composerBlurDrag) composerBlurDrag.removed = true;
+            composerRenderBlurOverlay();
+            return true;
+        }
+
+        function composerClearBlurLayer() {
+            if (composerBlurStrokes.length === 0 && !composerBlurDrag) return false;
+            composerBlurDrag = null;
+            composerBlurStrokes = [];
+            composerRenderBlurOverlay();
+            composerSyncBlurPanel();
+            composerRefreshLayersPanel();
+            composerScheduleCricutPreview();
+            composerCommitHistory();
+            return true;
+        }
+
+        function composerBlurStatusText() {
+            const n = composerBlurStrokes.length;
+            const strokes = `${n} blur stroke${n !== 1 ? 's' : ''}`;
+            return composerBlurErase
+                ? `Blur tool — erase: click or drag across a stroke to remove it. ${strokes}. Esc or Done to finish.`
+                : `Blur tool — paint: drag over the canvas to blur that area in the Cricut preview and PNG export. ${strokes}. Esc or Done to finish.`;
+        }
+
+        function composerSyncBlurToolButton() {
+            const button = composerSection && composerSection.querySelector('#composerBlurToolButton');
+            if (!button) return;
+            const active = composerActiveTool === COMPOSER_TOOL_BLUR;
+            if (active) button.classList.add('active');
+            else button.classList.remove('active');
+            button.setAttribute('aria-pressed', String(active));
+        }
+
+        function composerSetActiveTool(tool) {
+            const next = tool === COMPOSER_TOOL_BLUR ? COMPOSER_TOOL_BLUR : COMPOSER_TOOL_SELECT;
+            if (next === composerActiveTool) return;
+            if (next === COMPOSER_TOOL_BLUR) {
+                if (composerIsPatternPreviewActive()) composerCancelPatternPreview({ deselect: true });
+                composerDeselectAll();
+            } else if (composerBlurDrag) {
+                composerEndBlurStroke();
+            }
+            composerActiveTool = next;
+            composerHideBlurCursor();
+            if (composerSvg) {
+                if (next === COMPOSER_TOOL_BLUR) composerSvg.classList.add('tool-blur');
+                else composerSvg.classList.remove('tool-blur');
+            }
+            if (composerBlurPanel) {
+                if (next === COMPOSER_TOOL_BLUR) composerBlurPanel.classList.add('open');
+                else composerBlurPanel.classList.remove('open');
+            }
+            composerSyncBlurToolButton();
+            composerSyncBlurPanel();
+            composerRefreshLayersPanel();
+            if (composerStatus && composerSvg) {
+                if (next === COMPOSER_TOOL_BLUR) {
+                    composerStatus.textContent = composerBlurStatusText();
+                } else {
+                    const count = composerSvg.querySelectorAll('.composer-object').length;
+                    composerStatus.textContent = count === 0
+                        ? 'Add objects using the "+ Composer" button on any extracted object card.'
+                        : `${count} object${count !== 1 ? 's' : ''} in workspace. Click to select, drag to move, use the ↺/↻ buttons or the round handle to rotate (Shift snaps to 15°). Shift-click for multi-select.`;
+                }
+            }
+        }
+
+        function composerToggleBlurTool() {
+            composerSetActiveTool(composerActiveTool === COMPOSER_TOOL_BLUR ? COMPOSER_TOOL_SELECT : COMPOSER_TOOL_BLUR);
+        }
+
+        function composerSetBlurErase(erase) {
+            composerBlurErase = !!erase;
+            composerSyncBlurPanel();
+            if (composerStatus && composerActiveTool === COMPOSER_TOOL_BLUR) {
+                composerStatus.textContent = composerBlurStatusText();
+            }
+        }
+
+        function composerSetBlurBrush(next) {
+            const merged = { ...composerBlurBrush, ...(next || {}) };
+            composerBlurBrush = {
+                radius: clampNumber(merged.radius, COMPOSER_BLUR_RADIUS_MIN, COMPOSER_BLUR_RADIUS_MAX, COMPOSER_BLUR_DEFAULT_BRUSH.radius, 1),
+                strength: clampNumber(merged.strength, COMPOSER_BLUR_STRENGTH_MIN, COMPOSER_BLUR_STRENGTH_MAX, COMPOSER_BLUR_DEFAULT_BRUSH.strength, COMPOSER_BLUR_STRENGTH_STEP)
+            };
+            composerSyncBlurPanel();
+        }
+
+        function composerBuildBlurPanel() {
+            const panel = document.createElement('div');
+            panel.className = 'composer-blur-panel';
+            panel.id = 'composerBlurPanel';
+
+            const title = document.createElement('span');
+            title.className = 'pattern-title';
+            title.textContent = 'Blur brush';
+            panel.appendChild(title);
+
+            const mkNum = (labelText, value, min, max, step, titleText) => {
+                const label = document.createElement('label');
+                const span = document.createElement('span');
+                span.textContent = labelText;
+                const input = document.createElement('input');
+                input.type = 'number';
+                input.min = String(min);
+                input.max = String(max);
+                input.step = String(step);
+                input.value = String(value);
+                input.title = titleText;
+                input.setAttribute('aria-label', titleText);
+                label.appendChild(span);
+                label.appendChild(input);
+                label.input = input;
+                return label;
+            };
+
+            const sizeField = mkNum('Size', composerBlurBrush.radius, COMPOSER_BLUR_RADIUS_MIN, COMPOSER_BLUR_RADIUS_MAX, 1,
+                'Brush radius in canvas units (the canvas is 800 across)');
+            sizeField.input.id = 'composerBlurSize';
+            const strengthField = mkNum('Strength', composerBlurBrush.strength, COMPOSER_BLUR_STRENGTH_MIN, COMPOSER_BLUR_STRENGTH_MAX, COMPOSER_BLUR_STRENGTH_STEP,
+                'Blur amount as a Gaussian sigma in canvas units; scales with the export resolution');
+            strengthField.input.id = 'composerBlurStrength';
+
+            const modeGroup = document.createElement('div');
+            modeGroup.className = 'blur-mode-group';
+            modeGroup.setAttribute('role', 'group');
+            modeGroup.setAttribute('aria-label', 'Blur brush mode');
+            const paintButton = document.createElement('button');
+            paintButton.type = 'button';
+            paintButton.id = 'composerBlurPaintButton';
+            paintButton.textContent = 'Paint';
+            paintButton.title = 'Drag to add blur strokes';
+            paintButton.onclick = () => composerSetBlurErase(false);
+            const eraseButton = document.createElement('button');
+            eraseButton.type = 'button';
+            eraseButton.id = 'composerBlurEraseButton';
+            eraseButton.textContent = 'Erase';
+            eraseButton.title = 'Click or drag across a stroke to remove it';
+            eraseButton.onclick = () => composerSetBlurErase(true);
+            modeGroup.appendChild(paintButton);
+            modeGroup.appendChild(eraseButton);
+
+            const showField = document.createElement('label');
+            const showCheck = document.createElement('input');
+            showCheck.type = 'checkbox';
+            showCheck.id = 'composerBlurShowOverlay';
+            showCheck.checked = composerBlurVisible;
+            showCheck.title = 'Show the blur strokes on the canvas';
+            const showSpan = document.createElement('span');
+            showSpan.textContent = 'Show on canvas';
+            showField.appendChild(showCheck);
+            showField.appendChild(showSpan);
+            showField.input = showCheck;
+
+            const count = document.createElement('span');
+            count.className = 'blur-count';
+            count.id = 'composerBlurCount';
+
+            const clearButton = document.createElement('button');
+            clearButton.type = 'button';
+            clearButton.className = 'blur-clear';
+            clearButton.id = 'composerBlurClearButton';
+            clearButton.textContent = 'Clear blur';
+            clearButton.title = 'Remove every blur stroke';
+            clearButton.onclick = () => composerClearBlurLayer();
+
+            const doneButton = document.createElement('button');
+            doneButton.type = 'button';
+            doneButton.className = 'pattern-apply';
+            doneButton.textContent = 'Done';
+            doneButton.title = 'Back to the select tool (Esc)';
+            doneButton.onclick = () => composerSetActiveTool(COMPOSER_TOOL_SELECT);
+
+            const hint = document.createElement('p');
+            hint.className = 'blur-hint';
+            hint.textContent = 'Drag over the canvas to blur that area. The canvas shows where the strokes are; the blur itself is applied to the Cricut preview and PNG export.';
+
+            [sizeField, strengthField, modeGroup, showField, count, clearButton, doneButton, hint]
+                .forEach(el => panel.appendChild(el));
+
+            sizeField.input.addEventListener('change', () => composerSetBlurBrush({ radius: sizeField.input.value }));
+            sizeField.input.addEventListener('input', () => {
+                const radius = clampNumber(sizeField.input.value, COMPOSER_BLUR_RADIUS_MIN, COMPOSER_BLUR_RADIUS_MAX, NaN, 1);
+                if (Number.isFinite(radius)) composerBlurBrush = { ...composerBlurBrush, radius };
+            });
+            strengthField.input.addEventListener('change', () => composerSetBlurBrush({ strength: strengthField.input.value }));
+            strengthField.input.addEventListener('input', () => {
+                const strength = clampNumber(strengthField.input.value, COMPOSER_BLUR_STRENGTH_MIN, COMPOSER_BLUR_STRENGTH_MAX, NaN, COMPOSER_BLUR_STRENGTH_STEP);
+                if (Number.isFinite(strength)) composerBlurBrush = { ...composerBlurBrush, strength };
+            });
+            showCheck.addEventListener('change', () => composerSetBlurVisible(showCheck.checked));
+
+            composerBlurPanel = panel;
+            composerBlurInputs = { sizeField, strengthField, paintButton, eraseButton, showField, count, clearButton };
+            composerSyncBlurPanel();
+            return panel;
+        }
+
+        function composerSyncBlurPanel() {
+            const p = composerBlurInputs;
+            if (!p || !p.sizeField) return;
+            p.sizeField.input.value = String(composerBlurBrush.radius);
+            p.strengthField.input.value = String(composerBlurBrush.strength);
+            if (composerBlurErase) {
+                p.paintButton.classList.remove('active');
+                p.eraseButton.classList.add('active');
+            } else {
+                p.paintButton.classList.add('active');
+                p.eraseButton.classList.remove('active');
+            }
+            p.paintButton.setAttribute('aria-pressed', String(!composerBlurErase));
+            p.eraseButton.setAttribute('aria-pressed', String(composerBlurErase));
+            p.showField.input.checked = composerBlurVisible;
+            const n = composerBlurStrokes.length;
+            p.count.textContent = `${n} stroke${n !== 1 ? 's' : ''}`;
+            p.clearButton.disabled = n === 0;
         }
 
         // ── Layer controls ──
@@ -9081,6 +9929,7 @@
             if (composerIsPatternPreviewActive()) composerCancelPatternPreview();
 
             orderedIds.forEach(id => composerSvg.insertBefore(byId.get(id), null));
+            composerKeepBlurOverlayOnTop();
             composerScheduleCricutPreview();
             composerRefreshLayersPanel();
             composerCommitHistory();
@@ -9208,6 +10057,69 @@
             composerListenLayerDrag();
         }
 
+        function composerBuildBlurLayerRow() {
+            const row = document.createElement('div');
+            row.className = composerActiveTool === COMPOSER_TOOL_BLUR
+                ? 'composer-layers-blur-row active'
+                : 'composer-layers-blur-row';
+            row.id = 'composerBlurLayerRow';
+            row.setAttribute('role', 'button');
+            row.tabIndex = 0;
+            row.title = 'Blur layer — applied to the Cricut preview and PNG export. Click to edit with the blur tool.';
+
+            const thumb = document.createElement('div');
+            thumb.className = 'composer-layer-thumb';
+            const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+            icon.setAttribute('viewBox', '0 0 24 24');
+            icon.setAttribute('aria-hidden', 'true');
+            icon.innerHTML = '<path d="M12 2.5c3.5 4.2 7 8 7 12a7 7 0 0 1-14 0c0-4 3.5-7.8 7-12z"/>';
+            thumb.appendChild(icon);
+
+            const meta = document.createElement('div');
+            meta.className = 'composer-layer-meta';
+            const name = document.createElement('span');
+            name.className = 'composer-layer-name';
+            name.textContent = 'Blur layer';
+            const detail = document.createElement('span');
+            detail.className = 'composer-layer-id';
+            const n = composerBlurStrokes.length;
+            detail.textContent = `${n} stroke${n !== 1 ? 's' : ''} · always on top`;
+            meta.appendChild(name);
+            meta.appendChild(detail);
+
+            const visibility = document.createElement('button');
+            visibility.type = 'button';
+            visibility.className = composerBlurVisible ? 'blur-visibility' : 'blur-visibility off';
+            visibility.id = 'composerBlurVisibilityButton';
+            visibility.title = composerBlurVisible ? 'Hide blur strokes on the canvas' : 'Show blur strokes on the canvas';
+            visibility.setAttribute('aria-label', visibility.title);
+            visibility.setAttribute('aria-pressed', String(composerBlurVisible));
+            const eye = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+            eye.setAttribute('viewBox', '0 0 24 24');
+            eye.setAttribute('aria-hidden', 'true');
+            eye.innerHTML = composerBlurVisible
+                ? '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>'
+                : '<path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 10 8 10 8a13.16 13.16 0 0 1-1.67 2.68"/><path d="M6.61 6.61A13.5 13.5 0 0 0 2 12s3 8 10 8a9.74 9.74 0 0 0 5.39-1.61"/><line x1="2" x2="22" y1="2" y2="22"/>';
+            visibility.appendChild(eye);
+            visibility.onclick = (e) => {
+                if (e && e.stopPropagation) e.stopPropagation();
+                composerSetBlurVisible(!composerBlurVisible);
+            };
+
+            row.appendChild(thumb);
+            row.appendChild(meta);
+            row.appendChild(visibility);
+            row.onclick = () => composerSetActiveTool(COMPOSER_TOOL_BLUR);
+            row.onkeydown = (e) => {
+                if (!e) return;
+                if (e.key === 'Enter' || e.key === ' ') {
+                    if (e.preventDefault) e.preventDefault();
+                    composerSetActiveTool(COMPOSER_TOOL_BLUR);
+                }
+            };
+            return row;
+        }
+
         function composerRefreshLayersPanel() {
             const list = composerGetLayersList();
             if (!list || (composerLayerDrag && composerLayerDrag.dragging)) return;
@@ -9221,6 +10133,11 @@
             const selectedIds = composerLayerSelectionIds();
 
             list.replaceChildren();
+            // The blur layer always paints in front of every object, so it
+            // is pinned at the top and cannot be dragged into the stack.
+            if (composerBlurStrokes.length > 0 || composerActiveTool === COMPOSER_TOOL_BLUR) {
+                list.appendChild(composerBuildBlurLayerRow());
+            }
             if (objects.length === 0) {
                 const empty = document.createElement('div');
                 empty.className = 'composer-layers-empty';
@@ -9286,18 +10203,33 @@
             }
         }
 
+        // Stacking order is about .composer-object siblings only; the blur
+        // overlay (and any other chrome) sitting between them is skipped.
+        function composerNextObjectSibling(g) {
+            let node = g.nextElementSibling;
+            while (node && !(node.classList && node.classList.contains('composer-object'))) node = node.nextElementSibling;
+            return node;
+        }
+
+        function composerPreviousObjectSibling(g) {
+            let node = g.previousElementSibling;
+            while (node && !(node.classList && node.classList.contains('composer-object'))) node = node.previousElementSibling;
+            return node;
+        }
+
         function composerBringForward() {
             if (composerIsPatternPreviewActive()) composerCancelPatternPreview();
             let changed = false;
             for (let i = composerSelected.length - 1; i >= 0; i--) {
                 const g = composerSelected[i];
-                const next = g.nextElementSibling;
+                const next = composerNextObjectSibling(g);
                 if (next && !composerSelected.includes(next)) {
                     g.parentNode.insertBefore(next, g);
                     changed = true;
                 }
             }
             if (changed) {
+                composerKeepBlurOverlayOnTop();
                 composerScheduleCricutPreview();
                 composerCommitHistory();
                 composerRefreshLayersPanel();
@@ -9308,13 +10240,14 @@
             if (composerIsPatternPreviewActive()) composerCancelPatternPreview();
             let changed = false;
             composerSelected.forEach(g => {
-                const prev = g.previousElementSibling;
+                const prev = composerPreviousObjectSibling(g);
                 if (prev && !composerSelected.includes(prev)) {
                     g.parentNode.insertBefore(g, prev);
                     changed = true;
                 }
             });
             if (changed) {
+                composerKeepBlurOverlayOnTop();
                 composerScheduleCricutPreview();
                 composerCommitHistory();
                 composerRefreshLayersPanel();
@@ -9878,6 +10811,8 @@
 
         function composerTogglePatternPanel(mode) {
             if (!composerPatternPanel) return;
+            // Pattern editing and blur painting are exclusive modes.
+            composerSetActiveTool(COMPOSER_TOOL_SELECT);
 
             // Toggle off current mode → cancel preview
             if (composerPatternMode === mode && composerPatternPanel.classList.contains('open')) {
@@ -10114,6 +11049,11 @@
             composerSvg.querySelectorAll('.composer-object').forEach(g => g.remove());
             composerSelected = [];
             composerNextId = 1;
+            // "Clear all" empties the whole canvas, blur layer included.
+            composerBlurDrag = null;
+            composerBlurStrokes = [];
+            composerRenderBlurOverlay();
+            composerSyncBlurPanel();
             composerUpdateStatus();
             composerCommitHistory();
         }
@@ -10209,6 +11149,7 @@
                 cricut: persistedCricutOptions(getComposerCricutOptions(false)),
                 effects: getComposerRasterEffects(),
                 whiteBacking: composerWholeBacking,
+                blur: composerCaptureBlurLayer(),
                 objects: objects.map(g => {
                     const candidateSourceId = g.dataset.sourceObjectId || '';
                     return {
@@ -10249,6 +11190,9 @@
             composerWholeBacking = record.whiteBacking === true;
             if (composerWholeBackingToggle) composerWholeBackingToggle.sync();
             record.objects.forEach(createComposerObjectFromRecord);
+            // Projects saved before the blur layer existed carry none.
+            composerSetActiveTool(COMPOSER_TOOL_SELECT);
+            composerSetBlurStrokes(record.blur ? record.blur.strokes : []);
             composerDeselectAll();
             composerUpdateStatus();
             composerScheduleCricutPreview();
@@ -10331,6 +11275,14 @@
             });
             if (!isFinite(minX)) return null;
 
+            // Blurred ink spreads past the flat artwork; give it room so a
+            // stroke along an edge isn't clipped by the raster's edge.
+            const bleed = composerBlurBleed();
+            minX -= bleed;
+            minY -= bleed;
+            maxX += bleed;
+            maxY += bleed;
+
             const w = maxX - minX;
             const h = maxY - minY;
 
@@ -10394,15 +11346,36 @@
                 tmpSvg.appendChild(gWrap);
             });
 
+            // The blur layer, mapped into the export SVG's coordinate space
+            // (origin at the composition's top-left, upscaled with it) so the
+            // raster pipeline can treat it like any other effect.
+            const blur = composerBlurStrokes.length
+                ? {
+                    strokes: composerBlurStrokes.map(stroke => ({
+                        points: stroke.points.map((v, i) => ((i % 2 === 0 ? v - minX : v - minY) * upscale)),
+                        radius: stroke.radius * upscale,
+                        strength: stroke.strength * upscale
+                    }))
+                }
+                : null;
+
             const pid = composerProductId || 'composed';
             return {
                 svg: tmpSvg,
                 backingSvg,
                 hasWhiteBacking,
+                blur,
                 productId: pid,
                 width: Math.round(W),
                 height: Math.round(H)
             };
+        }
+
+        // The composer's raster effects plus its blur layer, as one effects
+        // record for a render of `exportData`.
+        function composerRenderEffects(exportData) {
+            const effects = getComposerRasterEffects();
+            return exportData && exportData.blur ? { ...effects, localBlur: exportData.blur } : effects;
         }
 
         async function composerExportCricut(options) {
@@ -10412,7 +11385,7 @@
                 ...options,
                 whiteBacking: exportData.hasWhiteBacking,
                 backingSvg: exportData.backingSvg,
-                effects: getComposerRasterEffects()
+                effects: composerRenderEffects(exportData)
             });
         }
     </script>
