@@ -24,6 +24,8 @@
     const COMPOSER_BLUR_STRENGTH_MAX = 100;
     const COMPOSER_BLUR_MAX_STROKES = 5000;
     const COMPOSER_BLUR_MAX_STROKE_POINTS = 20000;
+    // Fills clicked away on a Cricut preview, one point each.
+    const CRICUT_CLEAR_FILL_MAX = 200;
     const RASTER_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif']);
     const RENDER_MODES = new Set(['binary', 'color']);
     const SVG_ELEMENTS = new Set(['svg', 'g', 'path', 'rect', 'circle', 'ellipse', 'line', 'polyline', 'polygon']);
@@ -132,6 +134,23 @@
             requireFinite(stroke.strength, `${strokeLabel}.strength`, 0.000001, COMPOSER_BLUR_STRENGTH_MAX);
         });
         return blur;
+    }
+
+    // Optional as a whole: projects saved before fills could be cleared omit
+    // the list. An extracted object's points are in its own pixel units, so
+    // they must land on the object; the composer's are canvas units and are
+    // bounded like its transforms.
+    function requireClearedFills(value, label, minX, minY, maxX, maxY) {
+        if (value === undefined) return value;
+        const points = requireArray(value, label);
+        if (points.length > CRICUT_CLEAR_FILL_MAX) fail(`${label} exceeds the point limit`);
+        points.forEach((point, index) => {
+            const pointLabel = `${label}[${index}]`;
+            requireObject(point, pointLabel);
+            requireFinite(point.x, `${pointLabel}.x`, minX, maxX);
+            requireFinite(point.y, `${pointLabel}.y`, minY, maxY);
+        });
+        return points;
     }
 
     function requireDimensions(value, label, widthKey = 'width', heightKey = 'height') {
@@ -286,6 +305,7 @@
             }
             requireCricutState(object.cricut, `object ${object.id} cricut`);
             requireRasterEffects(object.effects, `object ${object.id} effects`);
+            requireClearedFills(object.clearedFills, `object ${object.id} clearedFills`, 0, 0, object.width, object.height);
         }
 
         if (document.composer !== null) {
@@ -300,6 +320,8 @@
                 fail('composer.whiteBacking must be a boolean');
             }
             requireComposerBlur(composer.blur, 'composer.blur');
+            requireClearedFills(composer.clearedFills, 'composer.clearedFills',
+                -MAX_TRANSFORM, -MAX_TRANSFORM, MAX_TRANSFORM, MAX_TRANSFORM);
             const composerIds = new Set();
             for (const object of requireArray(composer.objects, 'composer.objects')) {
                 requireObject(object, 'composer object');
@@ -481,6 +503,7 @@
         MAX_DIMENSION, MAX_PIXELS,
         COMPOSER_BLUR_RADIUS_MAX, COMPOSER_BLUR_STRENGTH_MAX,
         COMPOSER_BLUR_MAX_STROKES, COMPOSER_BLUR_MAX_STROKE_POINTS,
+        CRICUT_CLEAR_FILL_MAX,
         validateProject, serializeProject, parseProjectText, sanitizeSvg,
         rejectUnsafeSvgMarkup, encodeBlob, decodeAsset, createEmptyProject,
         assertProjectTextSize, assertDecodedAssetSize, applyMigrations

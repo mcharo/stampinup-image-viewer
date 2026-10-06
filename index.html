@@ -994,6 +994,57 @@
             pointer-events: none;
         }
 
+        /* Click-to-clear on an object's Cricut preview: a crosshair over the
+           rendered PNG, a hover hint, and a refill button once anything has
+           been cleared. Only offered while the white backing is on — without
+           it there is no fill to clear. */
+        .cricut-preview.can-clear-fill img {
+            cursor: crosshair;
+        }
+
+        .cricut-preview-hint {
+            position: absolute;
+            right: 0.45rem;
+            bottom: 0.35rem;
+            max-width: calc(100% - 0.9rem);
+            padding: 0.15rem 0.35rem;
+            border-radius: 4px;
+            background: rgba(255, 255, 255, 0.88);
+            color: #4b5563;
+            font-size: 0.68rem;
+            line-height: 1.2;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.15s ease;
+        }
+
+        .cricut-preview.can-clear-fill:hover .cricut-preview-hint,
+        .cricut-preview-hint.flash {
+            opacity: 1;
+        }
+
+        .cricut-preview-hint.flash {
+            background: #fef3c7;
+            color: #92400e;
+        }
+
+        .cricut-refill-btn {
+            position: absolute;
+            top: 0.45rem;
+            right: 0.45rem;
+            padding: 0.2rem 0.5rem;
+            border-radius: 4px;
+            background: rgba(255, 255, 255, 0.92);
+            color: #1f2937;
+            font-size: 0.72rem;
+            line-height: 1.2;
+        }
+
+        .cricut-refill-btn:hover {
+            background: #fff;
+            color: var(--primary-color);
+        }
+
         .remove-object-compact {
             background: none;
             color: #9ca3af;
@@ -5864,6 +5915,28 @@
             };
         }
 
+        // Fills the user clicked away on a Cricut preview. Each is one point
+        // in the owner's own units — source pixels for an object card,
+        // canvas units for the composer — so it lands on the same spot at
+        // preview scale and at export scale. The cap keeps a cleared region's
+        // mark in one byte (see clearCricutFills).
+        const CRICUT_CLEAR_FILL_MAX = 200;
+
+        // `bounds` is { maxX, maxY } plus optional minX/minY (default 0);
+        // points outside it are dropped.
+        function normalizeClearedFills(points, bounds) {
+            if (!Array.isArray(points)) return [];
+            const { minX = 0, minY = 0, maxX, maxY } = bounds;
+            const out = [];
+            for (const point of points) {
+                if (out.length >= CRICUT_CLEAR_FILL_MAX) break;
+                if (!point || !Number.isFinite(point.x) || !Number.isFinite(point.y)) continue;
+                if (point.x < minX || point.x > maxX || point.y < minY || point.y > maxY) continue;
+                out.push({ x: Number(point.x.toFixed(2)), y: Number(point.y.toFixed(2)) });
+            }
+            return out;
+        }
+
         // Sliders, steppers and preset chips all write into the number input,
         // so anything that changes a value behind their back has to bring them
         // back in step. The hook is stashed on the input itself because the
@@ -6456,6 +6529,63 @@
             });
         }
 
+        // The hover hint and refill button laid over a Cricut preview that
+        // supports click-to-clear. Shared by object cards and the composer;
+        // each owner keeps its own cleared-fill list and tells this how many
+        // there are to put back.
+        const CLEAR_FILL_HINT = 'Click white fill to cut it out';
+
+        function createClearFillOverlay(previewEl, onRefill) {
+            const hint = document.createElement('span');
+            hint.className = 'cricut-preview-hint';
+            hint.textContent = CLEAR_FILL_HINT;
+            previewEl.appendChild(hint);
+            let hintTimer = null;
+
+            const refillButton = document.createElement('button');
+            refillButton.type = 'button';
+            refillButton.className = 'cricut-refill-btn';
+            refillButton.title = 'Put back every fill cut out of this preview';
+            refillButton.onclick = onRefill;
+            previewEl.appendChild(refillButton);
+
+            return {
+                sync: (count) => {
+                    refillButton.style.display = count ? '' : 'none';
+                    refillButton.textContent = count === 1 ? '↺ Refill cut-out' : `↺ Refill ${count} cut-outs`;
+                },
+                // Whether the preview showing right now has a click map.
+                setClickable: (clickable) => {
+                    if (clickable) previewEl.classList.add('can-clear-fill');
+                    else previewEl.classList.remove('can-clear-fill');
+                },
+                flashMiss: () => {
+                    hint.textContent = 'Nothing to cut out here — click white fill away from the artwork';
+                    hint.classList.add('flash');
+                    clearTimeout(hintTimer);
+                    hintTimer = setTimeout(() => {
+                        hint.classList.remove('flash');
+                        hint.textContent = CLEAR_FILL_HINT;
+                    }, 2500);
+                },
+                dispose: () => clearTimeout(hintTimer)
+            };
+        }
+
+        // Maps a pointer event on an <img> drawn with object-fit: contain to a
+        // pixel of its natural image, or null over the letterboxing.
+        function previewImagePixel(img, event) {
+            const rect = img.getBoundingClientRect();
+            const naturalW = img.naturalWidth;
+            const naturalH = img.naturalHeight;
+            if (!naturalW || !naturalH || !rect.width || !rect.height) return null;
+            const fit = Math.min(rect.width / naturalW, rect.height / naturalH);
+            const x = (event.clientX - rect.left - (rect.width - naturalW * fit) / 2) / fit;
+            const y = (event.clientY - rect.top - (rect.height - naturalH * fit) / 2) / fit;
+            if (x < 0 || y < 0 || x >= naturalW || y >= naturalH) return null;
+            return { x, y };
+        }
+
         function getCricutPreviewScale(width, height, maxPreviewDim = 360) {
             const maxSourceDim = Math.max(width || 1, height || 1);
             return Math.max(0.12, Math.min(0.6, maxPreviewDim / maxSourceDim));
@@ -6529,6 +6659,9 @@
                 card: objectCard,
                 colorControl: null,
                 whiteBacking: options.whiteBacking !== false,
+                clearedFills: normalizeClearedFills(options.clearedFills, { maxX: width, maxY: height }),
+                // The latest preview's click map (see clearCricutFills).
+                fillMap: null,
                 borderInput: null,
                 floodInput: null,
                 smoothInput: null,
@@ -6548,6 +6681,15 @@
             cricutPreviewStatus.className = 'cricut-preview-status';
             cricutPreviewStatus.textContent = 'Rendering...';
             preview.appendChild(cricutPreviewStatus);
+
+            // Click-to-clear: the rendered preview is the control. A click on
+            // white fill away from the ink cuts it out of the backing; a click
+            // on a cleared area puts it back.
+            const clearFillOverlay = createClearFillOverlay(preview, () => setClearedFills([]));
+            const syncClearFillUi = () => {
+                clearFillOverlay.sync(objectState.whiteBacking ? objectState.clearedFills.length : 0);
+            };
+            syncClearFillUi();
             
             // Create controls container
             const controls = document.createElement('div');
@@ -6568,6 +6710,7 @@
             removeButton.textContent = '✕';
             removeButton.title = 'Remove';
             removeButton.onclick = () => {
+                clearFillOverlay.dispose();
                 if (typeof objectState.resetPreview === 'function') objectState.resetPreview();
                 if (objectState.cricutPanel) objectState.cricutPanel.dispose();
                 projectWorkspace.extractedObjects.delete(objectId);
@@ -6629,6 +6772,7 @@
                             whiteBacking: objectState.whiteBacking,
                             effects: cricutPanel.getEffects(),
                             explain: cricutPanel.shouldExplain(),
+                            clearedFills: objectState.clearedFills,
                             cache: true,
                             cacheId: objectId,
                             // A border drag can't have changed the artwork, so
@@ -6638,6 +6782,8 @@
                         if (token !== cricutPreviewToken ||
                             !isWorkspaceGenerationCurrent(previewGeneration)) return;
                         cricutPreviewImg.src = canvas.toDataURL('image/png');
+                        objectState.fillMap = canvas.cricutFillMap || null;
+                        clearFillOverlay.setClickable(!!objectState.fillMap);
                         if (svg.parentNode === preview) svg.remove();
                         if (!cricutPreviewImg.parentNode) preview.insertBefore(cricutPreviewImg, cricutPreviewStatus);
                         cricutPreviewStatus.textContent = '';
@@ -6670,6 +6816,29 @@
             objectState.schedulePreview = scheduleCricutPreview;
             objectState.resetPreview = resetCricutPreview;
 
+            const setClearedFills = (next) => {
+                objectState.clearedFills = next;
+                syncClearFillUi();
+                // The artwork hasn't changed, so this is a repaint of the
+                // cached stage — as quick as a border drag.
+                scheduleCricutPreview({ live: true });
+            };
+            cricutPreviewImg.addEventListener('click', (event) => {
+                const fillMap = objectState.fillMap;
+                if (!objectState.whiteBacking || !fillMap) return;
+                // A second click before the first one's repaint would be read
+                // against the old map; the repaint is a moment away.
+                if (fillMap.points !== objectState.clearedFills) return;
+                const pixel = previewImagePixel(cricutPreviewImg, event);
+                if (!pixel) return;
+                const next = toggleClearedFillAt(objectState.clearedFills, fillMap, pixel.x, pixel.y, width, height);
+                if (!next) {
+                    clearFillOverlay.flashMiss();
+                    return;
+                }
+                setClearedFills(next);
+            });
+
             const cricutButton = document.createElement('button');
             cricutButton.textContent = '✂ Cricut PNG';
             cricutButton.onclick = async () => {
@@ -6681,7 +6850,10 @@
                     await generateCricutPNG(svg, productId, width, height, {
                         ...liveCricutOptions,
                         whiteBacking: objectState.whiteBacking,
-                        effects: cricutPanel.getEffects()
+                        effects: cricutPanel.getEffects(),
+                        // Only pay for the clearable-fill pass at 2x when
+                        // there is something to clear.
+                        clearedFills: objectState.clearedFills.length ? objectState.clearedFills : undefined
                     });
                 } finally {
                     cricutButton.disabled = false;
@@ -6696,6 +6868,7 @@
                 isOn: () => objectState.whiteBacking,
                 onToggle: () => {
                     objectState.whiteBacking = !objectState.whiteBacking;
+                    syncClearFillUi();
                     scheduleCricutPreview();
                 }
             });
@@ -6802,6 +6975,7 @@
                     svg: new XMLSerializer().serializeToString(state.svg),
                     color: state.colorControl.getState(),
                     whiteBacking: state.whiteBacking !== false,
+                    clearedFills: (state.clearedFills || []).map(point => ({ x: point.x, y: point.y })),
                     cricut: persistedCricutOptions(readCricutOptionsFromInputs(state.borderInput, state.floodInput, false, state.smoothInput)),
                     effects: state.cricutPanel ? state.cricutPanel.getEffects() : normalizeRasterEffects()
                 }));
@@ -6831,6 +7005,7 @@
                     label: record.label,
                     color: record.color,
                     whiteBacking: record.whiteBacking,
+                    clearedFills: record.clearedFills,
                     cricut: record.cricut,
                     effects: record.effects,
                     scroll: false
@@ -7524,9 +7699,11 @@
             // Step 5: The distance field the border thresholds against.
             const borderDistSq = distanceToMaskSquared(closedSilhouette, tw, th, 1);
 
+            // isInk stays on the stage for clearCricutFills, which measures
+            // its own distance field from it the first time a fill is cleared.
             return {
                 svgData, backingSvgData, renderCanvas, tw, th, renderW, renderH, pad, scale,
-                floodPx, silhouette, closedSilhouette, borderDistSq,
+                floodPx, isInk, silhouette, closedSilhouette, borderDistSq,
                 inkCanvas,
                 inkKey: rasterInkKey(normalizedEffects),
                 effectsKey: rasterEffectsKey(normalizedEffects)
@@ -7699,7 +7876,136 @@
             return smoothed;
         }
 
-        function paintCricutStage(stage, options, explain, includeWhiteBacking) {
+        // Clears the fills the user clicked away. A clearable pixel is white
+        // backing farther than the border from any ink: an enclosed hole, a
+        // flood-bridged pocket, or a hole the border sealed. The band within
+        // the border of the ink is never clearable, so a cleared hole keeps a
+        // full-width border inside it and the cut line still stays off the
+        // artwork. Each point clears the whole connected clearable region it
+        // lands in. A point whose region has vanished — a wider border
+        // swallowed it — is kept but clears nothing until the region returns.
+        //
+        // Mutates `filled` and returns the map the preview hit-tests clicks
+        // against: per stage pixel 0 = not clearable, 1 = clearable, 2 + k =
+        // cleared by point k; `owners[k]` is the point whose region point k
+        // landed in (itself, an earlier point, or -1 for none).
+        function clearCricutFills(stage, filled, bufferScaled, points) {
+            const { tw, th, pad, scale, isInk } = stage;
+            const n = tw * th;
+            if (!stage.inkDistSq) stage.inkDistSq = distanceToMaskSquared(isInk, tw, th, 1);
+            const inkDistSq = stage.inkDistSq;
+            const radiusSquared = bufferScaled * bufferScaled;
+            const marks = new Uint8Array(n);
+            for (let i = 0; i < n; i++) {
+                if (filled[i] && inkDistSq[i] > radiusSquared) marks[i] = 1;
+            }
+
+            const owners = [];
+            const queue = new Int32Array(n);
+            points.forEach((point, k) => {
+                const x = Math.floor(point.x * scale) + pad;
+                const y = Math.floor(point.y * scale) + pad;
+                const start = x >= 0 && x < tw && y >= 0 && y < th ? y * tw + x : -1;
+                if (k >= CRICUT_CLEAR_FILL_MAX || start < 0 || marks[start] === 0) {
+                    owners.push(-1);
+                    return;
+                }
+                if (marks[start] >= 2) {
+                    owners.push(marks[start] - 2);
+                    return;
+                }
+                const label = k + 2;
+                let head = 0, tail = 0;
+                marks[start] = label;
+                queue[tail++] = start;
+                while (head < tail) {
+                    const idx = queue[head++];
+                    filled[idx] = 0;
+                    const col = idx % tw;
+                    if (col > 0 && marks[idx - 1] === 1)        { marks[idx - 1] = label;  queue[tail++] = idx - 1; }
+                    if (col < tw - 1 && marks[idx + 1] === 1)   { marks[idx + 1] = label;  queue[tail++] = idx + 1; }
+                    if (idx >= tw && marks[idx - tw] === 1)     { marks[idx - tw] = label; queue[tail++] = idx - tw; }
+                    if (idx < n - tw && marks[idx + tw] === 1)  { marks[idx + tw] = label; queue[tail++] = idx + tw; }
+                }
+                owners.push(k);
+            });
+            return { marks, owners, tw, th, pad, scale };
+        }
+
+        // The pixel of a clearable region farthest from its edge. A click is
+        // stored as this point rather than where it landed, so a click that
+        // grazed the border band at preview scale still lands well inside
+        // the region at the 2x export.
+        function deepestPixelOfRegion(marks, tw, th, start) {
+            const seen = new Uint8Array(tw * th);
+            const region = [start];
+            seen[start] = 1;
+            let minX = tw, minY = th, maxX = 0, maxY = 0;
+            for (let head = 0; head < region.length; head++) {
+                const idx = region[head];
+                const x = idx % tw;
+                const y = (idx / tw) | 0;
+                if (x < minX) minX = x;
+                if (x > maxX) maxX = x;
+                if (y < minY) minY = y;
+                if (y > maxY) maxY = y;
+                const visit = (j) => {
+                    if (marks[j] === 1 && !seen[j]) { seen[j] = 1; region.push(j); }
+                };
+                if (x > 0)      visit(idx - 1);
+                if (x < tw - 1) visit(idx + 1);
+                if (y > 0)      visit(idx - tw);
+                if (y < th - 1) visit(idx + tw);
+            }
+
+            // A one-pixel empty frame around the crop gives the distance
+            // field an edge to measure from on every side.
+            const cw = maxX - minX + 3;
+            const ch = maxY - minY + 3;
+            const crop = new Uint8Array(cw * ch);
+            region.forEach(idx => {
+                crop[((idx / tw | 0) - minY + 1) * cw + (idx % tw) - minX + 1] = 1;
+            });
+            const depthSq = distanceToMaskSquared(crop, cw, ch, 0);
+            let best = start;
+            let bestDepth = -1;
+            region.forEach(idx => {
+                const depth = depthSq[((idx / tw | 0) - minY + 1) * cw + (idx % tw) - minX + 1];
+                if (depth > bestDepth) { bestDepth = depth; best = idx; }
+            });
+            return best;
+        }
+
+        // What a click at (canvasX, canvasY) on a rendered preview does to the
+        // cleared-fill list: a click on a cleared region refills it, a click on
+        // a clearable one clears it. Returns the new list, or null when the
+        // click landed on ink, its border band, or open space.
+        //
+        // `points` is the owner's list, index for index the one the preview
+        // was painted from; `width`/`height` bound the render, and
+        // `toListUnits` maps a new point from render units into the list's
+        // (the composer renders a cropped, upscaled copy of its canvas).
+        function toggleClearedFillAt(points, fillMap, canvasX, canvasY, width, height, toListUnits = point => point) {
+            const { marks, owners, tw, th, pad, outPad, scale } = fillMap;
+            const x = Math.floor(canvasX) + pad - outPad;
+            const y = Math.floor(canvasY) + pad - outPad;
+            if (x < 0 || x >= tw || y < 0 || y >= th) return null;
+            const mark = marks[y * tw + x];
+            if (mark >= 2) {
+                const owner = mark - 2;
+                return points.filter((_, k) => owners[k] !== owner);
+            }
+            if (mark !== 1 || points.length >= CRICUT_CLEAR_FILL_MAX) return null;
+            const deepest = deepestPixelOfRegion(marks, tw, th, y * tw + x);
+            const toUnits = (pixel, limit) =>
+                Number(Math.max(0, Math.min(limit, (pixel - pad + 0.5) / scale)).toFixed(2));
+            return [...points, toListUnits({
+                x: toUnits(deepest % tw, width),
+                y: toUnits((deepest / tw) | 0, height)
+            })];
+        }
+
+        function paintCricutStage(stage, options, explain, includeWhiteBacking, clearedFills) {
             const { tw, th, renderW, renderH, pad, scale, silhouette, closedSilhouette, borderDistSq, renderCanvas } = stage;
             const n = tw * th;
             const bufferScaled = includeWhiteBacking ? options.outerBufferPx * scale : 0;
@@ -7725,6 +8031,43 @@
             // ink seams) will NOT be reached and should be filled white.
             const trulyExterior = findExteriorPixels(dilated, tw, th);
 
+            // Step 7b: The white region, less any fills the user clicked away.
+            const filled = new Uint8Array(n);
+            for (let i = 0; i < n; i++) {
+                filled[i] = dilated[i] || !trulyExterior[i] ? 1 : 0;
+            }
+            const fillMap = includeWhiteBacking && Array.isArray(clearedFills)
+                ? clearCricutFills(stage, filled, bufferScaled, clearedFills)
+                : null;
+
+            // Explain mode: the band left inside a cleared hole or pocket is
+            // border now, not piece or flood. It is whatever non-ink fill the
+            // cleared region touches.
+            let opened = null;
+            if (explain && fillMap && fillMap.owners.some((owner, k) => owner === k)) {
+                const { marks } = fillMap;
+                const { isInk } = stage;
+                opened = new Uint8Array(n);
+                const queue = new Int32Array(n);
+                let head = 0, tail = 0;
+                for (let i = 0; i < n; i++) {
+                    if (marks[i] >= 2) queue[tail++] = i;
+                }
+                const spread = (j) => {
+                    if (opened[j] || marks[j] >= 2 || isInk[j] || !closedSilhouette[j]) return;
+                    opened[j] = 1;
+                    queue[tail++] = j;
+                };
+                while (head < tail) {
+                    const idx = queue[head++];
+                    const x = idx % tw;
+                    if (x > 0)          spread(idx - 1);
+                    if (x < tw - 1)     spread(idx + 1);
+                    if (idx >= tw)      spread(idx - tw);
+                    if (idx < n - tw)   spread(idx + tw);
+                }
+            }
+
             // Step 8: Smooth the outer edge of the white region with a small blur.
             // This anti-aliases the pixel staircase on the border without visibly
             // changing the border size — interior pixels stay fully opaque (255),
@@ -7735,7 +8078,7 @@
             const edgeSrcCtx = edgeSrc.getContext('2d');
             const edgeSrcData = edgeSrcCtx.createImageData(tw, th);
             for (let i = 0; i < n; i++) {
-                if (dilated[i] || !trulyExterior[i]) {
+                if (filled[i]) {
                     edgeSrcData.data[i * 4]     = 255;
                     edgeSrcData.data[i * 4 + 1] = 255;
                     edgeSrcData.data[i * 4 + 2] = 255;
@@ -7763,7 +8106,9 @@
                 if (a === 0) continue;
                 let tint = CRICUT_TINTS.piece;
                 if (explain) {
-                    if (silhouette[i]) tint = CRICUT_TINTS.piece;
+                    if (fillMap && fillMap.marks[i] >= 2) tint = fringeTint;
+                    else if (opened && opened[i]) tint = CRICUT_TINTS.border;
+                    else if (silhouette[i]) tint = CRICUT_TINTS.piece;
                     else if (closedSilhouette[i]) tint = CRICUT_TINTS.flood;
                     else if (dilated[i]) tint = CRICUT_TINTS.border;
                     else if (!trulyExterior[i]) tint = CRICUT_TINTS.hole;
@@ -7789,18 +8134,27 @@
             const outPad = includeWhiteBacking
                 ? Math.min(pad, cricutStagePad(scale, options.outerBufferPx, stage.floodPx, options.smoothPx))
                 : 0;
-            if (outPad === pad) return outCanvas;
-            const trimmed = document.createElement('canvas');
-            trimmed.width = renderW + outPad * 2;
-            trimmed.height = renderH + outPad * 2;
-            trimmed.getContext('2d').drawImage(outCanvas, outPad - pad, outPad - pad);
-            return trimmed;
+            let result = outCanvas;
+            if (outPad !== pad) {
+                result = document.createElement('canvas');
+                result.width = renderW + outPad * 2;
+                result.height = renderH + outPad * 2;
+                result.getContext('2d').drawImage(outCanvas, outPad - pad, outPad - pad);
+            }
+            // The preview hit-tests clicks against this; `points` is the exact
+            // list it was painted from, so a click that arrives before the
+            // next repaint can tell the map is stale.
+            if (fillMap) result.cricutFillMap = { ...fillMap, outPad, points: clearedFills };
+            return result;
         }
 
         // Cache/explain values and the optional backing-mask SVG are transient
         // render hints. The owning extracted/composer object persists only its
         // whiteBacking boolean; normalizeCricutOptions continues to handle just
-        // the numeric border/flood settings.
+        // the numeric border/flood settings. `clearedFills` (an object's
+        // clicked-away fills) is applied at paint time, after the cached
+        // stage, so clearing a fill never rebuilds the stage — and passing
+        // the list at all, even empty, asks for the click map on the result.
         async function buildCricutCanvas(svg, width, height, rawOptions) {
             const options = normalizeCricutOptions(rawOptions);
             const hints = rawOptions && typeof rawOptions === 'object' ? rawOptions : {};
@@ -7850,7 +8204,7 @@
                 if (useCache) cricutStageSlot = { geomKey, stage };
             }
 
-            return paintCricutStage(stage, options, !!hints.explain, includeWhiteBacking);
+            return paintCricutStage(stage, options, !!hints.explain, includeWhiteBacking, hints.clearedFills);
         }
 
         function canvasToBlob(canvas, mimeType) {
@@ -7868,7 +8222,8 @@
                 previewScale: 2,
                 whiteBacking: hints.whiteBacking,
                 backingSvg: hints.backingSvg,
-                effects: hints.effects
+                effects: hints.effects,
+                clearedFills: hints.clearedFills
             });
             const blob = await canvasToBlob(outCanvas, 'image/png');
             if (!blob) return;
@@ -7915,6 +8270,17 @@
         // their backing off and then re-apply one backing to the result.
         let composerWholeBacking = false;
         let composerWholeBackingToggle = null;
+        // Fills clicked away on the composer's Cricut preview. Scene content
+        // in canvas units, like the blur layer, so they are saved, undone and
+        // cleared with it. They stay where they were clicked when objects
+        // move; a point left over nothing simply clears nothing. The bounds
+        // are the project format's transform limit.
+        const COMPOSER_CLEARED_FILL_BOUNDS = { minX: -1000000, minY: -1000000, maxX: 1000000, maxY: 1000000 };
+        let composerClearedFills = [];
+        // The latest preview's click map and how its render maps back onto
+        // the canvas. Transient: every preview render replaces it.
+        let composerFillFrame = null;
+        let composerClearFillOverlay = null;
         // A mid-drag render must not queue up behind the one already in flight,
         // or a fast scrub builds a backlog of renders whose results the token
         // check discards anyway.
@@ -7989,6 +8355,10 @@
             composerCricutSettings = null;
             composerWholeBacking = false;
             composerWholeBackingToggle = null;
+            composerClearedFills = [];
+            composerFillFrame = null;
+            if (composerClearFillOverlay) composerClearFillOverlay.dispose();
+            composerClearFillOverlay = null;
             composerPatternSession = null;
             composerClosePatternPanelUI();
             composerPatternPanel = null;
@@ -8037,6 +8407,9 @@
                 cricutSettings: composerCricutSettings,
                 wholeBacking: composerWholeBacking,
                 wholeBackingToggle: composerWholeBackingToggle,
+                clearedFills: composerClearedFills,
+                fillFrame: composerFillFrame,
+                clearFillOverlay: composerClearFillOverlay,
                 patternSession: composerPatternSession,
                 patternPanel: composerPatternPanel,
                 patternMode: composerPatternMode,
@@ -8085,6 +8458,9 @@
             composerCricutSettings = null;
             composerWholeBacking = false;
             composerWholeBackingToggle = null;
+            composerClearedFills = [];
+            composerFillFrame = null;
+            composerClearFillOverlay = null;
             composerPatternSession = null;
             composerPatternPanel = null;
             composerPatternMode = null;
@@ -8125,6 +8501,9 @@
             composerCricutSettings = snapshot.cricutSettings || null;
             composerWholeBacking = !!snapshot.wholeBacking;
             composerWholeBackingToggle = snapshot.wholeBackingToggle || null;
+            composerClearedFills = snapshot.clearedFills || [];
+            composerFillFrame = snapshot.fillFrame || null;
+            composerClearFillOverlay = snapshot.clearFillOverlay || null;
             composerPatternSession = snapshot.patternSession;
             composerPatternPanel = snapshot.patternPanel;
             composerPatternMode = snapshot.patternMode;
@@ -8162,6 +8541,7 @@
                     .filter(g => g && g.isConnected)
                     .map(g => g.dataset.composerId),
                 blur: composerCaptureBlurLayer(),
+                clearedFills: composerCaptureClearedFills(),
                 objects: Array.from(composerSvg.querySelectorAll('.composer-object')).map(g => ({
                     id: g.dataset.composerId,
                     sourceObjectId: g.dataset.sourceObjectId || '',
@@ -8182,6 +8562,7 @@
             return JSON.stringify({
                 productId: state.productId,
                 blur: state.blur,
+                clearedFills: state.clearedFills,
                 objects: state.objects
             });
         }
@@ -8240,6 +8621,7 @@
                 composerBlurStrokes = composerCloneBlurStrokes(state.blur ? state.blur.strokes : []);
                 composerRenderBlurOverlay();
                 composerSyncBlurPanel();
+                composerSetClearedFills(state.clearedFills || []);
 
                 // The blur tool paints over the whole canvas and deselects on entry;
                 // reviving a saved selection while it is active would show handles
@@ -8350,10 +8732,15 @@
                     previewStatus !== composerCricutPreviewStatus) return;
                 if (live) composerCricutPreviewBusy = true;
                 try {
+                    // The list the export below maps; a click compares against
+                    // it to tell whether the map it hit is still current.
+                    const fillSource = composerClearedFills;
                     const exportData = buildComposerCricutExportSvg();
                     if (!exportData) {
                         if (token === composerCricutPreviewToken &&
                             instanceGeneration === composerInstanceGeneration) {
+                            composerFillFrame = null;
+                            if (composerClearFillOverlay) composerClearFillOverlay.setClickable(false);
                             previewImg.removeAttribute('src');
                             if (previewImg.parentNode) previewImg.remove();
                             previewStatus.textContent = 'Preview';
@@ -8375,6 +8762,7 @@
                         backingSvg: exportData.backingSvg,
                         effects: composerRenderEffects(exportData),
                         explain: !!(composerCricutSettings && composerCricutSettings.shouldExplain()),
+                        clearedFills: exportData.clearedFills,
                         cache: true,
                         cacheId: 'composer',
                         // A border drag can't have moved the scene, so skip
@@ -8389,6 +8777,19 @@
 
                     const frame = previewStatus.parentNode;
                     previewImg.src = canvas.toDataURL('image/png');
+                    const fillMap = canvas.cricutFillMap || null;
+                    composerFillFrame = fillMap
+                        ? {
+                            fillMap,
+                            source: fillSource,
+                            originX: exportData.originX,
+                            originY: exportData.originY,
+                            upscale: exportData.upscale,
+                            width: exportData.width,
+                            height: exportData.height
+                        }
+                        : null;
+                    if (composerClearFillOverlay) composerClearFillOverlay.setClickable(!!fillMap);
                     if (frame && !previewImg.parentNode) {
                         frame.insertBefore(previewImg, previewStatus);
                     }
@@ -8412,6 +8813,54 @@
                     }
                 }
             }, live ? 0 : 250);
+        }
+
+        // ── Cleared fills ──
+
+        function composerCaptureClearedFills() {
+            return composerClearedFills.map(point => ({ x: point.x, y: point.y }));
+        }
+
+        // Replaces the list wholesale (a click, refill, project open or
+        // history restore); callers schedule the repaint and history.
+        function composerSetClearedFills(points) {
+            composerClearedFills = normalizeClearedFills(points, COMPOSER_CLEARED_FILL_BOUNDS);
+            if (composerClearFillOverlay) composerClearFillOverlay.sync(composerClearedFills.length);
+        }
+
+        // A click at (pixelX, pixelY) of the rendered preview image. The
+        // preview is a cropped, upscaled render of the canvas, so a new point
+        // is mapped back to canvas units before it is stored. Undoable, like
+        // a blur stroke.
+        function composerToggleClearedFillAt(pixelX, pixelY) {
+            const frame = composerFillFrame;
+            // A click before the last change's repaint would be read against
+            // the old map; the repaint is a moment away.
+            if (!frame || frame.source !== composerClearedFills) return false;
+            const next = toggleClearedFillAt(
+                composerClearedFills, frame.fillMap, pixelX, pixelY, frame.width, frame.height,
+                point => ({
+                    x: point.x / frame.upscale + frame.originX,
+                    y: point.y / frame.upscale + frame.originY
+                })
+            );
+            if (!next) {
+                if (composerClearFillOverlay) composerClearFillOverlay.flashMiss();
+                return false;
+            }
+            composerSetClearedFills(next);
+            // Nothing moved, so this is a repaint of the cached stage.
+            composerScheduleCricutPreview({ live: true });
+            composerCommitHistory();
+            return true;
+        }
+
+        function composerRefillAll() {
+            if (composerClearedFills.length === 0) return false;
+            composerSetClearedFills([]);
+            composerScheduleCricutPreview({ live: true });
+            composerCommitHistory();
+            return true;
         }
 
         // ── Lazy init ──
@@ -8614,6 +9063,13 @@
             const composerCricutPreview = document.createElement('div');
             composerCricutPreview.className = 'composer-cricut-preview cricut-preview';
             composerCricutPreview.appendChild(composerCricutPreviewStatus);
+            composerClearFillOverlay = createClearFillOverlay(composerCricutPreview, composerRefillAll);
+            composerClearFillOverlay.sync(composerClearedFills.length);
+            const previewImgForClicks = composerCricutPreviewImg;
+            previewImgForClicks.addEventListener('click', (event) => {
+                const pixel = previewImagePixel(previewImgForClicks, event);
+                if (pixel) composerToggleClearedFillAt(pixel.x, pixel.y);
+            });
 
             const cricutBtn = mkBtn({
                 icon: 'download',
@@ -11049,11 +11505,13 @@
             composerSvg.querySelectorAll('.composer-object').forEach(g => g.remove());
             composerSelected = [];
             composerNextId = 1;
-            // "Clear all" empties the whole canvas, blur layer included.
+            // "Clear all" empties the whole canvas, blur layer and cleared
+            // fills included.
             composerBlurDrag = null;
             composerBlurStrokes = [];
             composerRenderBlurOverlay();
             composerSyncBlurPanel();
+            composerSetClearedFills([]);
             composerUpdateStatus();
             composerCommitHistory();
         }
@@ -11150,6 +11608,7 @@
                 effects: getComposerRasterEffects(),
                 whiteBacking: composerWholeBacking,
                 blur: composerCaptureBlurLayer(),
+                clearedFills: composerCaptureClearedFills(),
                 objects: objects.map(g => {
                     const candidateSourceId = g.dataset.sourceObjectId || '';
                     return {
@@ -11193,6 +11652,8 @@
             // Projects saved before the blur layer existed carry none.
             composerSetActiveTool(COMPOSER_TOOL_SELECT);
             composerSetBlurStrokes(record.blur ? record.blur.strokes : []);
+            // Projects saved before fills could be cleared carry none.
+            composerSetClearedFills(record.clearedFills || []);
             composerDeselectAll();
             composerUpdateStatus();
             composerScheduleCricutPreview();
@@ -11359,12 +11820,23 @@
                 }
                 : null;
 
+            // Cleared fills, mapped the same way. The origin and upscale ride
+            // along so a click on the preview can be mapped back.
+            const clearedFills = composerClearedFills.map(point => ({
+                x: (point.x - minX) * upscale,
+                y: (point.y - minY) * upscale
+            }));
+
             const pid = composerProductId || 'composed';
             return {
                 svg: tmpSvg,
                 backingSvg,
                 hasWhiteBacking,
                 blur,
+                clearedFills,
+                originX: minX,
+                originY: minY,
+                upscale,
                 productId: pid,
                 width: Math.round(W),
                 height: Math.round(H)
@@ -11385,7 +11857,8 @@
                 ...options,
                 whiteBacking: exportData.hasWhiteBacking,
                 backingSvg: exportData.backingSvg,
-                effects: composerRenderEffects(exportData)
+                effects: composerRenderEffects(exportData),
+                clearedFills: exportData.clearedFills.length ? exportData.clearedFills : undefined
             });
         }
     </script>
